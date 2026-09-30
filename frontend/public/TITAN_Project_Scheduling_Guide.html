@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TITAN Project Scheduling Guide</title>
+<style>
+  @page { size: letter; margin: 0; }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+    font-size: 9px;
+    color: #1a1a1a;
+    background: #fff;
+    padding: 0.3in 0.42in;
+    line-height: 1.38;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────── */
+  .doc-title {
+    font-size: 21px;
+    font-weight: 700;
+    color: #1a6b8a;
+    letter-spacing: -0.2px;
+    margin-bottom: 2px;
+  }
+  .doc-subtitle {
+    font-size: 9.5px;
+    color: #555;
+    padding-bottom: 9px;
+    border-bottom: 2px solid #e5e7eb;
+    margin-bottom: 6px;
+  }
+
+  /* ── Mode cards ─────────────────────────────────────────────────── */
+  .modes-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 7px;
+  }
+  .mode-card {
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    padding: 8px 9px;
+    background: #fafafa;
+  }
+  .mode-label {
+    font-size: 7px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #9ca3af;
+    margin-bottom: 2px;
+  }
+  .mode-name {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .mode-name.summary   { color: #374151; }
+  .mode-name.cost-type { color: #1d4ed8; }
+  .mode-name.phase     { color: #166534; }
+
+  .mode-desc {
+    font-size: 8.5px;
+    color: #4b5563;
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+  .mode-meta {
+    font-size: 8.5px;
+    color: #6b7280;
+  }
+  .mode-meta strong { color: #374151; font-weight: 600; }
+
+  /* ── Gate badges ────────────────────────────────────────────────── */
+  .gates-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .gate-badge {
+    border: 1.5px dashed #f59e0b;
+    border-radius: 4px;
+    padding: 4px 8px;
+    text-align: center;
+    font-size: 8.5px;
+    color: #92400e;
+    font-weight: 500;
+  }
+
+  /* ── Callout ─────────────────────────────────────────────────────── */
+  .callout {
+    border: 1px solid #bbf7d0;
+    background: #f0fdf4;
+    border-radius: 4px;
+    padding: 7px 11px;
+    margin-bottom: 6px;
+    font-size: 9px;
+    color: #374151;
+  }
+  .callout strong { color: #166534; }
+
+  /* ── Section headers ─────────────────────────────────────────────── */
+  .section-hdr {
+    font-size: 11px;
+    font-weight: 700;
+    color: #1a6b8a;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #d1d5db;
+    padding-bottom: 2px;
+    margin-bottom: 6px;
+  }
+
+  /* ── Comparison table ────────────────────────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 6px;
+    font-size: 9px;
+  }
+  th {
+    background: #dbeafe;
+    color: #1e40af;
+    font-weight: 700;
+    padding: 5px 7px;
+    text-align: left;
+    border: 1px solid #bfdbfe;
+  }
+  td {
+    padding: 5px 7px;
+    border: 1px solid #e5e7eb;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f9fafb; }
+
+  /* ── Step-by-step columns ────────────────────────────────────────── */
+  .steps-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .steps-box {
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .steps-hdr {
+    padding: 6px 9px;
+    font-size: 9px;
+    font-weight: 700;
+  }
+  .steps-hdr.summary   { background: #f3f4f6; color: #374151; border-bottom: 2px solid #9ca3af; }
+  .steps-hdr.cost-type { background: #eff6ff; color: #1d4ed8; border-bottom: 2px solid #3b82f6; }
+  .steps-hdr.phase     { background: #f0fdf4; color: #166534; border-bottom: 2px solid #22c55e; }
+
+  .steps-body {
+    padding: 5px 8px;
+    font-size: 8px;
+    color: #374151;
+    line-height: 1.3;
+  }
+  .steps-body ol { padding-left: 12px; }
+  .steps-body ol li { margin-bottom: 2px; }
+
+  .step-note {
+    margin-top: 4px;
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 7.5px;
+    line-height: 1.3;
+  }
+  .step-note.gray  { background: #f3f4f6; color: #6b7280; }
+  .step-note.blue  { background: #eff6ff; color: #1d4ed8; }
+  .step-note.green { background: #f0fdf4; color: #166534; }
+  .step-note strong { font-weight: 700; }
+
+  /* ── When-to-use boxes ──────────────────────────────────────────── */
+  .when-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .when-box {
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 7px 9px;
+    background: #f9fafb;
+  }
+  .when-box-title {
+    font-size: 7.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #9ca3af;
+    margin-bottom: 2px;
+    font-weight: 600;
+  }
+  .when-box-mode {
+    font-size: 9.5px;
+    font-weight: 700;
+    margin-bottom: 5px;
+  }
+  .when-box-mode.summary   { color: #374151; }
+  .when-box-mode.cost-type { color: #1d4ed8; }
+  .when-box-mode.phase     { color: #166534; }
+
+  .signal { display: flex; gap: 5px; margin-bottom: 4px; align-items: flex-start; }
+  .signal-icon { font-size: 9px; flex-shrink: 0; line-height: 1.35; }
+  .signal-text { font-size: 8.5px; color: #374151; line-height: 1.35; }
+  .signal-text em { font-style: normal; font-weight: 600; }
+
+  /* ── Tips ────────────────────────────────────────────────────────── */
+  .tips-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 13px;
+    margin-bottom: 9px;
+  }
+  .tips-group-hdr {
+    font-size: 9px;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 5px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  ul.tips {
+    list-style: none;
+    padding: 0;
+  }
+  ul.tips li {
+    padding-left: 10px;
+    position: relative;
+    margin-bottom: 4px;
+    font-size: 8.5px;
+    color: #374151;
+    line-height: 1.4;
+  }
+  ul.tips li::before {
+    content: '·';
+    position: absolute;
+    left: 1px;
+    color: #9ca3af;
+    font-size: 11px;
+    line-height: 1.2;
+  }
+  ul.tips li strong { font-weight: 600; color: #111827; }
+
+  /* ── Footer ──────────────────────────────────────────────────────── */
+  .footer {
+    border-top: 1px solid #e5e7eb;
+    padding-top: 7px;
+    margin-top: 8px;
+    text-align: center;
+    font-size: 8.5px;
+    color: #6b7280;
+  }
+  .footer strong { color: #374151; }
+  .footer em { color: #9ca3af; font-style: italic; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<div class="doc-title">TITAN Project Scheduling Guide</div>
+<div class="doc-subtitle">Tweet Garot Mechanical · How to set up and manage a project schedule in TITAN</div>
+
+<!-- ── Three Mode Cards ─────────────────────────────────────────────────── -->
+<div class="modes-row">
+  <div class="mode-card">
+    <div class="mode-label">Scheduling Mode</div>
+    <div class="mode-name summary">Summary</div>
+    <div class="mode-desc">One start date and one end date for the entire project. All trades and cost types share the same window. Default for all new projects.</div>
+    <div class="mode-meta"><strong>Best for:</strong> Single-trade jobs, early-stage estimates, or any project where all field work runs one continuous schedule.</div>
+  </div>
+  <div class="mode-card">
+    <div class="mode-label">Scheduling Mode</div>
+    <div class="mode-name cost-type">Cost Type</div>
+    <div class="mode-desc">Separate date windows per active cost type segment — labor trades (Sheet Metal, Pipefitter, Plumbing) and non-labor types (Material, Subcontracts, Rentals, MEP Equipment, General Conditions). Each segment's forecast is spread across its own window.</div>
+    <div class="mode-meta"><strong>Best for:</strong> Multi-trade jobs where crews are on-site at different times or the GC schedule breaks out dates by trade.</div>
+  </div>
+  <div class="mode-card">
+    <div class="mode-label">Scheduling Mode</div>
+    <div class="mode-name phase">Phase</div>
+    <div class="mode-desc">Every phase item from Vista drives its own revenue and labor forecast window. Highest precision. Can link directly to GC schedule activities.</div>
+    <div class="mode-meta"><strong>Best for:</strong> Complex jobs with named phases (mobilization, rough-in, trim-out, commissioning) at different times of year.</div>
+  </div>
+</div>
+
+<!-- ── Gate badges ──────────────────────────────────────────────────────── -->
+<div class="gates-row">
+  <div class="gate-badge">▲ Low setup · Enter 2 dates</div>
+  <div class="gate-badge">▲ Medium setup · 1 date range per active cost type segment</div>
+  <div class="gate-badge">▲ High setup · Dates required on every phase</div>
+</div>
+
+<!-- ── Callout ──────────────────────────────────────────────────────────── -->
+<div class="callout">
+  <strong>Switching modes is safe.</strong>&nbsp; Change the mode at any time from the Summary tab → <em>Forecast Scheduling Mode</em> selector. Dates saved on the Cost Type or Phase tabs are preserved in the background and restored when you switch back. The Labor Forecast updates immediately — no regeneration step needed.
+</div>
+
+<!-- ── How to Choose ─────────────────────────────────────────────────────── -->
+<div class="section-hdr">How to Choose</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:13%">Mode</th>
+      <th style="width:38%">Use when…</th>
+      <th style="width:32%">Forecast driven by</th>
+      <th style="width:17%">Setup effort</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Summary</strong></td>
+      <td>Single trade, lump-sum bid, or project just awarded with no detailed schedule yet</td>
+      <td>Project start date + end date (one window)</td>
+      <td>Low — 2 dates</td>
+    </tr>
+    <tr>
+      <td><strong>Cost Type</strong></td>
+      <td>Multiple trades with different on-site windows, or GC schedule shows dates by trade</td>
+      <td>Separate date range per active cost-type segment</td>
+      <td>Medium — 1 range per active cost type segment</td>
+    </tr>
+    <tr>
+      <td><strong>Phase</strong></td>
+      <td>Complex job with named phases that have meaningfully different crew sizes or timing</td>
+      <td>Each Vista phase item's own start + end date</td>
+      <td>High — all phases need dates</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ── Step by Step ──────────────────────────────────────────────────────── -->
+<div class="section-hdr">Step-by-Step Setup</div>
+<div class="steps-grid">
+
+  <!-- Summary -->
+  <div class="steps-box">
+    <div class="steps-hdr summary">Mode 1 — Summary Schedule</div>
+    <div class="steps-body">
+      <ol>
+        <li>Open the project → click <strong>Schedule</strong> in the left navigation.</li>
+        <li>The page opens on the <strong>Summary</strong> tab. Confirm the <strong>Forecast source</strong> badge (top-right) reads <em>Summary</em>. If not, scroll to <strong>Forecast Scheduling Mode</strong> and select Summary.</li>
+        <li>Under <strong>Project Date Range</strong>, click the <strong>Start Date</strong> field and enter the mobilization date.</li>
+        <li>Click the <strong>End Date</strong> field and enter the completion date. Tab out of the field — saves automatically.</li>
+        <li>Toast confirms: <em>Project dates saved.</em> Labor Forecast updates immediately.</li>
+      </ol>
+      <div class="step-note gray">
+        <strong>Note:</strong> If the project has labor for more than one trade, a yellow banner appears suggesting a switch to Cost Type mode for more accurate forecasting. Dismiss it or click the link to jump to Cost Type.
+      </div>
+    </div>
+  </div>
+
+  <!-- Cost Type -->
+  <div class="steps-box">
+    <div class="steps-hdr cost-type">Mode 2 — Cost Type Schedule</div>
+    <div class="steps-body">
+      <ol>
+        <li>Summary tab → <strong>Forecast Scheduling Mode</strong> → select <strong>Cost Type</strong>. The Forecast source badge updates.</li>
+        <li>Click the <strong>Cost Type</strong> tab in the tab bar.</li>
+        <li>The table shows one row per active segment, grouped as <strong>Labor</strong> (Sheet Metal Field/Shop, Pipefitter Field/Shop, Plumbing Field/Shop, Overhead, BAS) and <strong>Non-Labor</strong> (Material, Subcontracts, Rentals, MEP Equipment, General Conditions). Only segments with estimated hours or costs in Vista appear.</li>
+        <li>For each row, click the <strong>Start</strong> date cell and enter the date that trade begins on-site.</li>
+        <li>Click the <strong>End</strong> date cell and enter the finish date. Saves on blur — no Save button.</li>
+        <li>Optionally set a <strong>Contour</strong> per row: Flat, Front-loaded, Back-loaded, or Bell curve.</li>
+        <li>Repeat for every active segment. Headcount updates live.</li>
+      </ol>
+      <div class="step-note blue">
+        <strong>Tip:</strong> If a trade runs the full project span, copy the project start and end dates. Only enter different dates for trades that diverge.
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase -->
+  <div class="steps-box">
+    <div class="steps-hdr phase">Mode 3 — Phase Schedule</div>
+    <div class="steps-body">
+      <ol>
+        <li>Summary tab → <strong>Forecast Scheduling Mode</strong> → select <strong>Phase</strong>.</li>
+        <li>Click the <strong>Phase</strong> tab. A green bar confirms: <em>Phase dates are driving the revenue and labor forecast for this project.</em></li>
+        <li>Phase codes populate automatically from the Vista contract import — no manual entry needed.</li>
+        <li>For each phase, click the <strong>Start</strong> cell and enter the phase start date.</li>
+        <li>Click the <strong>End</strong> cell and enter completion. Duration calculates automatically.</li>
+        <li>Optionally set a <strong>Predecessor</strong> (row ID of the preceding phase) to model sequential phases.</li>
+        <li>Optionally set a <strong>Contour</strong> per phase.</li>
+        <li>Phases without dates are excluded from the forecast. Enter dates on all phases that carry labor hours.</li>
+      </ol>
+      <div class="step-note green">
+        <strong>GC link:</strong> Click the GC chip icon on any phase row to link it to an activity on the uploaded GC schedule. Dates sync automatically on re-import.&nbsp;&nbsp;<strong>Provisional phases:</strong> Use <em>Add Phase</em> for phase codes not yet in Vista.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ── Decision Guide ────────────────────────────────────────────────────── -->
+<div class="section-hdr">Decision Guide</div>
+<div class="when-row">
+  <div class="when-box">
+    <div class="when-box-title">Summary Mode</div>
+    <div class="when-box-mode summary">One window for the whole project</div>
+    <div class="signal"><div class="signal-icon">✓</div><div class="signal-text"><em>Go — no hesitation:</em> project just awarded, single trade, or early estimate before GC schedule exists</div></div>
+    <div class="signal"><div class="signal-icon">⚠</div><div class="signal-text"><em>Upgrade to Cost Type</em> when 2 or more trades appear on the contract with different site windows</div></div>
+    <div class="signal"><div class="signal-icon">✗</div><div class="signal-text"><em>Not recommended</em> once the GC schedule has been issued with a phase or milestone breakdown</div></div>
+  </div>
+  <div class="when-box">
+    <div class="when-box-title">Cost Type Mode</div>
+    <div class="when-box-mode cost-type">Per-trade date windows</div>
+    <div class="signal"><div class="signal-icon">✓</div><div class="signal-text"><em>Go — standard choice:</em> multi-trade job with GC milestone dates available by trade or cost type</div></div>
+    <div class="signal"><div class="signal-icon">⚠</div><div class="signal-text"><em>Consider Phase</em> when the job has named phases with meaningfully different crew sizes across the project</div></div>
+    <div class="signal"><div class="signal-icon">✗</div><div class="signal-text"><em>Overkill</em> for a single-trade or simple one-phase project — Summary is sufficient</div></div>
+  </div>
+  <div class="when-box">
+    <div class="when-box-title">Phase Mode</div>
+    <div class="when-box-mode phase">Per-phase date windows</div>
+    <div class="signal"><div class="signal-icon">✓</div><div class="signal-text"><em>Go — maximum precision:</em> complex job with detailed GC schedule in hand and phases vary significantly in timing</div></div>
+    <div class="signal"><div class="signal-icon">⚠</div><div class="signal-text"><em>Verify coverage:</em> phases without dates are excluded from the forecast — blank dates = missing headcount</div></div>
+    <div class="signal"><div class="signal-icon">✗</div><div class="signal-text"><em>Not worth the effort</em> for a small job, single phase, or pre-award estimate</div></div>
+  </div>
+</div>
+
+<!-- ── Tips & Reference ───────────────────────────────────────────────────── -->
+<div class="section-hdr">Tips &amp; Quick Reference</div>
+<div class="tips-cols">
+  <div>
+    <div class="tips-group-hdr">Scheduling Principles</div>
+    <ul class="tips">
+      <li>Always enter an end date — without one the system estimates from contract value and % complete, which is less accurate.</li>
+      <li><strong>Contour shapes affect peak headcount.</strong> Flat is the safe default; use Front-loaded or Back-loaded only when you know the crew ramp plan.</li>
+      <li>Start in Summary on award day. Upgrade to Cost Type or Phase once the GC schedule arrives.</li>
+      <li>The Labor Forecast reflects every saved date in real time — no publish step required.</li>
+    </ul>
+  </div>
+  <div>
+    <div class="tips-group-hdr">Navigation Quick-Reference</div>
+    <ul class="tips">
+      <li><strong>Schedule page:</strong> Open any project → Schedule (left nav)</li>
+      <li><strong>Mode selector:</strong> Summary tab → Forecast Scheduling Mode section</li>
+      <li><strong>Active mode badge:</strong> Top-right of the Schedule page — shows current forecast source</li>
+      <li><strong>Labor Forecast:</strong> Team Financials → Labor Forecast (real-time)</li>
+      <li><strong>GC Schedule:</strong> Project → GC Schedule (upload GC schedule for phase linking)</li>
+      <li><strong>Provisional phases:</strong> Phase tab → Add Phase (for codes not yet in Vista)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ── Footer ─────────────────────────────────────────────────────────────── -->
+<div class="footer">
+  <strong>Set the mode at award, not at handoff.</strong>&nbsp;&nbsp;
+  <em>A firm end date beats a computed one.</em>&nbsp;&nbsp;
+  <em>Phase mode is only as good as the dates you enter.</em>
+</div>
+
+</body>
+</html>

@@ -287,17 +287,28 @@ const ScheduleHub: React.FC = () => {
             <div className="sales-subtitle">{project?.name ?? ''}</div>
           </div>
         </div>
-        {/* Active mode badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>Forecast source:</span>
-          <span style={{
-            background: mode === 'phase' ? '#f0fdf4' : mode === 'cost_type' ? '#eff6ff' : '#f9fafb',
-            color: mode === 'phase' ? '#166534' : mode === 'cost_type' ? '#1d4ed8' : '#374151',
-            border: `1px solid ${mode === 'phase' ? '#bbf7d0' : mode === 'cost_type' ? '#bfdbfe' : '#e5e7eb'}`,
-            borderRadius: 12, padding: '0.25rem 0.625rem', fontSize: '0.75rem', fontWeight: 600,
-          }}>
-            {MODE_LABELS[mode as SchedulingMode]}
-          </span>
+        {/* Active mode badge + guide link */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>Forecast source:</span>
+            <span style={{
+              background: mode === 'phase' ? '#f0fdf4' : mode === 'cost_type' ? '#eff6ff' : '#f9fafb',
+              color: mode === 'phase' ? '#166534' : mode === 'cost_type' ? '#1d4ed8' : '#374151',
+              border: `1px solid ${mode === 'phase' ? '#bbf7d0' : mode === 'cost_type' ? '#bfdbfe' : '#e5e7eb'}`,
+              borderRadius: 12, padding: '0.25rem 0.625rem', fontSize: '0.75rem', fontWeight: 600,
+            }}>
+              {MODE_LABELS[mode as SchedulingMode]}
+            </span>
+          </div>
+          <a
+            href="/TITAN_Project_Scheduling_Guide.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="sales-btn sales-btn-secondary"
+            style={{ textDecoration: 'none' }}
+          >
+            Scheduling Guide
+          </a>
         </div>
       </div>
 

@@ -1787,7 +1787,7 @@ const LaborForecast: React.FC = () => {
               value={projectFilter}
               onChange={setProjectFilter}
               placeholder="All Projects"
-              style={{ minWidth: '200px', fontSize: '0.8rem' }}
+              style={{ minWidth: '380px', fontSize: '0.8rem' }}
             />
           </div>
 
@@ -2606,15 +2606,36 @@ const LaborForecast: React.FC = () => {
             <div style={{ height: '320px', position: 'relative' }}>
               {(() => {
                 const barCount = displayColumns.length;
+                const hpp = hoursPerPersonPerMonth;
                 const graphData = displayColumns.map(col => {
                   const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
-                  return { label: col.label, key: col.key, monthKey: col.monthKey, ...ct };
+                  let pfFieldHC = 0, pfShopHC = 0, smFieldHC = 0, smShopHC = 0, plFieldHC = 0, plShopHC = 0;
+                  projections.forEach(p => {
+                    if (p.monthlySegHC) {
+                      const seg = p.monthlySegHC.get(col.key) ?? {};
+                      pfFieldHC += seg['40'] ?? 0;
+                      pfShopHC  += seg['45'] ?? 0;
+                      smFieldHC += seg['30'] ?? 0;
+                      smShopHC  += seg['35'] ?? 0;
+                      plFieldHC += seg['50'] ?? 0;
+                      plShopHC  += seg['55'] ?? 0;
+                    } else {
+                      const h = getHoursForColumn(p.monthlyHours, col);
+                      pfFieldHC += h.pf / hpp;
+                      smFieldHC += h.sm / hpp;
+                      plFieldHC += h.pl / hpp;
+                    }
+                  });
+                  if (!tradeFilter.includes('pf')) { pfFieldHC = 0; pfShopHC = 0; }
+                  if (!tradeFilter.includes('sm')) { smFieldHC = 0; smShopHC = 0; }
+                  if (!tradeFilter.includes('pl')) { plFieldHC = 0; plShopHC = 0; }
+                  return { label: col.label, key: col.key, monthKey: col.monthKey, ...ct, pfFieldHC, pfShopHC, smFieldHC, smShopHC, plFieldHC, plShopHC };
                 });
 
                 let maxValue = 0;
                 graphData.forEach(d => {
-                  const contractHC = d.total / hoursPerPersonPerMonth;
-                  const oppHC = oppMode !== 'off' ? ((oppColumnTotals.get(d.key)?.total || 0) / hoursPerPersonPerMonth) : 0;
+                  const contractHC = d.total / hpp;
+                  const oppHC = oppMode !== 'off' ? ((oppColumnTotals.get(d.key)?.total || 0) / hpp) : 0;
                   const combined = contractHC + oppHC;
                   if (combined > maxValue) maxValue = combined;
                 });
@@ -2670,46 +2691,64 @@ const LaborForecast: React.FC = () => {
                       ))}
 
                       {graphData.map((d, i) => {
-                        const hpp = hoursPerPersonPerMonth;
-                        const pfHC = d.pf / hpp;
-                        const smHC = d.sm / hpp;
-                        const plHC = d.pl / hpp;
+                        const { pfFieldHC, pfShopHC, smFieldHC, smShopHC, plFieldHC, plShopHC } = d;
+                        const pfHC = pfFieldHC + pfShopHC;
+                        const smHC = smFieldHC + smShopHC;
+                        const plHC = plFieldHC + plShopHC;
                         const totalHC = pfHC + smHC + plHC;
                         const oppHCForBar = oppMode !== 'off' ? ((oppColumnTotals.get(d.key)?.total || 0) / hpp) : 0;
                         const clickableHC = totalHC + oppHCForBar;
 
-                        const pfH = maxValue > 0 ? (pfHC / maxValue) * chartHeight : 0;
-                        const smH = maxValue > 0 ? (smHC / maxValue) * chartHeight : 0;
-                        const plH = maxValue > 0 ? (plHC / maxValue) * chartHeight : 0;
+                        const plFieldH = maxValue > 0 ? (plFieldHC / maxValue) * chartHeight : 0;
+                        const plShopH  = maxValue > 0 ? (plShopHC  / maxValue) * chartHeight : 0;
+                        const smFieldH = maxValue > 0 ? (smFieldHC / maxValue) * chartHeight : 0;
+                        const smShopH  = maxValue > 0 ? (smShopHC  / maxValue) * chartHeight : 0;
+                        const pfFieldH = maxValue > 0 ? (pfFieldHC / maxValue) * chartHeight : 0;
+                        const pfShopH  = maxValue > 0 ? (pfShopHC  / maxValue) * chartHeight : 0;
+                        const committedH = plFieldH + plShopH + smFieldH + smShopH + pfFieldH + pfShopH;
 
                         const xPercent = (i / barCount) * 95;
                         const showLabel = i % labelEvery === 0;
+                        const tip = `${d.label}: PF ${pfHC.toFixed(1)} (field ${pfFieldHC.toFixed(1)} / shop ${pfShopHC.toFixed(1)}), SM ${smHC.toFixed(1)} (field ${smFieldHC.toFixed(1)} / shop ${smShopHC.toFixed(1)}), PL ${plHC.toFixed(1)} (field ${plFieldHC.toFixed(1)} / shop ${plShopHC.toFixed(1)}) = ${totalHC.toFixed(1)} people`;
+
+                        const bw = `${barWidth * 0.8}%`;
+                        const bx = `${xPercent}%`;
+                        // Bottom-to-top stacking: PL field, PL shop, SM field, SM shop, PF field, PF shop
+                        const segs: { h: number; fill: string }[] = [
+                          { h: plFieldH, fill: TRADES[2].color },
+                          { h: plShopH,  fill: '#fde68a' },
+                          { h: smFieldH, fill: TRADES[1].color },
+                          { h: smShopH,  fill: '#86efac' },
+                          { h: pfFieldH, fill: TRADES[0].color },
+                          { h: pfShopH,  fill: '#93c5fd' },
+                        ];
+                        let stackY = chartHeight;
 
                         return (
                           <g key={d.key}
                             onClick={() => clickableHC > 0 && setDrillDownCol({ key: d.key, label: d.label, monthKey: d.monthKey || d.key })}
                             style={{ cursor: clickableHC > 0 ? 'pointer' : 'default' }}
                           >
-                            <rect x={`${xPercent}%`} y={chartHeight - plH} width={`${barWidth * 0.8}%`} height={plH} fill={TRADES[2].color} rx="1">
-                              <title>{d.label}: PL {plHC.toFixed(1)}, SM {smHC.toFixed(1)}, PF {pfHC.toFixed(1)} = {totalHC.toFixed(1)} people</title>
-                            </rect>
-                            <rect x={`${xPercent}%`} y={chartHeight - plH - smH} width={`${barWidth * 0.8}%`} height={smH} fill={TRADES[1].color} rx="1">
-                              <title>{d.label}: PL {plHC.toFixed(1)}, SM {smHC.toFixed(1)}, PF {pfHC.toFixed(1)} = {totalHC.toFixed(1)} people</title>
-                            </rect>
-                            <rect x={`${xPercent}%`} y={chartHeight - plH - smH - pfH} width={`${barWidth * 0.8}%`} height={pfH} fill={TRADES[0].color} rx="1">
-                              <title>{d.label}: PL {plHC.toFixed(1)}, SM {smHC.toFixed(1)}, PF {pfHC.toFixed(1)} = {totalHC.toFixed(1)} people</title>
-                            </rect>
+                            {segs.map((seg, si) => {
+                              const y = stackY - seg.h;
+                              stackY = y;
+                              if (seg.h <= 0.5) return null;
+                              return (
+                                <rect key={si} x={bx} y={y} width={bw} height={seg.h} fill={seg.fill} rx="1">
+                                  <title>{tip}</title>
+                                </rect>
+                              );
+                            })}
                             {oppMode !== 'off' && (() => {
                               const ot = oppColumnTotals.get(d.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
-                              const oppHC = ot.total / hoursPerPersonPerMonth;
+                              const oppHC = ot.total / hpp;
                               const oppBarH = maxValue > 0 ? (oppHC / maxValue) * chartHeight : 0;
                               if (oppBarH <= 0.5) return null;
-                              const committedH = plH + smH + pfH;
                               return (
                                 <rect
-                                  x={`${xPercent}%`}
+                                  x={bx}
                                   y={chartHeight - committedH - oppBarH}
-                                  width={`${barWidth * 0.8}%`}
+                                  width={bw}
                                   height={oppBarH}
                                   fill="url(#opp-hatch)"
                                   stroke="#f59e0b"
@@ -2751,13 +2790,26 @@ const LaborForecast: React.FC = () => {
               })()}
             </div>
             {/* Legend */}
-            <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.7rem', color: '#64748b', marginTop: '0.5rem' }}>
-              {filteredTrades.map(t => (
-                <span key={t.key} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <span style={{ display: 'inline-block', width: '12px', height: '12px', background: t.color, borderRadius: '2px' }} />
-                  {t.label}
-                </span>
-              ))}
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.7rem', color: '#64748b', marginTop: '0.5rem' }}>
+              {filteredTrades.map(t => {
+                const shopColor = ({ pf: '#93c5fd', sm: '#86efac', pl: '#fde68a' } as Record<string, string>)[t.key];
+                return (
+                  <span key={t.key} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    {locationFilter !== 'shop' && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <span style={{ display: 'inline-block', width: '12px', height: '12px', background: t.color, borderRadius: '2px' }} />
+                        {t.label} Field
+                      </span>
+                    )}
+                    {locationFilter !== 'field' && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <span style={{ display: 'inline-block', width: '12px', height: '12px', background: shopColor, borderRadius: '2px', border: '1px solid #e2e8f0' }} />
+                        {t.label} Shop
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
               {oppMode !== 'off' && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <span style={{

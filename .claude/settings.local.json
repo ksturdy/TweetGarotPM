@@ -16,7 +16,9 @@
       "PowerShell(Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"cd 'c:\\\\Projects\\\\Titan PM\\\\backend'; npm run dev\" -WindowStyle Normal; Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"cd 'c:\\\\Projects\\\\Titan PM\\\\frontend'; npm start\" -WindowStyle Normal)",
       "PowerShell(Start-Process powershell -ArgumentList '-NoExit', '-Command', 'cd \"c:\\\\Projects\\\\Titan PM\\\\frontend\"; npm start' -WindowStyle Normal)",
       "PowerShell(Start-Job -Name \"backend\" -ScriptBlock { cd \"c:\\\\Projects\\\\Titan PM\\\\backend\"; npm run dev 2>&1 } | Out-Null; Start-Job -Name \"frontend\" -ScriptBlock { cd \"c:\\\\Projects\\\\Titan PM\\\\frontend\"; npm start 2>&1 } | Out-Null; Write-Host \"Jobs started\"; Start-Sleep -Seconds 8; Receive-Job -Name \"backend\" -Keep | Select-Object -Last 20; Write-Host \"---FRONTEND---\"; Receive-Job -Name \"frontend\" -Keep | Select-Object -Last 10)",
-      "PowerShell(Receive-Job -Name \"backend\" -Keep)"
+      "PowerShell(Receive-Job -Name \"backend\" -Keep)",
+      "mcp__claude_ai_Claude_Docs__update",
+      "mcp__claude_ai_Claude_Docs__batch"
     ],
     "deny": [],
     "ask": []
