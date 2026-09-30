@@ -363,7 +363,6 @@ const LaborForecast: React.FC = () => {
     queryKey: ['bulkSegments', linkedCostTypeProjectIds],
     queryFn: () => scheduleSegmentsService.getBulk(linkedCostTypeProjectIds),
     enabled: linkedCostTypeProjectIds.length > 0,
-    staleTime: 5 * 60 * 1000,
   });
 
   // Opportunity data (lazy-loaded when overlay is enabled)

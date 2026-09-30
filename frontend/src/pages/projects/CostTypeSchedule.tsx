@@ -975,6 +975,7 @@ const CostTypeSchedule: React.FC<Props> = ({
   });
 
   // Manpower datasets: hours ÷ hrs-per-person-per-month
+  // Uses original (unclamped) start date so the planned-labor curve reflects the full schedule window.
   const laborDatasets = SEGMENT_DEFINITIONS
     .filter(d => d.isLabor && activeKeys.includes(d.key))
     .map(def => {
@@ -983,7 +984,7 @@ const CostTypeSchedule: React.FC<Props> = ({
       const shift    = shiftSettings[def.key] ?? SHIFT_DEFAULTS[def.key] ?? { hoursPerDay: 8, daysPerWeek: 5 };
       const capacity = hoursPerPersonPerMonth(shift);
       const hours    = c?.est_hours
-        ? distributeMonthly(c.est_hours, clampStart(seg?.start_date), seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
+        ? distributeMonthly(c.est_hours, seg?.start_date ?? null, seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
         : allMonths.map(() => 0);
       const data = hours.map(h => capacity > 0 ? Math.round((h / capacity) * 10) / 10 : 0);
       return { label: def.label, data, color: LABOR_CHART_COLORS[def.key] ?? '#6b7280' };
