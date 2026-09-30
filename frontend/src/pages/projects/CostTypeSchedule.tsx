@@ -752,7 +752,7 @@ const CostTypeSchedule: React.FC<Props> = ({
   projectId, segments, activeKeys, onSegmentUpdate, onInitialize, initPending, project,
 }) => {
   const queryClient = useQueryClient();
-  const [viewMode, setViewMode] = useState<'gantt' | 'table'>('gantt');
+  const [viewMode, setViewMode] = useState<'gantt' | 'table' | 'manpower'>('gantt');
   const [showProvisional, setShowProvisional] = useState(false);
 
   // ── Shift settings ────────────────────────────────────────────────────────
@@ -995,6 +995,28 @@ const CostTypeSchedule: React.FC<Props> = ({
     SEGMENT_DEFINITIONS.reduce((sum, def) => sum + (segMonthlyRem.get(def.key)?.[i] ?? 0), 0)
   );
 
+  // Manpower view: monthly remaining headcount per labor segment
+  const segMonthlyRemHrs = new Map<string, number[]>();
+  SEGMENT_DEFINITIONS.forEach(def => {
+    if (!activeKeys.includes(def.key) || !def.isLabor) return;
+    const seg    = segmentMap.get(def.key);
+    const c      = costsMap.get(def.key);
+    const remHrs = calcRemHrs(c, remainingMode);
+    segMonthlyRemHrs.set(def.key,
+      remHrs != null && remHrs > 0
+        ? distributeMonthly(remHrs, clampStart(seg?.start_date), seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
+        : allMonths.map(() => 0)
+    );
+  });
+  const monthlyTotalHC = allMonths.map((_, i) =>
+    SEGMENT_DEFINITIONS
+      .filter(d => d.isLabor && activeKeys.includes(d.key))
+      .reduce((sum, def) => {
+        const hpp = hoursPerPersonPerMonth(shiftSettings[def.key] ?? DEFAULT_SHIFT);
+        return sum + (hpp > 0 ? (segMonthlyRemHrs.get(def.key)?.[i] ?? 0) / hpp : 0);
+      }, 0)
+  );
+
   const projRev = project?.projected_revenue ?? 0;
 
   // Revenue chart: same shape as the TOTAL row, scaled by revenue/cost ratio.
@@ -1066,6 +1088,7 @@ const CostTypeSchedule: React.FC<Props> = ({
           <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
             <button style={viewBtn(viewMode === 'gantt')} onClick={() => setViewMode('gantt')}>Gantt</button>
             <button style={{ ...viewBtn(viewMode === 'table'), borderLeft: '1px solid #e2e8f0' }} onClick={() => setViewMode('table')}>$ Cost</button>
+            <button style={{ ...viewBtn(viewMode === 'manpower'), borderLeft: '1px solid #e2e8f0' }} onClick={() => setViewMode('manpower')}>Manpower</button>
           </div>
         </div>
       </div>
@@ -1204,7 +1227,7 @@ const CostTypeSchedule: React.FC<Props> = ({
       )}
 
       {/* ── Remaining hours method toggle ─────────────────────────────────── */}
-      {viewMode === 'gantt' && (
+      {(viewMode === 'gantt' || viewMode === 'manpower') && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>Labor Hrs:</span>
           <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
@@ -1486,6 +1509,112 @@ const CostTypeSchedule: React.FC<Props> = ({
                     </tr>
                   );
                 })()}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
+
+      {/* ── MANPOWER VIEW ─────────────────────────────────────────────────── */}
+      {viewMode === 'manpower' && (() => {
+        const colW = Math.max(52, Math.min(80, Math.floor(500 / (allMonths.length || 1))));
+        const peakHC = Math.max(...monthlyTotalHC, 0);
+        const fmtHC = (v: number) => v >= 0.05 ? v.toFixed(1) : '';
+        const cell: React.CSSProperties = {
+          padding: '0 0.4rem', borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0',
+          height: ROW_H, verticalAlign: 'middle', whiteSpace: 'nowrap', fontSize: '0.75rem',
+        };
+        return (
+          <div style={{ overflowX: 'auto', border: '1px solid #94a3b8', borderRadius: 6 }}>
+            <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+              <thead>
+                <tr style={{ background: '#eef2f7', position: 'sticky', top: 0, zIndex: 3 }}>
+                  <th style={{ ...cell, textAlign: 'left', fontWeight: 700, fontSize: '0.68rem', minWidth: 180, position: 'sticky', left: 0, background: '#eef2f7', zIndex: 4, borderLeft: '3px solid transparent', borderRight: '2px solid #94a3b8' }}>
+                    Cost Type
+                  </th>
+                  <th style={{ ...cell, textAlign: 'right', fontWeight: 700, fontSize: '0.68rem', minWidth: 72, background: '#eef2f7' }}>Rem Hrs</th>
+                  <th style={{ ...cell, textAlign: 'right', fontWeight: 700, fontSize: '0.68rem', minWidth: 72, background: '#eef2f7', borderRight: '2px solid #94a3b8' }}>Rem $</th>
+                  {allMonths.map((m, i) => (
+                    <th key={i} style={{ ...cell, textAlign: 'center', fontWeight: 700, fontSize: '0.68rem', width: colW, background: '#eef2f7' }}>
+                      {m.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' })}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const rows: React.ReactNode[] = [];
+                  let lastG = '';
+                  let rowIdx = 0;
+                  SEGMENT_DEFINITIONS.forEach(def => {
+                    if (!activeKeys.includes(def.key)) return;
+                    const group = def.isLabor ? 'LABOR' : 'NON-LABOR';
+                    if (group !== lastG) {
+                      lastG = group;
+                      rows.push(
+                        <tr key={`g-${group}`}>
+                          <td colSpan={3 + allMonths.length} style={{ ...cell, fontWeight: 700, fontSize: '0.63rem', letterSpacing: '0.06em', textTransform: 'uppercase', background: def.isLabor ? '#eff6ff' : '#f0fdf4', color: def.isLabor ? '#1d4ed8' : '#15803d', borderTop: '2px solid #94a3b8', borderLeft: 'none', borderRight: 'none', padding: '0 0.75rem' }}>
+                            {group}
+                          </td>
+                        </tr>
+                      );
+                    }
+                    const c      = costsMap.get(def.key);
+                    const color  = SEGMENT_COLOR[def.key] ?? '#6b7280';
+                    const remHrs = calcRemHrs(c, remainingMode);
+                    const remCost = safeN(c?.projected_cost) - safeN(c?.jtd_cost);
+                    const bg = rowIdx % 2 === 0 ? '#fff' : '#f8fafc';
+                    rowIdx++;
+                    const monthlyHrs = segMonthlyRemHrs.get(def.key) ?? allMonths.map(() => 0);
+                    rows.push(
+                      <tr key={def.key} style={{ background: bg }}>
+                        <td style={{ ...cell, position: 'sticky', left: 0, background: bg, zIndex: 1, borderLeft: `3px solid ${def.isLabor ? '#3b82f6' : '#10b981'}`, borderRight: '2px solid #94a3b8' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
+                            <span style={{ fontWeight: 500, fontSize: '0.75rem' }}>{def.label}</span>
+                            <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontFamily: 'monospace', marginLeft: 'auto' }}>{def.key.toUpperCase()}</span>
+                          </span>
+                        </td>
+                        <td style={{ ...cell, textAlign: 'right', color: '#64748b', fontSize: '0.7rem' }}>
+                          {def.isLabor && remHrs != null ? fmtHrs(Math.max(0, remHrs)) : '—'}
+                        </td>
+                        <td style={{ ...cell, textAlign: 'right', fontWeight: 600, borderRight: '2px solid #94a3b8', color: remCost < 0 ? '#dc2626' : '#1e293b' }}>
+                          {c?.projected_cost != null ? fmtCompact(remCost) : '—'}
+                        </td>
+                        {allMonths.map((_, i) => {
+                          if (!def.isLabor) return <td key={i} style={{ ...cell, textAlign: 'center', color: '#cbd5e1' }}>—</td>;
+                          const hpp = hoursPerPersonPerMonth(shiftSettings[def.key] ?? DEFAULT_SHIFT);
+                          const hc = hpp > 0 ? monthlyHrs[i] / hpp : 0;
+                          const intensity = peakHC > 0 ? hc / peakHC : 0;
+                          return (
+                            <td key={i} style={{ ...cell, textAlign: 'center', fontWeight: hc >= 0.05 ? 600 : 400,
+                              background: hc >= 0.05 ? `${color}${Math.round(intensity * 0.35 * 255).toString(16).padStart(2, '0')}` : undefined,
+                              color: hc >= 0.05 ? '#1e293b' : '#cbd5e1' }}>
+                              {fmtHC(hc)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  });
+                  return rows;
+                })()}
+                {/* Totals row */}
+                <tr style={{ background: '#e2e8f0', fontWeight: 700, borderTop: '2px solid #94a3b8' }}>
+                  <td style={{ ...cell, position: 'sticky', left: 0, background: '#e2e8f0', zIndex: 1, borderLeft: '3px solid #475569', borderRight: '2px solid #94a3b8', fontSize: '0.72rem' }}>TOTAL</td>
+                  <td style={{ ...cell, textAlign: 'right', fontSize: '0.72rem' }}>
+                    {fmtHrs(SEGMENT_DEFINITIONS.filter(d => d.isLabor && activeKeys.includes(d.key)).reduce((s, d) => { const v = calcRemHrs(costsMap.get(d.key), remainingMode); return s + (v != null ? Math.max(0, v) : 0); }, 0) || null)}
+                  </td>
+                  <td style={{ ...cell, textAlign: 'right', borderRight: '2px solid #94a3b8', fontSize: '0.72rem' }}>{fmtCompact(totalRem)}</td>
+                  {allMonths.map((_, i) => {
+                    const hc = monthlyTotalHC[i];
+                    return (
+                      <td key={i} style={{ ...cell, textAlign: 'center', background: i % 2 === 0 ? '#d9dfe8' : '#d1d8e2', color: hc >= 0.05 ? '#1e293b' : '#94a3b8' }}>
+                        {hc >= 0.05 ? hc.toFixed(1) : ''}
+                      </td>
+                    );
+                  })}
+                </tr>
               </tbody>
             </table>
           </div>
