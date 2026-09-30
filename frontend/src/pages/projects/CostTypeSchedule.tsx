@@ -91,7 +91,7 @@ const fmtK = (v: number | null | undefined) => {
   if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
   return `$${Math.round(v / 1000).toLocaleString()}k`;
 };
-const fmtHrs = (v: number | null | undefined) => v ? Math.round(v).toLocaleString() : '—';
+const fmtHrs = (v: number | null | undefined) => v != null && !isNaN(v as number) ? Math.round(v).toLocaleString() : '—';
 
 type RemHrsMode = 'est-rate' | 'jtd-rate';
 
@@ -105,18 +105,21 @@ function calcRate(costs: SegmentCosts | undefined, mode: RemHrsMode): number | n
 }
 
 function calcRemHrs(costs: SegmentCosts | undefined, mode: RemHrsMode): number | null {
-  const projCost = safeN(costs?.projected_cost);
-  const jtdCost  = safeN(costs?.jtd_cost);
-  const remCost  = projCost - jtdCost;
-  const estCost = safeN(costs?.est_cost);
-  const estHrs  = safeN(costs?.est_hours);
-  const jtdHrs  = safeN(costs?.jtd_hours);
-  if (mode === 'est-rate') {
-    if (estCost <= 0 || estHrs <= 0) return null;
-    return remCost / (estCost / estHrs);
+  const estHrs = safeN(costs?.est_hours);
+  const jtdHrs = safeN(costs?.jtd_hours);
+  if (estHrs <= 0) return null;
+  // est - jtd is the direct Vista answer; ignore projected_cost which can be
+  // negative for overhead/burden segments and would produce misleading results
+  if (mode === 'est-rate') return Math.max(0, estHrs - jtdHrs);
+  // jtd-rate: show hours remaining based on jtd pace if jtd data exists,
+  // otherwise fall back to est - jtd
+  const jtdCost = safeN(costs?.jtd_cost);
+  if (jtdCost > 0 && jtdHrs > 0) {
+    const projCost = safeN(costs?.projected_cost);
+    const remCost  = projCost - jtdCost;
+    return Math.max(0, remCost / (jtdCost / jtdHrs));
   }
-  if (jtdCost <= 0 || jtdHrs <= 0) return null;
-  return remCost / (jtdCost / jtdHrs);
+  return Math.max(0, estHrs - jtdHrs);
 }
 
 const calcDur = (start: string | null, end: string | null): string => {
