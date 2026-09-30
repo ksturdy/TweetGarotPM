@@ -338,34 +338,48 @@ const LaborForecast: React.FC = () => {
     queryFn: () => vistaDataService.getShopFieldHours(),
   });
 
-  // Fetch segment data for all linked non-phase projects so cost_type distribution
-  // works even when the project's scheduling_mode hasn't been explicitly set to 'cost_type'.
-  // Also include projects resolved from provisional phase codes (provisional_linked_project_id)
-  // for contracts that haven't been formally linked but do have provisional codes.
-  const linkedNonPhaseProjectIds = useMemo(() => {
+  // Explicitly cost_type projects — the primary path for segment-based distribution.
+  const linkedCostTypeProjectIds = useMemo(() => {
     if (!contracts) return [];
     const seen = new Set<number>();
     const ids: number[] = [];
     for (const c of contracts) {
-      const projId = c.linked_project_id ?? (c as any).provisional_linked_project_id;
-      const mode = c.linked_project_scheduling_mode ?? (c as any).provisional_linked_project_scheduling_mode;
-      if (projId && mode !== 'phase' && !seen.has(projId)) {
-        ids.push(projId);
-        seen.add(projId);
+      if (c.linked_project_id && c.linked_project_scheduling_mode === 'cost_type' && !seen.has(c.linked_project_id)) {
+        ids.push(c.linked_project_id);
+        seen.add(c.linked_project_id);
       }
     }
     return ids;
   }, [contracts]);
 
-  const { data: bulkSegments } = useQuery({
-    queryKey: ['bulkSegments', linkedNonPhaseProjectIds],
-    queryFn: () => scheduleSegmentsService.getBulk(linkedNonPhaseProjectIds),
-    enabled: linkedNonPhaseProjectIds.length > 0,
-    staleTime: 30 * 1000,
-  });
+  // Projects linked only via provisional codes — contracts that have no direct project link
+  // but do have provisional phase codes pointing to a PM project (e.g. job 44484 SM Shop).
+  const linkedProvProjectIds = useMemo(() => {
+    if (!contracts) return [];
+    const directIds = new Set(linkedCostTypeProjectIds);
+    const seen = new Set<number>();
+    const ids: number[] = [];
+    for (const c of contracts) {
+      const provId = (c as any).provisional_linked_project_id as number | null | undefined;
+      if (provId && !directIds.has(provId) && !seen.has(provId)) {
+        ids.push(provId);
+        seen.add(provId);
+      }
+    }
+    return ids;
+  }, [contracts, linkedCostTypeProjectIds]);
 
-  // Keep a narrowed alias for the old cost_type-only list (still used in the ProjectedRevenue path)
-  const linkedCostTypeProjectIds = useMemo(() => linkedNonPhaseProjectIds, [linkedNonPhaseProjectIds]);
+  const allSegmentProjectIds = useMemo(
+    () => [...linkedCostTypeProjectIds, ...linkedProvProjectIds],
+    [linkedCostTypeProjectIds, linkedProvProjectIds]
+  );
+
+  const { data: bulkSegments } = useQuery({
+    queryKey: ['bulkSegments', allSegmentProjectIds],
+    queryFn: () => scheduleSegmentsService.getBulk(allSegmentProjectIds),
+    enabled: allSegmentProjectIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Opportunity data (lazy-loaded when overlay is enabled)
   const { data: opportunitiesWithEstimates } = useQuery({
@@ -756,26 +770,27 @@ const LaborForecast: React.FC = () => {
       //   b) The project has at least one labor segment with dates AND est_hours configured —
       //      i.e. the PM is using the Cost Type schedule without having set the mode flag.
       const LABOR_COST_TYPE_KEYS = new Set(['30', '35', '40', '45', '50', '55', '70']);
-      // Resolve project ID: direct link first, then fallback from provisional codes
-      const resolvedProjectId = contract.linked_project_id
-        ?? (contract as any).provisional_linked_project_id
-        ?? null;
-      const resolvedMode = contract.linked_project_scheduling_mode
-        ?? (contract as any).provisional_linked_project_scheduling_mode
-        ?? null;
-      const projSegData = (resolvedProjectId && bulkSegments)
-        ? (bulkSegments[resolvedProjectId] ?? null)
+
+      // PRIMARY: explicit cost_type mode (Vantage and any project with scheduling_mode='cost_type')
+      const primaryProjId = (contract.linked_project_id && contract.linked_project_scheduling_mode === 'cost_type')
+        ? contract.linked_project_id : null;
+
+      // FALLBACK: project resolved from provisional codes — no direct link, no mode flag,
+      // but has provisional phase codes pointing at a PM project with segment dates.
+      const provProjId = primaryProjId ? null
+        : ((contract as any).provisional_linked_project_id as number | null) ?? null;
+
+      const resolvedProjId = primaryProjId ?? provProjId;
+      const projSegData = (resolvedProjId && bulkSegments)
+        ? (bulkSegments[resolvedProjId] ?? null)
         : null;
-      // Activate cost_type distribution if any labor segment has dates configured —
-      // don't require est_hours > 0 since the segment may not have Vista codes yet.
-      const hasConfiguredSegments = projSegData?.some(
-        s => LABOR_COST_TYPE_KEYS.has(s.segment_key) && !!s.start_date
-      ) ?? false;
-      const projectSegs = (
-        resolvedProjectId &&
-        bulkSegments &&
-        (resolvedMode === 'cost_type' || hasConfiguredSegments)
-      ) ? projSegData : null;
+
+      // Provisional path: only activate cost_type mode when segments actually have est_hours.
+      const hasProvSegments = !primaryProjId && (projSegData?.some(
+        s => LABOR_COST_TYPE_KEYS.has(s.segment_key) && s.start_date && (s.est_hours ?? 0) > 0
+      ) ?? false);
+
+      const projectSegs = (primaryProjId || hasProvSegments) ? projSegData : null;
 
       if (projectSegs) {
         const TRADE_FIELD_SEG: Record<string, string> = { pf: '40', sm: '30', pl: '50' };
