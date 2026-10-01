@@ -1293,8 +1293,30 @@ const LaborForecast: React.FC = () => {
     const cBottom = y + cH;
 
     const pdfGraphData = displayColumns.map(col => {
-      const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
-      return { label: col.label, pfHC: ct.pf / hpp, smHC: ct.sm / hpp, plHC: ct.pl / hpp, totalHC: ct.total / hpp };
+      let pfFieldHC = 0, pfShopHC = 0, smFieldHC = 0, smShopHC = 0, plFieldHC = 0, plShopHC = 0;
+      projections.forEach(p => {
+        if (p.monthlySegHC) {
+          const seg = p.monthlySegHC.get(col.key) ?? {};
+          pfFieldHC += seg['40'] ?? 0;
+          pfShopHC  += seg['45'] ?? 0;
+          smFieldHC += seg['30'] ?? 0;
+          smShopHC  += seg['35'] ?? 0;
+          plFieldHC += seg['50'] ?? 0;
+          plShopHC  += seg['55'] ?? 0;
+        } else {
+          const h = p.monthlyHours.get(col.key) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
+          if (locationFilter === 'shop') {
+            pfShopHC += h.pf / hpp; smShopHC += h.sm / hpp; plShopHC += h.pl / hpp;
+          } else {
+            pfFieldHC += h.pf / hpp; smFieldHC += h.sm / hpp; plFieldHC += h.pl / hpp;
+          }
+        }
+      });
+      if (!tradeFilter.includes('pf')) { pfFieldHC = 0; pfShopHC = 0; }
+      if (!tradeFilter.includes('sm')) { smFieldHC = 0; smShopHC = 0; }
+      if (!tradeFilter.includes('pl')) { plFieldHC = 0; plShopHC = 0; }
+      const totalHC = pfFieldHC + pfShopHC + smFieldHC + smShopHC + plFieldHC + plShopHC;
+      return { label: col.label, pfFieldHC, pfShopHC, smFieldHC, smShopHC, plFieldHC, plShopHC, totalHC };
     });
 
     let pdfMaxHC = 0;
@@ -1327,25 +1349,29 @@ const LaborForecast: React.FC = () => {
     const pdfBarW = Math.min(cW / pdfBarCount * 0.75, 20);
     const pdfBarGap = cW / pdfBarCount;
     const tColors: Array<[number, number, number]> = [[59, 130, 246], [16, 185, 129], [245, 158, 11]];
+    const tShopColors: Array<[number, number, number]> = [[147, 197, 253], [134, 239, 172], [253, 230, 138]];
 
     pdfGraphData.forEach((d, i) => {
       const bx = cLeft + i * pdfBarGap + (pdfBarGap - pdfBarW) / 2;
-      const plBarH = pdfMaxHC > 0 ? (d.plHC / pdfMaxHC) * cH : 0;
-      const smBarH = pdfMaxHC > 0 ? (d.smHC / pdfMaxHC) * cH : 0;
-      const pfBarH = pdfMaxHC > 0 ? (d.pfHC / pdfMaxHC) * cH : 0;
 
-      if (plBarH > 0.5) {
-        doc.setFillColor(tColors[2][0], tColors[2][1], tColors[2][2]);
-        doc.rect(bx, cBottom - plBarH, pdfBarW, plBarH, 'F');
-      }
-      if (smBarH > 0.5) {
-        doc.setFillColor(tColors[1][0], tColors[1][1], tColors[1][2]);
-        doc.rect(bx, cBottom - plBarH - smBarH, pdfBarW, smBarH, 'F');
-      }
-      if (pfBarH > 0.5) {
-        doc.setFillColor(tColors[0][0], tColors[0][1], tColors[0][2]);
-        doc.rect(bx, cBottom - plBarH - smBarH - pfBarH, pdfBarW, pfBarH, 'F');
-      }
+      // Bottom-to-top: PL field, PL shop, SM field, SM shop, PF field, PF shop
+      const segs: { hc: number; rgb: [number, number, number] }[] = [
+        { hc: d.plFieldHC, rgb: tColors[2] },
+        { hc: d.plShopHC,  rgb: tShopColors[2] },
+        { hc: d.smFieldHC, rgb: tColors[1] },
+        { hc: d.smShopHC,  rgb: tShopColors[1] },
+        { hc: d.pfFieldHC, rgb: tColors[0] },
+        { hc: d.pfShopHC,  rgb: tShopColors[0] },
+      ];
+      let stackBottom = cBottom;
+      segs.forEach(seg => {
+        const segH = pdfMaxHC > 0 ? (seg.hc / pdfMaxHC) * cH : 0;
+        if (segH > 0.5) {
+          doc.setFillColor(seg.rgb[0], seg.rgb[1], seg.rgb[2]);
+          doc.rect(bx, stackBottom - segH, pdfBarW, segH, 'F');
+          stackBottom -= segH;
+        }
+      });
 
       // Opportunity overlay bar with diagonal hatch pattern
       if (oppMode !== 'off') {
@@ -1353,18 +1379,14 @@ const LaborForecast: React.FC = () => {
         const oppHC = ot.total / hpp;
         const oppBarH = pdfMaxHC > 0 ? (oppHC / pdfMaxHC) * cH : 0;
         if (oppBarH > 0.5) {
-          const committedH = plBarH + smBarH + pfBarH;
-          const oppY = cBottom - committedH - oppBarH;
+          const oppY = stackBottom - oppBarH;
 
-          // Light orange fill background with border
           doc.setFillColor(255, 251, 235);
           doc.setDrawColor(245, 158, 11);
           doc.setLineWidth(0.3);
           doc.rect(bx, oppY, pdfBarW, oppBarH, 'FD');
 
-          // Draw diagonal hatch lines clipped to bar area
           doc.saveGraphicsState();
-          // Build clip path using moveTo/lineTo
           (doc as any).moveTo(bx, oppY);
           (doc as any).lineTo(bx + pdfBarW, oppY);
           (doc as any).lineTo(bx + pdfBarW, oppY + oppBarH);
@@ -1392,14 +1414,24 @@ const LaborForecast: React.FC = () => {
     // Legend
     const lgY = cBottom + 20;
     let lgX = cLeft;
-    filteredTrades.forEach((trade, ti) => {
+    filteredTrades.forEach((trade) => {
       const colorIdx = TRADES.findIndex(t => t.key === trade.key);
-      doc.setFillColor(tColors[colorIdx][0], tColors[colorIdx][1], tColors[colorIdx][2]);
-      doc.rect(lgX, lgY - 4, 10, 6, 'F');
-      doc.setFontSize(7);
-      doc.setTextColor(100, 116, 139);
-      doc.text(trade.label, lgX + 13, lgY + 1);
-      lgX += 70;
+      if (locationFilter !== 'shop') {
+        doc.setFillColor(tColors[colorIdx][0], tColors[colorIdx][1], tColors[colorIdx][2]);
+        doc.rect(lgX, lgY - 4, 10, 6, 'F');
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`${trade.label} Field`, lgX + 13, lgY + 1);
+        lgX += 75;
+      }
+      if (locationFilter !== 'field') {
+        doc.setFillColor(tShopColors[colorIdx][0], tShopColors[colorIdx][1], tShopColors[colorIdx][2]);
+        doc.rect(lgX, lgY - 4, 10, 6, 'F');
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`${trade.label} Shop`, lgX + 13, lgY + 1);
+        lgX += 75;
+      }
     });
     if (oppMode !== 'off') {
       // Hatched legend swatch matching the bar style
@@ -1592,7 +1624,11 @@ const LaborForecast: React.FC = () => {
         const totalHC = p.monthlySegHC
           ? pc.keys.reduce((sum, mk) => {
               const seg = p.monthlySegHC!.get(mk) ?? {};
-              return sum + Object.values(seg).reduce((s2, v) => s2 + v, 0);
+              let filtered = 0;
+              if (tradeFilter.includes('pf')) filtered += (seg['40'] ?? 0) + (seg['45'] ?? 0);
+              if (tradeFilter.includes('sm')) filtered += (seg['30'] ?? 0) + (seg['35'] ?? 0);
+              if (tradeFilter.includes('pl')) filtered += (seg['50'] ?? 0) + (seg['55'] ?? 0);
+              return sum + filtered;
             }, 0)
           : (h.pf + h.sm + h.pl) / hpp;
         return totalHC < 0.1 ? '-' : totalHC.toFixed(1);
