@@ -40,8 +40,8 @@ const BacklogByMarketWidget: React.FC<WidgetProps> = () => {
   };
 
   const options: any = {
-    responsive: true,
-    maintainAspectRatio: false,
+    responsive: false,
+    maintainAspectRatio: true,
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -71,8 +71,8 @@ const BacklogByMarketWidget: React.FC<WidgetProps> = () => {
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: '0.75rem', padding: '0.75rem' }}>
           {/* Pie */}
-          <div style={{ flex: '0 0 105px', minHeight: 0, position: 'relative' }}>
-            <Pie data={chartData} options={options} />
+          <div style={{ flexShrink: 0, alignSelf: 'center' }}>
+            <Pie data={chartData} options={options} width={130} height={130} />
           </div>
           {/* Custom legend */}
           <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', justifyContent: 'center' }}>
