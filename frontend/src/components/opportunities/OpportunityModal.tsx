@@ -102,13 +102,26 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     // Sync the prevCustomerId ref BEFORE setFormData so the customer-change
     // effect doesn't wipe the facility fields we're about to restore.
     prevCustomerId.current = fullOpportunity.customer_id || '';
+
+    // If end date is missing but start+duration are present, recover it
+    let recoveredEndDate = fullOpportunity.estimated_end_date ? String(fullOpportunity.estimated_end_date).substring(0, 10) : '';
+    if (!recoveredEndDate && fullOpportunity.estimated_start_date && fullOpportunity.estimated_duration_days) {
+      const start = new Date(String(fullOpportunity.estimated_start_date).substring(0, 10) + 'T00:00:00');
+      const months = Math.round(Number(fullOpportunity.estimated_duration_days) / 30);
+      if (months > 0) {
+        const end = new Date(start);
+        end.setMonth(end.getMonth() + months);
+        recoveredEndDate = end.toISOString().split('T')[0];
+      }
+    }
+
     setFormData({
       title: fullOpportunity.title || '',
       description: fullOpportunity.description || '',
       estimated_value: fullOpportunity.estimated_value ? Math.round(Number(fullOpportunity.estimated_value)).toString() : '',
       estimated_start_date: fullOpportunity.estimated_start_date ? String(fullOpportunity.estimated_start_date).substring(0, 10) : '',
       estimated_duration_months: fullOpportunity.estimated_duration_days ? Math.round(Number(fullOpportunity.estimated_duration_days) / 30).toString() : '',
-      estimated_end_date: fullOpportunity.estimated_end_date ? String(fullOpportunity.estimated_end_date).substring(0, 10) : '',
+      estimated_end_date: recoveredEndDate,
       construction_type: fullOpportunity.construction_type || fullOpportunity.project_type || '',
       location: fullOpportunity.location || '',
       location_group: fullOpportunity.location_group || '',
@@ -339,7 +352,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     if (formData.location) cleanedData.location = formData.location;
     cleanedData.location_group = formData.location_group || null;
     if (formData.estimated_start_date) cleanedData.estimated_start_date = formData.estimated_start_date;
-    if (formData.estimated_end_date) cleanedData.estimated_end_date = formData.estimated_end_date;
+    cleanedData.estimated_end_date = formData.estimated_end_date || null;
     if (formData.source) cleanedData.source = formData.source;
     if (formData.market) cleanedData.market = formData.market;
     if (formData.owner) cleanedData.owner = formData.owner;

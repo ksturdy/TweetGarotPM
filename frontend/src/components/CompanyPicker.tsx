@@ -52,6 +52,15 @@ const CompanyPicker: React.FC<CompanyPickerProps> = ({
     [companies]
   );
 
+  // When selectedId is set externally (e.g. after form hydration), switch back to select mode
+  useEffect(() => {
+    if (selectedId && !selectOnly) {
+      setMode('select');
+      setMatches([]);
+      setShowMatches(false);
+    }
+  }, [selectedId, selectOnly]);
+
   // Focus text input when switching to manual mode
   useEffect(() => {
     if (mode === 'manual' && inputRef.current) {
