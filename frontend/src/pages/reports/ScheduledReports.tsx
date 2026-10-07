@@ -1150,18 +1150,6 @@ const ScheduledReports: React.FC = () => {
                           })}
                         </div>
                       </div>
-                      <div style={{ minWidth: '160px' }}>
-                        <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Hours / Person / Mo</label>
-                        <input
-                          type="number"
-                          min="100"
-                          max="240"
-                          step="1"
-                          style={inputStyle}
-                          value={(form.filters.hoursPerPersonPerMonth as number) || 173}
-                          onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, hoursPerPersonPerMonth: Number(e.target.value) || undefined } }))}
-                        />
-                      </div>
                     </div>
                   )}
                 </div>
