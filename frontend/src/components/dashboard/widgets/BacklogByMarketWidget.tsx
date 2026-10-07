@@ -75,10 +75,10 @@ const BacklogByMarketWidget: React.FC<WidgetProps> = () => {
             <Pie data={chartData} options={options} />
           </div>
           {/* Custom legend */}
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', justifyContent: 'center' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', justifyContent: 'center' }}>
             {markets.map((m, i) => (
-              <div key={m.market} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem' }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, background: COLORS[i], flexShrink: 0 }} />
+              <div key={m.market} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.5rem' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: COLORS[i], flexShrink: 0 }} />
                 <span style={{ flex: 1, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.market}</span>
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{fmtM(m.backlog)}</span>
               </div>
