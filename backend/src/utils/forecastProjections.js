@@ -364,10 +364,11 @@ function buildLaborProjections(contracts, shopFieldRows, filters, opts) {
         if (!tradeFilter.has(trade.key)) continue;
         const td = sfData ? sfData[trade.key] : null;
         if (!td) continue;
-        const estField = td.field?.est || 0;
-        const estShop  = td.shop?.est  || 0;
-        const fieldHours = locationFilter !== 'shop'  ? estField : 0;
-        const shopHours  = locationFilter !== 'field' ? estShop  : 0;
+        // Use est-jtd per location — matches CostTypeSchedule source of truth
+        const remField = Math.max(0, (td.field?.est || 0) - (td.field?.jtd || 0));
+        const remShop  = Math.max(0, (td.shop?.est  || 0) - (td.shop?.jtd  || 0));
+        const fieldHours = locationFilter !== 'shop'  ? remField : 0;
+        const shopHours  = locationFilter !== 'field' ? remShop  : 0;
         if (fieldHours > 0) {
           const seg = projectSegs.find(s => s.segment_key === TRADE_FIELD_SEG[trade.key]);
           distributeSegHoursIntoMaps(monthlyHours, monthlyHC, trade.key, fieldHours, seg, startOffset, endOffset, contour, now);

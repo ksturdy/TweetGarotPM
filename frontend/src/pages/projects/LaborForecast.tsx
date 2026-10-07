@@ -821,22 +821,16 @@ const LaborForecast: React.FC = () => {
           }
         };
 
-        TRADES.forEach((trade, idx) => {
-          const rem = tradeHours[idx].remaining;
-          if (rem <= 0) return;
+        TRADES.forEach((trade) => {
+          const td = sfData?.[trade.key];
+          if (!td) return;
           const fieldSegKey = TRADE_FIELD_SEG[trade.key];
           const shopSegKey  = TRADE_SHOP_SEG[trade.key];
-          // Use est_hours from segments only to determine field/shop split ratio.
-          // Apply that ratio to actual remaining hours so the chart matches the Manpower grid.
-          const estField = projectSegs.find(s => s.segment_key === fieldSegKey)?.est_hours ?? 0;
-          const estShop  = projectSegs.find(s => s.segment_key === shopSegKey)?.est_hours  ?? 0;
-          const totalSeg = estField + estShop;
-          const fieldRatio = totalSeg > 0 ? estField / totalSeg : 0.5;
-          const shopRatio  = totalSeg > 0 ? estShop  / totalSeg : 0.5;
-          // If no segment est_hours, fall back to rem for single-location filters.
-          const useFallback = totalSeg === 0 && rem > 0 && locationFilter !== 'both';
-          const fieldHours = locationFilter !== 'shop'  ? (useFallback ? rem : rem * fieldRatio) : 0;
-          const shopHours  = locationFilter !== 'field' ? (useFallback ? rem : rem * shopRatio)  : 0;
+          // Use est-jtd per location — matches CostTypeSchedule source of truth
+          const remField = Math.max(0, (td.field?.est || 0) - (td.field?.jtd || 0));
+          const remShop  = Math.max(0, (td.shop?.est  || 0) - (td.shop?.jtd  || 0));
+          const fieldHours = locationFilter !== 'shop'  ? remField : 0;
+          const shopHours  = locationFilter !== 'field' ? remShop  : 0;
           distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', fieldHours, fieldSegKey);
           distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', shopHours,  shopSegKey);
         });
