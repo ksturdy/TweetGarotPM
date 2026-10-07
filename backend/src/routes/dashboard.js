@@ -284,18 +284,13 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             p.created_at,
             p.updated_at,
             CASE
-              WHEN p.updated_at <= p.created_at + interval '5 seconds'
-                   AND p.updated_by IS NULL
-                   AND vc.id IS NOT NULL
-                THEN 'opened'
-              WHEN p.updated_at > p.created_at + interval '5 seconds'
-                THEN 'updated'
-              ELSE 'created'
+              WHEN p.updated_at <= p.created_at + interval '10 seconds'
+                THEN 'created'
+              ELSE 'updated'
             END as action
           FROM projects p
           LEFT JOIN users updater ON p.updated_by = updater.id
           LEFT JOIN employees e ON p.manager_id = e.id
-          LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
           WHERE p.tenant_id = $1
           ORDER BY GREATEST(p.created_at, p.updated_at) DESC
           LIMIT 8
