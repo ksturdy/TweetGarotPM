@@ -283,17 +283,13 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             ) as actor_name,
             p.created_at,
             p.updated_at,
-            CASE
-              WHEN p.updated_at <= p.created_at + interval '10 seconds'
-                THEN 'created'
-              ELSE 'updated'
-            END as action
+            'created' as action
           FROM projects p
           LEFT JOIN users updater ON p.updated_by = updater.id
           LEFT JOIN employees e ON p.manager_id = e.id
           WHERE p.tenant_id = $1
-          ORDER BY GREATEST(p.created_at, p.updated_at) DESC
-          LIMIT 8
+          ORDER BY p.created_at DESC
+          LIMIT 20
         )
         UNION ALL
         (
@@ -310,14 +306,14 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             ) as actor_name,
             o.created_at,
             o.updated_at,
-            CASE WHEN o.updated_at > o.created_at + interval '5 seconds' THEN 'updated' ELSE 'created' END as action
+            'created' as action
           FROM opportunities o
           LEFT JOIN users updater ON o.updated_by = updater.id
           LEFT JOIN users creator ON o.created_by = creator.id
           LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
           WHERE o.tenant_id = $1
-          ORDER BY GREATEST(o.created_at, o.updated_at) DESC
-          LIMIT 8
+          ORDER BY o.created_at DESC
+          LIMIT 20
         )
         UNION ALL
         (
@@ -331,12 +327,12 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             u.first_name || ' ' || u.last_name as actor_name,
             est.created_at,
             est.updated_at,
-            CASE WHEN est.updated_at > est.created_at + interval '5 seconds' THEN 'updated' ELSE 'created' END as action
+            'created' as action
           FROM estimates est
           LEFT JOIN users u ON est.created_by = u.id
           WHERE est.tenant_id = $1
-          ORDER BY GREATEST(est.created_at, est.updated_at) DESC
-          LIMIT 8
+          ORDER BY est.created_at DESC
+          LIMIT 20
         )
         UNION ALL
         (
@@ -350,13 +346,13 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             u.first_name || ' ' || u.last_name as actor_name,
             r.created_at,
             r.updated_at,
-            CASE WHEN r.updated_at > r.created_at + interval '5 seconds' THEN 'updated' ELSE 'created' END as action
+            'created' as action
           FROM rfis r
           JOIN projects p ON r.project_id = p.id
           LEFT JOIN users u ON r.created_by = u.id
           WHERE p.tenant_id = $1
-          ORDER BY GREATEST(r.created_at, r.updated_at) DESC
-          LIMIT 8
+          ORDER BY r.created_at DESC
+          LIMIT 20
         )
         UNION ALL
         (
@@ -370,13 +366,13 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             u.first_name || ' ' || u.last_name as actor_name,
             s.created_at,
             s.updated_at,
-            CASE WHEN s.updated_at > s.created_at + interval '5 seconds' THEN 'updated' ELSE 'created' END as action
+            'created' as action
           FROM submittals s
           JOIN projects p ON s.project_id = p.id
           LEFT JOIN users u ON s.created_by = u.id
           WHERE p.tenant_id = $1
-          ORDER BY GREATEST(s.created_at, s.updated_at) DESC
-          LIMIT 8
+          ORDER BY s.created_at DESC
+          LIMIT 20
         )
         UNION ALL
         (
@@ -390,13 +386,13 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             u.first_name || ' ' || u.last_name as actor_name,
             co.created_at,
             co.updated_at,
-            CASE WHEN co.updated_at > co.created_at + interval '5 seconds' THEN 'updated' ELSE 'created' END as action
+            'created' as action
           FROM change_orders co
           JOIN projects p ON co.project_id = p.id
           LEFT JOIN users u ON co.created_by = u.id
           WHERE p.tenant_id = $1
-          ORDER BY GREATEST(co.created_at, co.updated_at) DESC
-          LIMIT 8
+          ORDER BY co.created_at DESC
+          LIMIT 20
         )
         UNION ALL
         (
@@ -410,16 +406,16 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             u.first_name || ' ' || u.last_name as actor_name,
             dr.created_at,
             dr.updated_at,
-            CASE WHEN dr.updated_at > dr.created_at + interval '5 seconds' THEN 'updated' ELSE 'created' END as action
+            'created' as action
           FROM daily_reports dr
           JOIN projects p ON dr.project_id = p.id
           LEFT JOIN users u ON dr.created_by = u.id
           WHERE p.tenant_id = $1
-          ORDER BY GREATEST(dr.created_at, dr.updated_at) DESC
-          LIMIT 8
+          ORDER BY dr.created_at DESC
+          LIMIT 20
         )
       ) activity
-      ORDER BY GREATEST(created_at, updated_at) DESC
+      ORDER BY created_at DESC
       LIMIT $2
     `;
 
@@ -434,7 +430,7 @@ router.get('/recent-activity', authenticate, async (req, res) => {
       status: row.status,
       actorName: row.actor_name,
       action: row.action,
-      timestamp: row.updated_at || row.created_at,
+      timestamp: row.created_at,
     }));
 
     res.json(activities);
