@@ -14,4 +14,5 @@ export const defaultLayout: DashboardLayout = [
   { id: 'gm_trending_up', column: 'center', order: 7, visible: false },
   { id: 'recent_activity', column: 'activity', order: 0, visible: true },
   { id: 'trade_shows', column: 'activity', order: 1, visible: false },
+  { id: 'backlog_by_market', column: 'right', order: 0, visible: true },
 ];

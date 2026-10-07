@@ -12,6 +12,7 @@ import LargestBacklogWidget from './widgets/LargestBacklogWidget';
 import MostGmDollarsWidget from './widgets/MostGmDollarsWidget';
 import GmTrendingDownWidget from './widgets/GmTrendingDownWidget';
 import GmTrendingUpWidget from './widgets/GmTrendingUpWidget';
+import BacklogByMarketWidget from './widgets/BacklogByMarketWidget';
 
 export const widgetRegistry: Record<string, WidgetDefinition> = {
   kpi_cards: {
@@ -105,6 +106,13 @@ export const widgetRegistry: Record<string, WidgetDefinition> = {
     category: 'projects',
     defaultColumn: 'center',
     component: GmTrendingUpWidget,
+  },
+  backlog_by_market: {
+    id: 'backlog_by_market',
+    title: 'Backlog by Market',
+    category: 'projects',
+    defaultColumn: 'right',
+    component: BacklogByMarketWidget,
   },
 };
 
