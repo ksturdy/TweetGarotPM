@@ -125,8 +125,8 @@ function resolveTileUrl(mapStyle: string, hasRevenue: boolean): string {
   if (mapStyle === 'esri-street') return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
   if (mapStyle === 'esri-topo') return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
   if (mapStyle === 'osm') return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-  if (hasRevenue) return 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
-  return 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+  if (hasRevenue) return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+  return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
 }
 
 const ProjectLocations: React.FC = () => {
@@ -307,7 +307,7 @@ const ProjectLocations: React.FC = () => {
   const [enabledMarketGroups, setEnabledMarketGroups] = useState<number[]>([]);
   const [showUngrouped, setShowUngrouped] = useState(false);
   const [standardLayers, setStandardLayers] = useState<string[]>(['projects']);
-  const [mapStyle, setMapStyle] = useState<string>('carto-voyager');
+  const [mapStyle, setMapStyle] = useState<string>('esri-street');
 
   const { data: customLayers = [] } = useQuery({
     queryKey: ['custom-map-layers'],
@@ -689,7 +689,6 @@ const ProjectLocations: React.FC = () => {
           <label className="form-label">Map Style</label>
           <SearchableSelect
             options={[
-              { value: 'carto-voyager', label: 'Standard (CARTO)' },
               { value: 'esri-street', label: 'Streets (ESRI)' },
               { value: 'esri-topo', label: 'Topographic (ESRI)' },
               { value: 'stamen-terrain', label: 'Terrain (Stamen)' },
@@ -770,7 +769,7 @@ const ProjectLocations: React.FC = () => {
               mapStyle.startsWith('stamen') ? '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://stamen.com/">Stamen Design</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' :
               mapStyle.startsWith('esri') ? '&copy; <a href="https://www.esri.com/">Esri</a>' :
               mapStyle === 'osm' ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' :
-              '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
+              '&copy; <a href="https://www.esri.com/">Esri</a>'
             }
             url={
               mapStyle === 'stamen-terrain' && standardLayers.includes('revenue')
@@ -787,9 +786,7 @@ const ProjectLocations: React.FC = () => {
                 ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}'
               : mapStyle === 'osm'
                 ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-              : standardLayers.includes('revenue')
-                ? 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png'
-                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+              : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'
             }
           />
           <MapRefCapture mapRef={leafletMapRef} />
