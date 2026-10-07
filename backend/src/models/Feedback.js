@@ -182,7 +182,21 @@ class Feedback {
     if (updates.status === 'completed') {
       const query = `
         UPDATE feedback
-        SET ${setClause}, completed_at = CURRENT_TIMESTAMP
+        SET ${setClause}, completed_at = CURRENT_TIMESTAMP,
+            first_responded_at = COALESCE(first_responded_at, CURRENT_TIMESTAMP)
+        ${whereClause}
+        RETURNING *
+      `;
+      const result = await pool.query(query, [id, ...values]);
+      return result.rows[0];
+    }
+
+    // If status is moving away from 'submitted' for the first time, record it
+    if (updates.status && updates.status !== 'submitted') {
+      const query = `
+        UPDATE feedback
+        SET ${setClause},
+            first_responded_at = COALESCE(first_responded_at, CURRENT_TIMESTAMP)
         ${whereClause}
         RETURNING *
       `;
@@ -319,8 +333,8 @@ class Feedback {
           FILTER (WHERE completed_at >= NOW() - INTERVAL '30 days')
         ::numeric, 1) as avg_fix_days,
         ROUND(
-          AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400)
-          FILTER (WHERE status <> 'submitted' AND updated_at >= NOW() - INTERVAL '30 days')
+          AVG(EXTRACT(EPOCH FROM (first_responded_at - created_at)) / 86400)
+          FILTER (WHERE first_responded_at >= NOW() - INTERVAL '30 days')
         ::numeric, 1) as avg_response_days
       FROM feedback
       WHERE tenant_id = $1

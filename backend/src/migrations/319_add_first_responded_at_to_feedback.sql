@@ -1,0 +1,2 @@
+ALTER TABLE feedback
+  ADD COLUMN IF NOT EXISTS first_responded_at TIMESTAMPTZ;
