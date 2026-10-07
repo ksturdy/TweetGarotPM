@@ -5,7 +5,8 @@ import {
   Feedback,
   FeedbackVote,
   FeedbackComment,
-  FeedbackFilters
+  FeedbackFilters,
+  FeedbackKPIs
 } from '../services/feedback';
 import { useAuth } from '../context/AuthContext';
 import { attachmentsApi } from '../services/attachments';
@@ -56,6 +57,12 @@ const FeedbackPage: React.FC = () => {
   const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null);
   const [userVotes, setUserVotes] = useState<Map<number, FeedbackVote | null>>(new Map());
   const [showForm, setShowForm] = useState(true);
+
+  // Fetch KPIs
+  const { data: kpis } = useQuery<FeedbackKPIs>({
+    queryKey: ['feedback-kpis'],
+    queryFn: () => feedbackService.getKPIs(),
+  });
 
   // Fetch all feedback
   const { data: feedbackItems = [], isLoading } = useQuery({
@@ -448,6 +455,52 @@ const FeedbackPage: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="feedback-kpi-bar">
+        <div className="feedback-kpi-card">
+          <div className="kpi-icon kpi-icon--blue">&#9776;</div>
+          <div className="kpi-body">
+            <div className="kpi-value">{feedbackItems.length}</div>
+            <div className="kpi-label">Showing</div>
+          </div>
+        </div>
+        <div className="feedback-kpi-card">
+          <div className="kpi-icon kpi-icon--green">&#10003;</div>
+          <div className="kpi-body">
+            <div className="kpi-value">{kpis ? Number(kpis.completed_count).toLocaleString() : '—'}</div>
+            <div className="kpi-label">Completed</div>
+          </div>
+        </div>
+        <div className="feedback-kpi-card">
+          <div className="kpi-icon kpi-icon--orange">&#9201;</div>
+          <div className="kpi-body">
+            <div className="kpi-value">
+              {kpis?.avg_response_days != null ? `${kpis.avg_response_days}d` : '—'}
+            </div>
+            <div className="kpi-label">Avg. Response (30d)</div>
+          </div>
+        </div>
+        <div className="feedback-kpi-card">
+          <div className="kpi-icon kpi-icon--purple">&#9889;</div>
+          <div className="kpi-body">
+            <div className="kpi-value">
+              {kpis?.avg_fix_days != null ? `${kpis.avg_fix_days}d` : '—'}
+            </div>
+            <div className="kpi-label">Avg. Fix Time (30d)</div>
+          </div>
+        </div>
+        <div className="feedback-kpi-card">
+          <div className="kpi-icon kpi-icon--gold">&#9733;</div>
+          <div className="kpi-body">
+            <div className="kpi-value kpi-value--name">
+              {kpis?.top_contributor ? kpis.top_contributor.name.split(' ')[0] : '—'}
+            </div>
+            <div className="kpi-label">
+              Power User{kpis?.top_contributor ? ` (${kpis.top_contributor.count})` : ''}
+            </div>
+          </div>
         </div>
       </div>
 

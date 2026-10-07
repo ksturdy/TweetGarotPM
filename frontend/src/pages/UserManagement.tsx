@@ -121,6 +121,10 @@ const UserManagement: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setEditingUser(null);
+      toast.success('User updated successfully');
+    },
+    onError: (err: any) => {
+      toast.error(`Failed to save user: ${err.response?.data?.error || 'Unknown error'}`);
     },
   });
 
@@ -308,6 +312,8 @@ const UserManagement: React.FC = () => {
     switch (role) {
       case 'admin': return 'lost';
       case 'manager': return 'quoted';
+      case 'director': return 'awarded';
+      case 'executive': return 'active';
       case 'foreman': return 'negotiation';
       default: return 'lead';
     }
@@ -598,6 +604,8 @@ const UserManagement: React.FC = () => {
                           style={{ width: '100%', padding: '6px 10px', fontSize: '14px', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--bg-dark)', cursor: 'pointer' }}
                         >
                           <option value="admin">Admin</option>
+                          <option value="executive">Executive</option>
+                          <option value="director">Director</option>
                           <option value="manager">Manager</option>
                           <option value="user">User</option>
                           <option value="foreman">Foreman</option>

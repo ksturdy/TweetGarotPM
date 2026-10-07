@@ -7,6 +7,8 @@ interface PermissionRow {
   isCategory?: boolean;
   admin?: boolean;
   manager?: boolean;
+  director?: boolean;
+  executive?: boolean;
   user?: boolean;
   foreman?: boolean;
   note?: string;
@@ -22,34 +24,34 @@ interface HRPermissionRow {
 
 const rolePermissions: PermissionRow[] = [
   { capability: 'Projects', isCategory: true },
-  { capability: 'View projects', admin: true, manager: true, user: true, foreman: false, note: 'Foremen see assigned projects via Field module' },
-  { capability: 'Create projects', admin: true, manager: true, user: false, foreman: false },
-  { capability: 'Edit projects', admin: true, manager: true, user: false, foreman: false },
-  { capability: 'Delete projects', admin: true, manager: false, user: false, foreman: false },
+  { capability: 'View projects', admin: true, manager: true, director: true, executive: true, user: true, foreman: false, note: 'Foremen see assigned projects via Field module' },
+  { capability: 'Create projects', admin: true, manager: true, director: true, executive: true, user: false, foreman: false },
+  { capability: 'Edit projects', admin: true, manager: true, director: true, executive: true, user: false, foreman: false },
+  { capability: 'Delete projects', admin: true, manager: false, director: false, executive: false, user: false, foreman: false },
   { capability: 'RFIs / Submittals / Change Orders', isCategory: true },
-  { capability: 'View', admin: true, manager: true, user: true, foreman: false },
-  { capability: 'Create / Edit', admin: true, manager: true, user: true, foreman: false },
+  { capability: 'View', admin: true, manager: true, director: true, executive: true, user: true, foreman: false },
+  { capability: 'Create / Edit', admin: true, manager: true, director: true, executive: true, user: true, foreman: false },
   { capability: 'Daily Reports', isCategory: true },
-  { capability: 'View daily reports', admin: true, manager: true, user: true, foreman: false },
-  { capability: 'Create / Edit daily reports', admin: true, manager: true, user: true, foreman: false },
+  { capability: 'View daily reports', admin: true, manager: true, director: true, executive: true, user: true, foreman: false },
+  { capability: 'Create / Edit daily reports', admin: true, manager: true, director: true, executive: true, user: true, foreman: false },
   { capability: 'Schedule', isCategory: true },
-  { capability: 'View schedule items', admin: true, manager: true, user: true, foreman: false },
-  { capability: 'Create / Edit schedule items', admin: true, manager: true, user: true, foreman: false },
+  { capability: 'View schedule items', admin: true, manager: true, director: true, executive: true, user: true, foreman: false },
+  { capability: 'Create / Edit schedule items', admin: true, manager: true, director: true, executive: true, user: true, foreman: false },
   { capability: 'Field Module', isCategory: true },
-  { capability: 'Access Field dashboard', admin: true, manager: true, user: true, foreman: true },
-  { capability: 'Field daily reports', admin: true, manager: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
-  { capability: 'Field purchase orders', admin: true, manager: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
-  { capability: 'Field fitting orders', admin: true, manager: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
-  { capability: 'Field safety JSA', admin: true, manager: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
+  { capability: 'Access Field dashboard', admin: true, manager: true, director: true, executive: true, user: true, foreman: true },
+  { capability: 'Field daily reports', admin: true, manager: true, director: true, executive: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
+  { capability: 'Field purchase orders', admin: true, manager: true, director: true, executive: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
+  { capability: 'Field fitting orders', admin: true, manager: true, director: true, executive: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
+  { capability: 'Field safety JSA', admin: true, manager: true, director: true, executive: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
   { capability: 'Administration', isCategory: true },
-  { capability: 'Access admin dashboard', admin: true, manager: false, user: false, foreman: false },
-  { capability: 'Manage users', admin: true, manager: false, user: false, foreman: false },
-  { capability: 'Security settings', admin: true, manager: false, user: false, foreman: false },
-  { capability: 'Tenant settings', admin: true, manager: false, user: false, foreman: false },
+  { capability: 'Access admin dashboard', admin: true, manager: false, director: false, executive: false, user: false, foreman: false },
+  { capability: 'Manage users', admin: true, manager: false, director: false, executive: false, user: false, foreman: false },
+  { capability: 'Security settings', admin: true, manager: false, director: false, executive: false, user: false, foreman: false },
+  { capability: 'Tenant settings', admin: true, manager: false, director: false, executive: false, user: false, foreman: false },
   { capability: 'Security Actions', isCategory: true },
-  { capability: 'Reset user passwords', admin: true, manager: false, user: false, foreman: false, note: 'Also available with HR Full Access' },
-  { capability: 'Disable user 2FA', admin: true, manager: false, user: false, foreman: false, note: 'Also available with HR Full Access' },
-  { capability: 'Force password change', admin: true, manager: false, user: false, foreman: false, note: 'Also available with HR Full Access' },
+  { capability: 'Reset user passwords', admin: true, manager: false, director: false, executive: false, user: false, foreman: false, note: 'Also available with HR Full Access' },
+  { capability: 'Disable user 2FA', admin: true, manager: false, director: false, executive: false, user: false, foreman: false, note: 'Also available with HR Full Access' },
+  { capability: 'Force password change', admin: true, manager: false, director: false, executive: false, user: false, foreman: false, note: 'Also available with HR Full Access' },
 ];
 
 const hrPermissions: HRPermissionRow[] = [
@@ -88,7 +90,7 @@ const PermissionCell: React.FC<{ allowed?: boolean }> = ({ allowed }) => (
 
 const RolesPermissions: React.FC = () => {
   return (
-    <div className="sales-container">
+    <div className="sales-container" style={{ height: 'auto', minHeight: 'calc(100vh - 64px - 3rem)', overflowY: 'auto' }}>
       {/* Header */}
       <div className="sales-page-header">
         <div className="sales-page-title">
@@ -103,11 +105,23 @@ const RolesPermissions: React.FC = () => {
       </div>
 
       {/* Role Descriptions */}
-      <div className="sales-kpi-grid">
+      <div className="sales-kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
         <div className="sales-kpi-card" style={{ borderLeft: '4px solid #dc2626' }}>
           <div className="sales-kpi-label">Admin</div>
           <div style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '0.5rem' }}>
             Full system access including user management, security settings, and administration
+          </div>
+        </div>
+        <div className="sales-kpi-card" style={{ borderLeft: '4px solid #059669' }}>
+          <div className="sales-kpi-label">Executive</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '0.5rem' }}>
+            Same access as Manager with a high-level executive dashboard view
+          </div>
+        </div>
+        <div className="sales-kpi-card" style={{ borderLeft: '4px solid #0891b2' }}>
+          <div className="sales-kpi-label">Director</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '0.5rem' }}>
+            Same access as Manager with a tailored dashboard view for director-level oversight
           </div>
         </div>
         <div className="sales-kpi-card" style={{ borderLeft: '4px solid #7c3aed' }}>
@@ -131,16 +145,23 @@ const RolesPermissions: React.FC = () => {
       </div>
 
       {/* System Roles Table */}
-      <div className="sales-table-section">
+      <div className="sales-table-section" style={{ flex: 'none' }}>
         <div className="sales-table-header">
           <div className="sales-table-title">System Role Permissions</div>
         </div>
+        <div className="sales-table-scroll-wrapper">
         <table className="sales-table">
           <thead>
             <tr>
-              <th style={{ width: '35%' }}>Capability</th>
+              <th style={{ width: '30%' }}>Capability</th>
               <th style={{ textAlign: 'center' }}>
                 <span className="sales-stage-badge lost"><span className="sales-stage-dot"></span>Admin</span>
+              </th>
+              <th style={{ textAlign: 'center' }}>
+                <span className="sales-stage-badge awarded"><span className="sales-stage-dot"></span>Executive</span>
+              </th>
+              <th style={{ textAlign: 'center' }}>
+                <span className="sales-stage-badge" style={{ background: '#e0f2fe', color: '#0891b2' }}><span className="sales-stage-dot" style={{ background: '#0891b2' }}></span>Director</span>
               </th>
               <th style={{ textAlign: 'center' }}>
                 <span className="sales-stage-badge quoted"><span className="sales-stage-dot"></span>Manager</span>
@@ -158,7 +179,7 @@ const RolesPermissions: React.FC = () => {
             {rolePermissions.map((row, idx) =>
               row.isCategory ? (
                 <tr key={idx} style={{ background: 'var(--bg-dark, #f8fafc)' }}>
-                  <td colSpan={6} style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)', padding: '10px 16px' }}>
+                  <td colSpan={8} style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)', padding: '10px 16px' }}>
                     {row.capability}
                   </td>
                 </tr>
@@ -166,6 +187,8 @@ const RolesPermissions: React.FC = () => {
                 <tr key={idx}>
                   <td style={{ paddingLeft: '2rem', color: 'var(--text-secondary)' }}>{row.capability}</td>
                   <td style={{ textAlign: 'center' }}><PermissionCell allowed={row.admin} /></td>
+                  <td style={{ textAlign: 'center' }}><PermissionCell allowed={row.executive} /></td>
+                  <td style={{ textAlign: 'center' }}><PermissionCell allowed={row.director} /></td>
                   <td style={{ textAlign: 'center' }}><PermissionCell allowed={row.manager} /></td>
                   <td style={{ textAlign: 'center' }}><PermissionCell allowed={row.user} /></td>
                   <td style={{ textAlign: 'center' }}><PermissionCell allowed={row.foreman} /></td>
@@ -175,16 +198,18 @@ const RolesPermissions: React.FC = () => {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* HR Access Levels */}
-      <div className="sales-table-section" style={{ marginTop: '1.5rem' }}>
+      <div className="sales-table-section" style={{ marginTop: '1.5rem', flex: 'none', marginBottom: '1.5rem' }}>
         <div className="sales-table-header">
           <div className="sales-table-title">HR Access Level Permissions</div>
         </div>
         <div style={{ padding: '0.75rem 1.25rem', background: 'var(--bg-dark, #f8fafc)', borderBottom: '1px solid var(--border, #e2e8f0)', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-          HR Access is an additional permission layer assigned per user, independent of their system role. Any role (Admin, Manager, or User) can be granted HR access.
+          HR Access is an additional permission layer assigned per user, independent of their system role. Any role (Admin, Manager, Director, Executive, or User) can be granted HR access.
         </div>
+        <div className="sales-table-scroll-wrapper">
         <table className="sales-table">
           <thead>
             <tr>
@@ -219,6 +244,7 @@ const RolesPermissions: React.FC = () => {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

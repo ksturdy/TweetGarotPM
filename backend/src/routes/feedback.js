@@ -46,6 +46,17 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// GET /api/feedback/kpis - Get KPI metrics
+router.get('/kpis', async (req, res) => {
+  try {
+    const kpis = await Feedback.getKPIsByTenant(req.tenantId);
+    res.json(kpis);
+  } catch (error) {
+    console.error('Error fetching feedback KPIs:', error);
+    res.status(500).json({ message: 'Error fetching feedback KPIs', error: error.message });
+  }
+});
+
 // GET /api/feedback/user-search?q= - Search active users (for adding followers)
 router.get('/user-search', async (req, res) => {
   try {

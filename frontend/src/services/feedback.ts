@@ -54,6 +54,15 @@ export interface FeedbackStats {
   feature_requests: number;
 }
 
+export interface FeedbackKPIs {
+  total_count: string;
+  open_count: string;
+  completed_count: string;
+  avg_fix_days: string | null;
+  avg_response_days: string | null;
+  top_contributor: { name: string; count: string } | null;
+}
+
 export interface FeedbackFollower {
   user_id: number;
   first_name: string;
@@ -175,6 +184,12 @@ export const feedbackService = {
   // Get feedback statistics
   async getStats(): Promise<FeedbackStats> {
     const response = await api.get('/feedback/stats');
+    return response.data;
+  },
+
+  // Get KPI metrics
+  async getKPIs(): Promise<FeedbackKPIs> {
+    const response = await api.get('/feedback/kpis');
     return response.data;
   },
 

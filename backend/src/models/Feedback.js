@@ -307,6 +307,45 @@ class Feedback {
     return result.rows[0];
   }
 
+  // Get KPI metrics (tenant-scoped)
+  static async getKPIsByTenant(tenantId) {
+    const metricsQuery = `
+      SELECT
+        COUNT(*) as total_count,
+        COUNT(*) FILTER (WHERE status NOT IN ('completed', 'rejected', 'on_hold')) as open_count,
+        COUNT(*) FILTER (WHERE status = 'completed') as completed_count,
+        ROUND(
+          AVG(EXTRACT(EPOCH FROM (completed_at - created_at)) / 86400)
+          FILTER (WHERE completed_at >= NOW() - INTERVAL '30 days')
+        ::numeric, 1) as avg_fix_days,
+        ROUND(
+          AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400)
+          FILTER (WHERE status <> 'submitted' AND updated_at >= NOW() - INTERVAL '30 days')
+        ::numeric, 1) as avg_response_days
+      FROM feedback
+      WHERE tenant_id = $1
+    `;
+    const topContributorQuery = `
+      SELECT
+        u.first_name || ' ' || u.last_name as name,
+        COUNT(f.id) as count
+      FROM feedback f
+      JOIN users u ON f.user_id = u.id
+      WHERE f.tenant_id = $1
+      GROUP BY f.user_id, u.first_name, u.last_name
+      ORDER BY count DESC
+      LIMIT 1
+    `;
+    const [metricsResult, topResult] = await Promise.all([
+      pool.query(metricsQuery, [tenantId]),
+      pool.query(topContributorQuery, [tenantId]),
+    ]);
+    return {
+      ...metricsResult.rows[0],
+      top_contributor: topResult.rows[0] || null,
+    };
+  }
+
   // Get feedback statistics (tenant-scoped)
   static async getStatsByTenant(tenantId) {
     const query = `

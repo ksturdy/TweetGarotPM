@@ -80,7 +80,7 @@ router.get('/user/:userId', async (req, res) => {
 // Managers need this for the Labor Board employee detail view.
 router.get('/:id', (req, res, next) => {
   if (!req.user) return res.status(401).json({ error: 'Authentication required' });
-  if (req.user.role === 'admin' || req.user.role === 'manager') return next();
+  if (['admin', 'manager', 'director', 'executive'].includes(req.user.role)) return next();
   if (req.user.hrAccess && req.user.hrAccess !== 'none') return next();
   return res.status(403).json({ error: 'HR access required' });
 }, async (req, res) => {
