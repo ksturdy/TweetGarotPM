@@ -26,7 +26,9 @@ const BacklogByMarketWidget: React.FC<WidgetProps> = () => {
     queryFn: () => companyHealthApi.get().then(r => r.data),
   });
 
-  const markets: BacklogByMarket[] = (data?.backlog_by_market ?? []).filter(m => m.backlog > 0);
+  const markets = (data?.backlog_by_market ?? [])
+    .map((m: BacklogByMarket) => ({ ...m, backlog: parseFloat(String(m.backlog)) || 0 }))
+    .filter(m => m.backlog > 0);
   const total = markets.reduce((s, m) => s + m.backlog, 0);
 
   const chartData = {
@@ -47,7 +49,7 @@ const BacklogByMarketWidget: React.FC<WidgetProps> = () => {
       tooltip: {
         callbacks: {
           label: (ctx: any) => {
-            const val = ctx.raw as number;
+            const val = parseFloat(ctx.raw);
             const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0';
             return ` ${fmtM(val)}  (${pct}%)`;
           },
