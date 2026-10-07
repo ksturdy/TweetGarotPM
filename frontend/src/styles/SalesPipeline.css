@@ -774,6 +774,16 @@
   color: #6B7280;
 }
 
+.sales-stage-badge.executive {
+  background: rgba(5, 150, 105, 0.15);
+  color: #059669;
+}
+
+.sales-stage-badge.director {
+  background: rgba(8, 145, 178, 0.15);
+  color: #0891b2;
+}
+
 /* Estimate Status badges */
 .sales-stage-badge.in-progress {
   background: rgba(59, 130, 246, 0.15);

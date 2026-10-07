@@ -158,10 +158,10 @@ const RolesPermissions: React.FC = () => {
                 <span className="sales-stage-badge lost"><span className="sales-stage-dot"></span>Admin</span>
               </th>
               <th style={{ textAlign: 'center' }}>
-                <span className="sales-stage-badge awarded"><span className="sales-stage-dot"></span>Executive</span>
+                <span className="sales-stage-badge executive"><span className="sales-stage-dot"></span>Executive</span>
               </th>
               <th style={{ textAlign: 'center' }}>
-                <span className="sales-stage-badge" style={{ background: '#e0f2fe', color: '#0891b2' }}><span className="sales-stage-dot" style={{ background: '#0891b2' }}></span>Director</span>
+                <span className="sales-stage-badge director"><span className="sales-stage-dot"></span>Director</span>
               </th>
               <th style={{ textAlign: 'center' }}>
                 <span className="sales-stage-badge quoted"><span className="sales-stage-dot"></span>Manager</span>

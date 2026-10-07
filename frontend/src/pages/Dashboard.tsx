@@ -155,9 +155,13 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     if (scopeInitialized || layoutLoading) return;
-    if (defaultViewScope) setViewScope(defaultViewScope);
+    if (defaultViewScope) {
+      setViewScope(defaultViewScope);
+    } else if (user?.role === 'executive' || user?.role === 'director') {
+      setViewScope('company');
+    }
     setScopeInitialized(true);
-  }, [defaultViewScope, scopeInitialized, layoutLoading]);
+  }, [defaultViewScope, scopeInitialized, layoutLoading, user?.role]);
 
   const { data: currentEmployeeResponse } = useQuery({
     queryKey: ['current-employee', user?.id],

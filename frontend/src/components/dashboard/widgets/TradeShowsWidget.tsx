@@ -5,10 +5,17 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import { tradeShowsApi, TRADE_SHOW_STATUS_OPTIONS, TradeShow } from '../../../services/tradeShows';
 import { WidgetProps } from '../types';
 
-const formatDateRange = (start?: string | null, end?: string | null): string => {
+const formatDateRange = (start?: string | null, end?: string | null): React.ReactNode => {
   if (!start && !end) return '-';
   const fmt = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  if (start && end && start !== end) return `${fmt(start)} – ${fmt(end)}`;
+  if (start && end && start !== end) {
+    return (
+      <>
+        <span style={{ display: 'block' }}>{fmt(start)}</span>
+        <span style={{ display: 'block' }}>{fmt(end)}</span>
+      </>
+    );
+  }
   return fmt(start || end || '');
 };
 
@@ -73,16 +80,16 @@ const TradeShowsWidget: React.FC<WidgetProps> = ({
         <table className="sales-table dashboard-compact-table">
           <thead>
             <tr>
-              <th style={{ width: '40%' }}>Event</th>
-              <th style={{ width: '22%' }}>Dates</th>
-              <th style={{ width: '20%' }}>Location</th>
-              <th style={{ width: '18%', textAlign: 'center' }}>Status</th>
+              <th style={{ width: '50%' }}>Event</th>
+              <th style={{ width: '28%' }}>Dates</th>
+              <th style={{ width: '22%', textAlign: 'center' }}>Status</th>
             </tr>
           </thead>
           <tbody>
             {visibleShows.length > 0 ? (
               visibleShows.map(show => {
                 const statusOpt = TRADE_SHOW_STATUS_OPTIONS.find(o => o.value === show.status);
+                const location = formatLocation(show);
                 return (
                   <tr
                     key={show.id}
@@ -92,18 +99,13 @@ const TradeShowsWidget: React.FC<WidgetProps> = ({
                     <td>
                       <div className="sales-project-info">
                         <h4>{show.name}</h4>
-                        {show.booth_number && (
-                          <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                            Booth {show.booth_number}
-                          </span>
-                        )}
+                        <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                          {location}{show.booth_number ? ` · Booth ${show.booth_number}` : ''}
+                        </span>
                       </div>
                     </td>
-                    <td style={{ color: '#5a5a72' }}>
+                    <td style={{ color: '#5a5a72', fontSize: '0.75rem' }}>
                       {formatDateRange(show.event_start_date, show.event_end_date)}
-                    </td>
-                    <td style={{ color: '#5a5a72' }}>
-                      {formatLocation(show)}
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <span
@@ -122,7 +124,7 @@ const TradeShowsWidget: React.FC<WidgetProps> = ({
               })
             ) : (
               <tr>
-                <td colSpan={4} className="empty-table">No upcoming trade shows</td>
+                <td colSpan={3} className="empty-table">No upcoming trade shows</td>
               </tr>
             )}
           </tbody>

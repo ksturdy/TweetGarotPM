@@ -1,5 +1,7 @@
 .dashboard {
   max-width: none;
+  height: calc(100vh - 112px); /* viewport - 64px header - 24px padding-top - 24px padding-bottom */
+  overflow-y: auto;
 }
 
 /* Header Row with Welcome and View Toggle */

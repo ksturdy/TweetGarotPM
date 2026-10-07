@@ -312,8 +312,8 @@ const UserManagement: React.FC = () => {
     switch (role) {
       case 'admin': return 'lost';
       case 'manager': return 'quoted';
-      case 'director': return 'awarded';
-      case 'executive': return 'active';
+      case 'director': return 'director';
+      case 'executive': return 'executive';
       case 'foreman': return 'negotiation';
       default: return 'lead';
     }
