@@ -791,24 +791,26 @@ const LaborForecast: React.FC = () => {
           let sOff: number, eOff: number, segContour: ContourType;
           let segWeeklyHrs = 40;
           if (seg?.start_date) {
-            // Do NOT clamp to 0 — a past start keeps the correct contour position
             sOff = dateToMonthOffset(seg.start_date) ?? 0;
             const eUserOff = dateToMonthOffset(seg.end_date);
             eOff = eUserOff != null
               ? Math.max(sOff + 1, Math.min(37, eUserOff + 1))
               : sOff + Math.max(1, Math.min(36, remainingMonths > 0 ? remainingMonths : 3));
-            segContour = (seg.contour_type as ContourType) || getDefaultContour(pctComplete);
+            // Default to 'bell' when no contour stored — matches CostTypeSchedule effContour default
+            segContour = (seg.contour_type as ContourType) || 'bell';
             segWeeklyHrs = (seg.weekly_hours != null && seg.weekly_hours > 0) ? seg.weekly_hours : 40;
           } else {
             sOff = startOffset; eOff = endOffset; segContour = contour;
           }
-          const remMonths = eOff - sOff;
+          // Clamp to current month — mirrors CostTypeSchedule.clampStart so past segment
+          // starts don't spread the contour over already-completed months.
+          const clampedSOff = Math.max(0, sOff);
+          const remMonths = eOff - clampedSOff;
           if (remMonths <= 0) return;
           const mults = getContourMultipliers(remMonths, segContour);
           const segHPM = segWeeklyHrs * 4.33;
           for (let i = 0; i < remMonths; i++) {
-            const monthIdx = sOff + i;
-            if (monthIdx < 0) continue;  // segment started in past — skip but keep contour shape
+            const monthIdx = clampedSOff + i;
             const mk = format(addMonths(now, monthIdx), 'yyyy-MM');
             const h = (hours / remMonths) * mults[i];
             const existing = monthlyHours.get(mk) ?? { pf: 0, sm: 0, pl: 0, total: 0 };

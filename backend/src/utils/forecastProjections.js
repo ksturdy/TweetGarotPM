@@ -234,18 +234,21 @@ function distributeSegHoursIntoMaps(monthlyHours, monthlyHC, tradeKey, hours, se
     eOff = eUserOff != null
       ? Math.max(sOff + 1, Math.min(37, eUserOff + 1))
       : sOff + 3;
-    segContour  = seg.contour_type || fallbackContour;
+    // Default to 'bell' when no contour stored — matches CostTypeSchedule effContour default
+    segContour  = seg.contour_type || 'bell';
     segWeeklyHrs = (seg.weekly_hours != null && seg.weekly_hours > 0) ? seg.weekly_hours : 40;
   } else {
     sOff = fallbackSOff; eOff = fallbackEOff; segContour = fallbackContour; segWeeklyHrs = 40;
   }
-  const remMonths = eOff - sOff;
+  // Clamp to current month — mirrors CostTypeSchedule.clampStart so past segment starts
+  // don't spread the contour over a window that includes already-completed months.
+  const clampedSOff = Math.max(0, sOff);
+  const remMonths = eOff - clampedSOff;
   if (remMonths <= 0) return;
   const mults = getContourMultipliers(remMonths, segContour);
   const segHPM = segWeeklyHrs * WEEKS_PER_MONTH;
   for (let i = 0; i < remMonths; i++) {
-    const monthIdx = sOff + i;
-    if (monthIdx < 0) continue; // past months — skip but preserve contour shape
+    const monthIdx = clampedSOff + i;
     const monthKey = formatYYYYMM(addMonths(now, monthIdx));
     const h = (hours / remMonths) * mults[i];
     const existing = monthlyHours.get(monthKey) || { pf: 0, sm: 0, pl: 0, total: 0 };

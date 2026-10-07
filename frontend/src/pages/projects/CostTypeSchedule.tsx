@@ -827,11 +827,11 @@ const CostTypeSchedule: React.FC<Props> = ({
 
   useEffect(() => {
     if (alignInitialized) return;
-    const effStart = toInput(project?.effective_start_date ?? project?.start_date);
-    const effEnd   = toInput(project?.effective_end_date   ?? project?.end_date);
     const firstSeg = segments.find(s => activeKeys.includes(s.segment_key) && s.start_date && s.end_date);
-    const start    = effStart || toInput(firstSeg?.start_date)           || '';
-    const end      = effEnd   || toInput(firstSeg?.end_date)             || '';
+    // Prefer segment dates (DB source of truth) over project effective dates so that
+    // CostTypeSchedule and LaborForecast always read the same values from the same source.
+    const start    = toInput(firstSeg?.start_date) || toInput(project?.effective_start_date ?? project?.start_date) || '';
+    const end      = toInput(firstSeg?.end_date)   || toInput(project?.effective_end_date   ?? project?.end_date)   || '';
     const contour  = (firstSeg?.contour_type as ContourType | undefined) || 'bell';
     if (start || end) {
       setAlignedStart(start);

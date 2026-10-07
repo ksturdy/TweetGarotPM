@@ -1,51 +1,52 @@
 /**
- * Port of frontend/src/utils/contours.ts getContourMultipliers()
- * Used by phaseSchedulePdfGenerator.js to compute monthly distributions server-side.
+ * Exact port of frontend/src/utils/contours.ts getContourMultipliers()
+ * Used by forecastProjections.js, phaseSchedulePdfGenerator.js, and other
+ * backend utilities to compute monthly distributions server-side.
+ *
+ * IMPORTANT: Keep in sync with frontend/src/utils/contours.ts.
  */
 
 function getContourMultipliers(months, contour) {
   const multipliers = [];
 
   for (let i = 0; i < months; i++) {
-    const position = months > 1 ? i / (months - 1) : 0.5;
+    const x = months > 1 ? i / (months - 1) : 0.5; // 0 → 1
+    const env = Math.sin(x * Math.PI); // base envelope: 0 at both ends, 1 at center
     let weight;
 
     switch (contour) {
       case 'front':
-        weight = 2 - position * 1.5;
+        weight = env * Math.exp(-x * 2);
         break;
       case 'back':
-        weight = 0.5 + position * 1.5;
+        weight = env * Math.exp(-(1 - x) * 2);
         break;
       case 'bell':
-        weight = Math.exp(-Math.pow((position - 0.5) * 3, 2)) * 1.5 + 0.5;
+        weight = env;
         break;
       case 'turtle':
-        weight = Math.exp(-Math.pow((position - 0.5) * 2, 2)) * 0.8 + 0.6;
+        weight = Math.pow(env, 0.3);
         break;
-      case 'double': {
-        const peak1 = Math.exp(-Math.pow((position - 0.25) * 5, 2));
-        const peak2 = Math.exp(-Math.pow((position - 0.75) * 5, 2));
-        weight = (peak1 + peak2) * 0.8 + 0.4;
+      case 'double':
+        weight = 0.5 - 0.5 * Math.cos(x * 4 * Math.PI);
         break;
-      }
       case 'early':
-        weight = Math.exp(-Math.pow((position - 0.2) * 4, 2)) * 1.8 + 0.2;
+        weight = env * Math.exp(-x * 4);
         break;
       case 'late':
-        weight = Math.exp(-Math.pow((position - 0.8) * 4, 2)) * 1.8 + 0.2;
+        weight = env * Math.exp(-(1 - x) * 4);
         break;
       case 'scurve':
-        weight = Math.exp(-Math.pow((position - 0.5) * 2.5, 2)) * 1.2 + 0.4;
+        weight = Math.pow(env, 1.5);
         break;
       case 'rampup':
-        weight = 0.1 + position * 1.9;
+        weight = x * env;
         break;
       case 'rampdown':
-        weight = 2 - position * 1.9;
+        weight = (1 - x) * env;
         break;
       case 'gradual':
-        weight = Math.pow(Math.sin(position * Math.PI), 2) * 1.5 + 0.2;
+        weight = env * env;
         break;
       case 'flat':
       default:
@@ -56,6 +57,7 @@ function getContourMultipliers(months, contour) {
   }
 
   const sum = multipliers.reduce((a, b) => a + b, 0);
+  if (sum === 0) return multipliers.map(() => 1); // edge case: fallback to flat
   return multipliers.map(w => (w / sum) * months);
 }
 
