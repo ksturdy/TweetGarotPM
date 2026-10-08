@@ -1170,25 +1170,6 @@ const ProjectList: React.FC = () => {
               ({filteredProjects.length.toLocaleString()} of {(projects || []).length.toLocaleString()})
             </span>
           </div>
-          {JSON.stringify(columnWidths) !== JSON.stringify(DEFAULT_WIDTHS) && (
-            <button
-              onClick={() => {
-                setColumnWidths({ ...DEFAULT_WIDTHS });
-                localStorage.removeItem(STORAGE_KEY);
-              }}
-              style={{
-                padding: '4px 10px',
-                fontSize: '0.75rem',
-                color: '#6b7280',
-                background: 'transparent',
-                border: '1px solid #d1d5db',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Reset Columns
-            </button>
-          )}
         </div>
         <div className="projects-table-scroll" style={{ overflowX: 'auto' }}>
         <table className="sales-table" ref={tableRef} style={{ minWidth: tableMinWidth }}>
