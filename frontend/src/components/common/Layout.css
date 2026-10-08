@@ -168,8 +168,7 @@
   height: 44px;
   max-width: 180px;
   object-fit: contain;
-  filter: invert(1) sepia(1) saturate(3) hue-rotate(175deg) brightness(0.9);
-  mix-blend-mode: screen;
+  filter: brightness(0) invert(1);
 }
 
 /* Layout Body - Sidebar + Main */
