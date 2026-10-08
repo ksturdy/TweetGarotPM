@@ -1022,6 +1022,10 @@
     display: none;
   }
 
+  .projects-gm-override {
+    display: none;
+  }
+
   .projects-table-scroll {
     display: none;
   }

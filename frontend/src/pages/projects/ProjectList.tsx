@@ -1025,7 +1025,7 @@ const ProjectList: React.FC = () => {
           </select>
         </div>
         {/* GM Override Control */}
-        <div style={{ minWidth: '200px', display: 'flex', alignItems: 'flex-end', gap: '0.25rem' }}>
+        <div className="projects-gm-override" style={{ minWidth: '200px', display: 'flex', alignItems: 'flex-end', gap: '0.25rem' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>
               GM Override {gmOverrideCount > 0 && <span style={{ color: '#f59e0b' }}>({gmOverrideCount})</span>}
