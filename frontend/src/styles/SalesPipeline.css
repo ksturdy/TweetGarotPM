@@ -615,6 +615,12 @@
   overflow: visible;
 }
 
+.sales-table.sales-table--wrap td {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 /* Column widths - managed per-table via colgroup or inline styles */
 
 /* Resizable column handle */

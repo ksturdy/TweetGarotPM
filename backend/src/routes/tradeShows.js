@@ -275,6 +275,7 @@ router.post('/:id/recur', async (req, res, next) => {
       event_start_date: req.body.event_start_date || null,
       event_end_date: req.body.event_end_date || null,
       registration_deadline: req.body.registration_deadline || null,
+      dates_tentative: req.body.dates_tentative ?? false,
     });
 
     res.status(201).json(newShow);

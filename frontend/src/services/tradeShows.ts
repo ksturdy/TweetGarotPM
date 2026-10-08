@@ -35,6 +35,7 @@ export interface TradeShow {
 
   event_type?: TradeShowEventType | null;
   market?: string | null;
+  dates_tentative?: boolean;
 
   sales_lead_id?: number | null;
   sales_lead_name?: string | null;
@@ -160,7 +161,7 @@ export const tradeShowsApi = {
 
   delete: (id: number) => api.delete(`/trade-shows/${id}`),
 
-  recur: (id: number, data: { event_start_date?: string | null; event_end_date?: string | null; registration_deadline?: string | null }) =>
+  recur: (id: number, data: { event_start_date?: string | null; event_end_date?: string | null; registration_deadline?: string | null; dates_tentative?: boolean }) =>
     api.post<TradeShow>(`/trade-shows/${id}/recur`, data),
 
   extractFromUrl: (url: string) =>

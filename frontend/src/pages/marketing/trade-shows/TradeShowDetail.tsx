@@ -1,4 +1,8 @@
 import React, { useMemo, useState } from 'react';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import EventRepeatIcon from '@mui/icons-material/EventRepeat';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { jsPDF } from 'jspdf';
@@ -141,7 +145,7 @@ const TradeShowDetail: React.FC = () => {
   const [attendeeError, setAttendeeError] = useState<string | null>(null);
 
   const [showRecurModal, setShowRecurModal] = useState(false);
-  const [recurForm, setRecurForm] = useState({ event_start_date: '', event_end_date: '', registration_deadline: '' });
+  const [recurForm, setRecurForm] = useState({ event_start_date: '', event_end_date: '', registration_deadline: '', dates_tentative: false });
 
   const showId = id ? parseInt(id) : 0;
 
@@ -177,12 +181,18 @@ const TradeShowDetail: React.FC = () => {
   });
 
   const recurMutation = useMutation({
-    mutationFn: (data: { event_start_date?: string | null; event_end_date?: string | null; registration_deadline?: string | null }) =>
+    mutationFn: (data: { event_start_date?: string | null; event_end_date?: string | null; registration_deadline?: string | null; dates_tentative?: boolean }) =>
       tradeShowsApi.recur(showId, data),
     onSuccess: (res) => {
+      setShowRecurModal(false);
       queryClient.invalidateQueries({ queryKey: ['trade-shows'] });
       navigate(`/marketing/trade-shows/${res.data.id}`);
     },
+  });
+
+  const confirmDatesMutation = useMutation({
+    mutationFn: () => tradeShowsApi.update(showId, { ...show, dates_tentative: false }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['trade-show', id] }),
   });
 
   const addAttendeeMutation = useMutation({
@@ -243,6 +253,7 @@ const TradeShowDetail: React.FC = () => {
       event_start_date: shiftYear(show?.event_start_date),
       event_end_date: shiftYear(show?.event_end_date),
       registration_deadline: shiftYear(show?.registration_deadline),
+      dates_tentative: false,
     });
     setShowRecurModal(true);
   };
@@ -252,6 +263,7 @@ const TradeShowDetail: React.FC = () => {
       event_start_date: recurForm.event_start_date || null,
       event_end_date: recurForm.event_end_date || null,
       registration_deadline: recurForm.registration_deadline || null,
+      dates_tentative: recurForm.dates_tentative,
     });
   };
 
@@ -667,7 +679,7 @@ const TradeShowDetail: React.FC = () => {
             <Link to="/marketing/trade-shows" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
               &larr; Back to Conferences and Trade Shows
             </Link>
-            <h1>🎪 {show.name}</h1>
+            <h1>{show.name}</h1>
             <div style={{ marginTop: '0.5rem' }}>
               <span className={statusBadge(show.status)}>{statusLabel(show.status)}</span>
             </div>
@@ -675,13 +687,13 @@ const TradeShowDetail: React.FC = () => {
         </div>
         <div className="sales-header-actions">
           <button className="btn btn-secondary" onClick={exportPdf}>
-            📄 Export PDF
+            <PictureAsPdfIcon style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }} /> Export PDF
           </button>
           <button className="btn btn-secondary" onClick={openRecurModal}>
-            🔁 Schedule Next Occurrence
+            <EventRepeatIcon style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }} /> Schedule Next Occurrence
           </button>
           <button className="btn btn-secondary" onClick={() => navigate(`/marketing/trade-shows/${id}/edit`)}>
-            ✏️ Edit
+            <EditIcon style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }} /> Edit
           </button>
           <button
             className="btn btn-secondary"
@@ -689,10 +701,31 @@ const TradeShowDetail: React.FC = () => {
             style={{ color: '#dc2626', borderColor: '#fecaca' }}
             disabled={deleteShowMutation.isPending}
           >
-            🗑️ Delete
+            <DeleteIcon style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }} /> Delete
           </button>
         </div>
       </div>
+
+      {/* Tentative dates banner */}
+      {show.dates_tentative && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px',
+          padding: '0.75rem 1rem', marginBottom: '1.25rem', gap: '1rem',
+        }}>
+          <span style={{ color: '#92400e', fontSize: '0.875rem' }}>
+            <strong>Dates are tentative</strong> — confirm once the schedule is published.
+          </span>
+          <button
+            className="btn btn-secondary"
+            style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '0.3rem 0.75rem' }}
+            onClick={() => confirmDatesMutation.mutate()}
+            disabled={confirmDatesMutation.isPending}
+          >
+            {confirmDatesMutation.isPending ? 'Saving…' : 'Mark Dates Confirmed'}
+          </button>
+        </div>
+      )}
 
       {/* Summary grid */}
       <div className="card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
@@ -939,7 +972,8 @@ const TradeShowDetail: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 style={{ fontSize: '1.2rem', fontWeight: 600, marginTop: 0, marginBottom: '0.5rem' }}>
-              🔁 Schedule Next Occurrence
+              <EventRepeatIcon style={{ fontSize: 18, marginRight: 6, verticalAlign: 'middle' }} />
+              Schedule Next Occurrence
             </h2>
             <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
               Creates a copy of <strong>{show.name}</strong> with dates reset for next year.
@@ -976,6 +1010,15 @@ const TradeShowDetail: React.FC = () => {
                 onChange={(e) => setRecurForm(f => ({ ...f, registration_deadline: e.target.value }))}
               />
             </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#374151', cursor: 'pointer', marginBottom: '1.25rem' }}>
+              <input
+                type="checkbox"
+                checked={recurForm.dates_tentative}
+                onChange={(e) => setRecurForm(f => ({ ...f, dates_tentative: e.target.checked }))}
+              />
+              Dates are tentative — I'll confirm them later
+            </label>
 
             {recurMutation.isError && (
               <div style={{ padding: '0.5rem 0.75rem', marginBottom: '0.75rem', background: '#fee2e2', borderRadius: '6px', color: '#991b1b', fontSize: '0.85rem' }}>

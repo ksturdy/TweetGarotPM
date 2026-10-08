@@ -103,6 +103,7 @@ const TradeShow = {
         booth_number, booth_size, website_url, notes,
         sales_lead_id, coordinator_id,
         event_type, market,
+        dates_tentative,
         created_by, updated_by
       ) VALUES (
         $1, $2, $3, $4,
@@ -112,7 +113,8 @@ const TradeShow = {
         $19, $20, $21, $22,
         $23, $24,
         $25, $26,
-        $27, $28
+        $27,
+        $28, $29
       )
       RETURNING *
     `, [
@@ -142,6 +144,7 @@ const TradeShow = {
       data.coordinator_id || null,
       data.event_type || null,
       data.market || null,
+      data.dates_tentative ?? false,
       userId || null,
       userId || null
     ]);
@@ -176,9 +179,10 @@ const TradeShow = {
         coordinator_id = $23,
         event_type = $24,
         market = $25,
-        updated_by = $26,
+        dates_tentative = $26,
+        updated_by = $27,
         updated_at = NOW()
-      WHERE id = $27 AND tenant_id = $28
+      WHERE id = $28 AND tenant_id = $29
       RETURNING *
     `, [
       data.name,
@@ -206,6 +210,7 @@ const TradeShow = {
       data.coordinator_id || null,
       data.event_type || null,
       data.market || null,
+      data.dates_tentative ?? false,
       userId || null,
       id,
       tenantId
@@ -568,6 +573,7 @@ const TradeShow = {
       event_start_date: overrides.event_start_date || null,
       event_end_date: overrides.event_end_date || null,
       registration_deadline: overrides.registration_deadline || null,
+      dates_tentative: overrides.dates_tentative ?? false,
       booth_size: source.booth_size,
       website_url: source.website_url,
       notes: source.notes,
