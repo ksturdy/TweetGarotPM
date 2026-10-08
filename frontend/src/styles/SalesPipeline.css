@@ -1001,7 +1001,17 @@
   }
 
   .sales-header-actions {
+    display: flex;
+    width: 100%;
+  }
+
+  .sales-header-actions > *:not(.sales-btn-primary) {
     display: none;
+  }
+
+  .sales-header-actions .sales-btn-primary {
+    width: 100%;
+    justify-content: center;
   }
 
   .sales-view-toggle {
