@@ -1486,7 +1486,7 @@ const SalesPipeline: React.FC = () => {
                   </svg>
                 </button>
                 {salespersonOpen && (
-                  <div className="sales-stage-filter-dropdown" style={{ minWidth: '180px' }}>
+                  <div className="sales-stage-filter-dropdown" style={{ minWidth: '180px', left: 0, right: 'auto' }}>
                     <input
                       autoFocus
                       type="text"

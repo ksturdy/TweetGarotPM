@@ -991,7 +991,7 @@
     height: auto;
     min-height: calc(100vh - 64px - 1.5rem);
     display: block;
-    overflow: visible;
+    overflow-x: hidden;
   }
 
   .sales-page-header {
@@ -1037,6 +1037,17 @@
 
   .sales-charts-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sales-chart-card {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .sales-chart-container {
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .sales-pipeline-board {
