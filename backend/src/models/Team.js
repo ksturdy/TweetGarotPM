@@ -899,9 +899,10 @@ class Team {
   }
 
   static async addMetricConfig(teamId, tenantId, data) {
-    const { member_user_id, member_team_id, metric_key, label, display_order } = data;
+    const { member_user_id, member_team_id, metric_key, label, display_order, lower_is_better } = data;
     const uid = member_user_id || null;
     const tid = member_team_id || null;
+    const lib = lower_is_better === true;
 
     // Manual upsert using IS NOT DISTINCT FROM to handle NULLs correctly
     const existing = await db.query(`
@@ -914,19 +915,19 @@ class Team {
     if (existing.rows.length > 0) {
       const r = await db.query(`
         UPDATE team_metric_configs
-        SET label = $1, display_order = $2
-        WHERE id = $3
+        SET label = $1, display_order = $2, lower_is_better = $3
+        WHERE id = $4
         RETURNING *
-      `, [label, display_order || 0, existing.rows[0].id]);
+      `, [label, display_order || 0, lib, existing.rows[0].id]);
       return r.rows[0];
     }
 
     const r = await db.query(`
       INSERT INTO team_metric_configs
-        (team_id, tenant_id, member_user_id, member_team_id, metric_key, label, display_order)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+        (team_id, tenant_id, member_user_id, member_team_id, metric_key, label, display_order, lower_is_better)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
-    `, [teamId, tenantId, uid, tid, metric_key, label, display_order || 0]);
+    `, [teamId, tenantId, uid, tid, metric_key, label, display_order || 0, lib]);
     return r.rows[0];
   }
 
@@ -947,12 +948,17 @@ class Team {
   }
 
   static async updateMetricConfig(teamId, tenantId, configId, data) {
+    const fields = [];
+    const values = [];
+    if ('goal' in data) { fields.push(`goal = $${fields.length + 1}`); values.push(data.goal ?? null); }
+    if ('lower_is_better' in data) { fields.push(`lower_is_better = $${fields.length + 1}`); values.push(!!data.lower_is_better); }
+    if (fields.length === 0) return null;
+    values.push(configId, teamId, tenantId);
     const result = await db.query(`
-      UPDATE team_metric_configs
-      SET goal = $1
-      WHERE id = $2 AND team_id = $3 AND tenant_id = $4
+      UPDATE team_metric_configs SET ${fields.join(', ')}
+      WHERE id = $${values.length - 2} AND team_id = $${values.length - 1} AND tenant_id = $${values.length}
       RETURNING *
-    `, [data.goal ?? null, configId, teamId, tenantId]);
+    `, values);
     return result.rows[0];
   }
 
@@ -1058,6 +1064,11 @@ class Team {
       contract_value:     () => Number(metrics.projects?.total_value ?? 0),
       backlog:            () => Number(metrics.projects?.total_backlog ?? 0),
       cash_flow:          () => Number(metrics.cashFlow?.net_cash_position ?? 0),
+      cash_flow_pct:      () => {
+        const total = Number(metrics.cashFlow?.total_count ?? 0);
+        if (total === 0) return 0;
+        return (Number(metrics.cashFlow?.positive_count ?? 0) / total) * 100;
+      },
       buyout_remaining:   () => Number(metrics.buyout?.total_buyout_remaining ?? 0),
     };
     return map[key] ? map[key]() : null;
@@ -1116,7 +1127,10 @@ class Team {
       `, [tenantId, employeeIds]),
 
       db.query(`
-        SELECT COALESCE(SUM(vc.cash_flow), 0) as net_cash_position
+        SELECT
+          COALESCE(SUM(vc.cash_flow), 0) as net_cash_position,
+          COUNT(CASE WHEN vc.cash_flow > 0 THEN 1 END) as positive_count,
+          COUNT(CASE WHEN vc.cash_flow IS NOT NULL THEN 1 END) as total_count
         FROM projects p
         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
         WHERE p.tenant_id = $1 AND p.manager_id = ANY($2) AND p.status = 'Open'

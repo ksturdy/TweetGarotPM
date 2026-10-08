@@ -31,6 +31,7 @@ function formatWeekStart(iso: string): string {
 function formatValue(value: number | null, format: string): string {
   if (value === null || value === undefined) return '—';
   if (format === 'count') return value.toLocaleString();
+  if (format === 'percent') return `${value.toFixed(1)}%`;
   const abs = Math.abs(value);
   if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
@@ -64,42 +65,21 @@ function trendColor(values: (number | null)[]): string {
   return valid[valid.length - 1] > valid[0] ? '#10b981' : valid[valid.length - 1] < valid[0] ? '#ef4444' : '#94a3b8';
 }
 
-// Metrics where lower value = better (goal is a ceiling, not a floor)
-const LOWER_IS_BETTER = new Set(['buyout_remaining']);
-
-function goalColor(value: number | null, goal: number | null, format: string, metricKey?: string): string {
+function goalColor(value: number | null, goal: number | null, format: string, lowerIsBetter?: boolean): string {
   if (value === null) return '#94a3b8';
-  if (goal !== null && goal !== 0) {
-    const lowerIsBetter = metricKey ? LOWER_IS_BETTER.has(metricKey) : false;
-    const pct = value / goal;
-    if (lowerIsBetter) {
-      if (pct <= 1.0) return '#166534';  // green — at or under goal
-      if (pct <= 1.2) return '#b45309';  // amber — up to 20% over goal
-      return '#dc2626';                   // red — more than 20% over goal
-    }
-    if (pct >= 1.0) return '#166534';
-    if (pct >= 0.8) return '#b45309';
-    return '#dc2626';
+  if (goal !== null) {
+    return (lowerIsBetter ? value <= goal : value >= goal) ? '#166534' : '#dc2626';
   }
   if (format === 'count') return value >= 0 ? '#166534' : '#dc2626';
   return value < 0 ? '#dc2626' : '#166534';
 }
 
-function goalBarColor(weekValues: (number | null)[], goal: number | null, metricKey?: string): string {
-  if (goal !== null && goal !== 0) {
+function goalBarColor(weekValues: (number | null)[], goal: number | null, lowerIsBetter?: boolean): string {
+  if (goal !== null) {
     const valid = weekValues.filter((v): v is number => v !== null);
     if (valid.length === 0) return '#94a3b8';
     const last = valid[valid.length - 1];
-    const lowerIsBetter = metricKey ? LOWER_IS_BETTER.has(metricKey) : false;
-    const pct = last / goal;
-    if (lowerIsBetter) {
-      if (pct <= 1.0) return '#10b981';
-      if (pct <= 1.2) return '#f59e0b';
-      return '#ef4444';
-    }
-    if (pct >= 1.0) return '#10b981';
-    if (pct >= 0.8) return '#f59e0b';
-    return '#ef4444';
+    return (lowerIsBetter ? last <= goal : last >= goal) ? '#10b981' : '#ef4444';
   }
   return trendColor(weekValues);
 }
@@ -179,11 +159,13 @@ interface SettingsModalProps {
   allTeams: Team[];
   configs: TeamMetricConfig[];
   settings: TeamSnapshotSettings;
+  groupMode: GroupMode;
+  onGroupModeChange: (mode: GroupMode) => void;
   onClose: () => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
-  teamId, members, allTeams, configs, settings, onClose,
+  teamId, members, allTeams, configs, settings, groupMode, onGroupModeChange, onClose,
 }) => {
   const queryClient = useQueryClient();
   const { toast, confirm } = useTitanFeedback();
@@ -241,6 +223,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     onError: () => toast.error('Failed to save goal'),
   });
 
+  const libMutation = useMutation({
+    mutationFn: ({ configId, lower_is_better }: { configId: number; lower_is_better: boolean }) =>
+      teamsApi.updateMetricConfig(teamId, configId, { lower_is_better }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-metric-configs', teamId] });
+    },
+    onError: () => toast.error('Failed to save direction'),
+  });
+
   const handleGoalBlur = (cfg: TeamMetricConfig) => {
     const raw = goalEdits[cfg.id]?.trim();
     const parsed = raw === '' ? null : parseFloat(raw.replace(/[$,]/g, ''));
@@ -261,6 +252,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       metric_key: metricKey,
       label: `${memberLabel} – ${def.label}`,
       display_order: configs.length,
+      lower_is_better: metricKey === 'buyout_remaining',
     });
   };
 
@@ -370,9 +362,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     }}
                   />
                 </div>
+                {/* Above/Below toggle */}
+                <button
+                  title={cfg.lower_is_better ? 'Below goal = good. Click to flip.' : 'Above goal = good. Click to flip.'}
+                  onClick={() => libMutation.mutate({ configId: cfg.id, lower_is_better: !cfg.lower_is_better })}
+                  style={{
+                    flexShrink: 0, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontSize: '0.7rem',
+                    fontWeight: 700, border: '1px solid #16a34a', whiteSpace: 'nowrap',
+                    background: '#f0fdf4', color: '#166534',
+                  }}
+                >
+                  {cfg.lower_is_better ? '↓ Good' : '↑ Good'}
+                </button>
                 <button
                   onClick={async () => {
-                    const ok = await confirm({ message: `Remove "${cfg.label}" from the metrics grid?`, danger: true });
+                    const ok = await confirm({ message: `Remove "${cfg.label}" from the metrics grid?\n\nAll tracked weekly history for this row will be permanently deleted and cannot be recovered.`, danger: true });
                     if (ok) deleteMutation.mutate(cfg.id);
                   }}
                   style={{ border: 'none', background: 'none', color: '#ef4444', fontSize: '1rem', cursor: 'pointer', padding: '4px 6px', flexShrink: 0 }}
@@ -382,6 +386,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             );
           })}
+        </div>
+
+        {/* Default View */}
+        <div style={{ background: '#f8fafc', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Default View</div>
+          <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Group rows by default when opening this tab.</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {(['none', 'member', 'metric'] as GroupMode[]).map(mode => (
+              <button
+                key={mode}
+                onClick={() => onGroupModeChange(mode)}
+                style={{
+                  flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid',
+                  borderColor: groupMode === mode ? '#0f172a' : '#e2e8f0',
+                  background: groupMode === mode ? '#0f172a' : 'white',
+                  color: groupMode === mode ? 'white' : '#374151',
+                  fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                {mode === 'none' ? 'None' : mode === 'member' ? 'By Member' : 'By Metric'}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Snapshot Schedule */}
@@ -439,7 +466,14 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
   const queryClient = useQueryClient();
   const { toast } = useTitanFeedback();
   const [showSettings, setShowSettings] = useState(false);
-  const [groupMode, setGroupMode] = useState<GroupMode>('none');
+  const groupModeKey = `team-metrics-group-${teamId}`;
+  const [groupMode, setGroupModeState] = useState<GroupMode>(
+    () => (localStorage.getItem(groupModeKey) as GroupMode | null) ?? 'member'
+  );
+  const setGroupMode = (mode: GroupMode) => {
+    setGroupModeState(mode);
+    localStorage.setItem(groupModeKey, mode);
+  };
   const [sortDir, setSortDir] = useState<SortDir>('none');
 
   const { data: configsRes, isLoading: configsLoading } = useQuery({
@@ -458,7 +492,6 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
   const { data: currentRes, isLoading: currentLoading } = useQuery({
     queryKey: ['team-metric-current', teamId],
     queryFn: () => teamsApi.getCurrentMetrics(teamId),
-    enabled: configs.length > 0,
     refetchInterval: 5 * 60 * 1000, // refresh every 5 min
   });
   const currentMetrics: TeamMetricCurrent[] = currentRes?.data.data ?? [];
@@ -712,7 +745,7 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
                         ? validValues.reduce((a, b) => a + b, 0) / validValues.length
                         : null;
                       const goal = cfg.goal !== null ? Number(cfg.goal) : null;
-                      const barColor = goalBarColor(weekValues, goal, cfg.metric_key);
+                      const barColor = goalBarColor(weekValues, goal, cfg.lower_is_better);
                       const isSubTeam = cfg.member_team_id !== null;
                       const trend = computeTrend(weekValues);
                       const rowBg = rowIdx % 2 === 0 ? 'white' : '#f8fafc';
@@ -793,7 +826,7 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
                             padding: '5px 8px', borderBottom: '1px solid #f1f5f9',
                             textAlign: 'right', fontWeight: 700, fontSize: '0.75rem',
                             background: '#f0fdf4',
-                            color: goalColor(currentVal, goal, def?.format ?? 'currency', cfg.metric_key), whiteSpace: 'nowrap',
+                            color: goalColor(currentVal, goal, def?.format ?? 'currency', cfg.lower_is_better), whiteSpace: 'nowrap',
                           }}>
                             {formatValue(currentVal, def?.format ?? 'currency')}
                           </td>
@@ -803,7 +836,7 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
                             padding: '5px 8px', borderBottom: '1px solid #f1f5f9',
                             textAlign: 'right', fontWeight: 700, fontSize: '0.75rem',
                             background: '#eff6ff',
-                            color: goalColor(avg, goal, def?.format ?? 'currency', cfg.metric_key), whiteSpace: 'nowrap',
+                            color: goalColor(avg, goal, def?.format ?? 'currency', cfg.lower_is_better), whiteSpace: 'nowrap',
                           }}>
                             {formatValue(avg, def?.format ?? 'currency')}
                           </td>
@@ -854,6 +887,8 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
           allTeams={allTeams}
           configs={configs}
           settings={snapshotSettings}
+          groupMode={groupMode}
+          onGroupModeChange={setGroupMode}
           onClose={() => setShowSettings(false)}
         />
       )}

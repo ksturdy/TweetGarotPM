@@ -1,0 +1,2 @@
+ALTER TABLE team_metric_configs
+  ADD COLUMN IF NOT EXISTS lower_is_better BOOLEAN NOT NULL DEFAULT FALSE;

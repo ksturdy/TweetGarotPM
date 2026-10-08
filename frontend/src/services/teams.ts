@@ -161,6 +161,7 @@ export const METRIC_DEFINITIONS = [
   { key: 'contract_value',     label: 'Contract Value',      format: 'currency' },
   { key: 'backlog',            label: 'Backlog',             format: 'currency' },
   { key: 'cash_flow',          label: 'Cash Flow',           format: 'currency' },
+  { key: 'cash_flow_pct',      label: 'CF Positive %',       format: 'percent'  },
   { key: 'buyout_remaining',   label: 'Buyout Remaining',    format: 'currency' },
 ] as const;
 
@@ -176,6 +177,7 @@ export interface TeamMetricConfig {
   label: string;
   display_order: number;
   goal: number | null;
+  lower_is_better: boolean;
   member_name: string | null;
   member_team_name: string | null;
   created_at: string;
@@ -187,6 +189,7 @@ export interface TeamMetricConfigInput {
   metric_key: MetricKey;
   label: string;
   display_order?: number;
+  lower_is_better?: boolean;
 }
 
 export interface TeamMetricSnapshot {
@@ -278,7 +281,7 @@ export const teamsApi = {
   addMetricConfig: (id: number, data: TeamMetricConfigInput) =>
     api.post<{ data: TeamMetricConfig }>(`/teams/${id}/metric-configs`, data),
 
-  updateMetricConfig: (id: number, configId: number, data: { goal?: number | null }) =>
+  updateMetricConfig: (id: number, configId: number, data: { goal?: number | null; lower_is_better?: boolean }) =>
     api.patch<{ data: TeamMetricConfig }>(`/teams/${id}/metric-configs/${configId}`, data),
 
   deleteMetricConfig: (id: number, configId: number) =>

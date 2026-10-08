@@ -1,7 +1,7 @@
 // @refresh reset
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { teamsApi, Team, TeamMember, TeamDashboard } from '../../services/teams';
 import { projectsApi, BacklogSnapshot } from '../../services/projects';
 import TeamFinancialsTab from '../../components/teams/TeamFinancialsTab';
@@ -50,7 +50,12 @@ const TeamDetailPage: React.FC = () => {
   const { toast, confirm } = useTitanFeedback();
   const teamId = parseInt(id || '0');
 
-  const [activeTab, setActiveTab] = useState<'members' | 'projects' | 'opportunities' | 'customers' | 'estimates' | 'financials' | 'metrics'>('members');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const VALID_TABS = ['members', 'projects', 'opportunities', 'customers', 'estimates', 'financials', 'metrics'] as const;
+  type TabName = typeof VALID_TABS[number];
+  const rawTab = searchParams.get('tab') as TabName | null;
+  const activeTab: TabName = rawTab && VALID_TABS.includes(rawTab) ? rawTab : 'members';
+  const setActiveTab = (tab: TabName) => setSearchParams({ tab }, { replace: true });
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['Open']);
   const toggleStatus = (s: string) =>
     setSelectedStatuses(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
