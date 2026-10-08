@@ -18,6 +18,7 @@ const WEEKS_PER_MONTH = 52 / 12;
 const DEFAULT_HPM = 40 * WEEKS_PER_MONTH; // ~173.3 — flat 40h/wk fallback
 const TRADE_FIELD_SEG = { pf: '40', sm: '30', pl: '50' };
 const TRADE_SHOP_SEG  = { pf: '45', sm: '35', pl: '55' };
+const LABOR_SEG_KEYS  = new Set(['30', '35', '40', '45', '50', '55']);
 
 const TRADES = [
   { key: 'pf', label: 'PF', color: '#3b82f6' },
@@ -356,11 +357,35 @@ function buildLaborProjections(contracts, shopFieldRows, filters, opts) {
     const monthlyHours = new Map();
     const monthlyHC    = new Map();
 
-    // Cost-type projects: use per-segment dates/contour/HPM matching LaborForecast.tsx
-    const projectSegs = contract.linked_project_id &&
-      contract.linked_project_scheduling_mode === 'cost_type'
+    // Determine whether to use per-segment distribution.
+    // Cost-type projects always use segments. Summary/phase projects use segments when
+    // they have at least one labor segment with a start_date and est_hours > 0
+    // (provisional mode — mirrors hasProvSegments logic in LaborForecast.tsx).
+    const rawSegs = contract.linked_project_id
       ? (segmentsByProject[contract.linked_project_id] || null)
       : null;
+    const hasProvSegments = rawSegs != null && rawSegs.some(
+      s => LABOR_SEG_KEYS.has(s.segment_key) && s.start_date && parseNum(s.est_hours) > 0
+    );
+    let projectSegs = (
+      contract.linked_project_scheduling_mode === 'cost_type' || hasProvSegments
+    ) ? rawSegs : null;
+
+    // For provisional-segment projects, mirror CostTypeSchedule's default aligned mode:
+    // all labor segments share the first configured segment's dates/contour, matching
+    // the manpower table the user sees without requiring localStorage state in the DB.
+    if (projectSegs && contract.linked_project_scheduling_mode !== 'cost_type') {
+      const masterSeg = projectSegs.find(
+        s => LABOR_SEG_KEYS.has(s.segment_key) && s.start_date && s.end_date
+      );
+      if (masterSeg) {
+        projectSegs = projectSegs.map(s =>
+          LABOR_SEG_KEYS.has(s.segment_key)
+            ? { ...s, start_date: masterSeg.start_date, end_date: masterSeg.end_date, contour_type: masterSeg.contour_type }
+            : s
+        );
+      }
+    }
 
     if (projectSegs) {
       for (const trade of TRADES) {
@@ -579,11 +604,13 @@ async function buildLaborForecastData(tenantId, rawFilters) {
     VistaData.getShopFieldHoursByContract(tenantId),
   ]);
 
-  const costTypeProjectIds = contracts
-    .filter(c => c.linked_project_id && c.linked_project_scheduling_mode === 'cost_type')
-    .map(c => c.linked_project_id);
-  const segmentsByProject = costTypeProjectIds.length > 0
-    ? await ProjectScheduleSegment.getBulkByProjects(costTypeProjectIds, tenantId)
+  // Fetch segments for ALL linked projects, not just cost_type — summary/phase projects
+  // may have provisional segments configured (hasProvSegments path in LaborForecast.tsx).
+  const linkedProjectIds = [...new Set(contracts
+    .filter(c => c.linked_project_id)
+    .map(c => c.linked_project_id))];
+  const segmentsByProject = linkedProjectIds.length > 0
+    ? await ProjectScheduleSegment.getBulkByProjects(linkedProjectIds, tenantId)
     : {};
 
   const opts = {

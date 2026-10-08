@@ -778,7 +778,24 @@ const LaborForecast: React.FC = () => {
         s => LABOR_COST_TYPE_KEYS.has(s.segment_key) && s.start_date && (s.est_hours ?? 0) > 0
       ) ?? false);
 
-      const projectSegs = (primaryProjId || hasProvSegments) ? projSegData : null;
+      // For provisional-segment projects, mirror CostTypeSchedule's default aligned mode:
+      // all labor segments share the first configured segment's dates/contour.
+      // This matches the manpower table the user sees in CostTypeSchedule without
+      // requiring localStorage state to be synced to the DB.
+      let projectSegs = (primaryProjId || hasProvSegments) ? projSegData : null;
+      if (projectSegs && !primaryProjId) {
+        const ALIGNED_KEYS = ['30', '35', '40', '45', '50', '55'];
+        const masterSeg = projectSegs.find(
+          (s: ScheduleSegment) => ALIGNED_KEYS.includes(s.segment_key) && s.start_date && s.end_date
+        );
+        if (masterSeg) {
+          projectSegs = projectSegs.map((s: ScheduleSegment) =>
+            ALIGNED_KEYS.includes(s.segment_key)
+              ? { ...s, start_date: masterSeg.start_date, end_date: masterSeg.end_date, contour_type: (masterSeg.contour_type || 'bell') as ContourType }
+              : s
+          );
+        }
+      }
 
       if (projectSegs) {
         const TRADE_FIELD_SEG: Record<string, string> = { pf: '40', sm: '30', pl: '50' };
