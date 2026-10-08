@@ -1190,7 +1190,7 @@ const ProjectList: React.FC = () => {
             </button>
           )}
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="projects-table-scroll" style={{ overflowX: 'auto' }}>
         <table className="sales-table" ref={tableRef} style={{ minWidth: tableMinWidth }}>
           <colgroup>
             {COLUMN_KEYS.map(key => (
@@ -1414,6 +1414,47 @@ const ProjectList: React.FC = () => {
             </tfoot>
           )}
         </table>
+        </div>
+
+        {/* Mobile card list */}
+        <div className="projects-mobile-cards">
+          {sortedProjects.length > 0 ? sortedProjects.map((project: Project) => (
+            <div
+              key={project.id}
+              className="sales-mobile-card"
+              onClick={() => navigate(`/projects/${project.id}/financials`)}
+            >
+              <div className="sales-mobile-card-main">
+                <div className="sales-project-icon" style={{ background: project.market ? getMarketGradient(project.market) : getProjectGradient(project.status) }}>
+                  {project.market ? renderMarketIcon(project.market) : renderProjectIcon(project.status)}
+                </div>
+                <div className="sales-mobile-card-info">
+                  <div className="sales-mobile-card-name">{project.name}</div>
+                  <div className="sales-mobile-card-company">{project.number}</div>
+                  <div className="sales-mobile-card-gc">{project.owner_name || project.customer_name || project.client || ''}</div>
+                </div>
+                <div className="sales-mobile-card-right">
+                  <div className="sales-mobile-card-value">
+                    {project.contract_value ? `$${(Number(project.contract_value) / 1000000).toFixed(1)}M` : '-'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: project.gross_margin_percent && Number(project.gross_margin_percent) > 0 ? '#10b981' : '#9ca3af', textAlign: 'right' }}>
+                    {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null
+                      ? `${(Number(project.gross_margin_percent) * 100).toFixed(1)}% GM`
+                      : ''}
+                  </div>
+                </div>
+              </div>
+              <div className="sales-mobile-card-footer">
+                <span className={`sales-stage-badge ${project.status.toLowerCase().replace('-', '_')}`}>
+                  <span className="sales-stage-dot" style={{ background: getStatusColor(project.status) }}></span>
+                  {project.status.replace('_', ' ').charAt(0).toUpperCase() + project.status.replace('_', ' ').slice(1)}
+                </span>
+                <span>{formatStartMonth(project.start_date)}</span>
+              </div>
+            </div>
+          )) : (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6b7280' }}>No projects found</div>
+          )}
         </div>
       </div>
     </div>

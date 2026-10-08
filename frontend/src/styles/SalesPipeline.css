@@ -985,6 +985,10 @@
   display: none;
 }
 
+.projects-mobile-cards {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .sales-container {
     padding: 16px;
@@ -1016,6 +1020,17 @@
 
   .projects-page-actions {
     display: none;
+  }
+
+  .projects-table-scroll {
+    display: none;
+  }
+
+  .projects-mobile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 0 16px;
   }
 
   .sales-view-toggle {
