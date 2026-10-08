@@ -798,7 +798,7 @@ const ProjectList: React.FC = () => {
             <div className="sales-subtitle">Manage construction projects</div>
           </div>
         </div>
-        <div className="sales-header-actions">
+        <div className="sales-header-actions projects-page-actions">
           <button
             className="sales-btn sales-btn-secondary"
             onClick={() => navigate('/projects/projected-revenue')}
