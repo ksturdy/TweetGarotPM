@@ -153,6 +153,63 @@ export interface TeamFinancials {
   };
 }
 
+export const METRIC_DEFINITIONS = [
+  { key: 'opportunities',      label: 'Opportunities',       format: 'count'    },
+  { key: 'opp_value',          label: 'Opp Value',           format: 'currency' },
+  { key: 'opp_weighted_value', label: 'Weighted Opp Value',  format: 'currency' },
+  { key: 'projects',           label: 'Active Projects',     format: 'count'    },
+  { key: 'contract_value',     label: 'Contract Value',      format: 'currency' },
+  { key: 'backlog',            label: 'Backlog',             format: 'currency' },
+  { key: 'cash_flow',          label: 'Cash Flow',           format: 'currency' },
+  { key: 'buyout_remaining',   label: 'Buyout Remaining',    format: 'currency' },
+] as const;
+
+export type MetricKey = typeof METRIC_DEFINITIONS[number]['key'];
+
+export interface TeamMetricConfig {
+  id: number;
+  team_id: number;
+  tenant_id: number;
+  member_user_id: number | null;
+  member_team_id: number | null;
+  metric_key: MetricKey;
+  label: string;
+  display_order: number;
+  goal: number | null;
+  member_name: string | null;
+  member_team_name: string | null;
+  created_at: string;
+}
+
+export interface TeamMetricConfigInput {
+  member_user_id?: number | null;
+  member_team_id?: number | null;
+  metric_key: MetricKey;
+  label: string;
+  display_order?: number;
+}
+
+export interface TeamMetricSnapshot {
+  member_user_id: number | null;
+  member_team_id: number | null;
+  metric_key: string;
+  week_start: string;
+  value: string | null;
+}
+
+export interface TeamMetricCurrent {
+  member_user_id: number | null;
+  member_team_id: number | null;
+  metric_key: string;
+  value: number | null;
+}
+
+export interface TeamSnapshotSettings {
+  team_id: number;
+  snapshot_day_of_week: number;
+  snapshot_hour: number;
+}
+
 export interface TeamInput {
   name: string;
   description?: string;
@@ -214,4 +271,34 @@ export const teamsApi = {
 
   getFinancials: (id: number, statuses: string[] = ['Open', 'Soft-Closed']) =>
     api.get<TeamFinancials>(`/teams/${id}/financials`, { params: { statuses: statuses.join(',') } }).then(r => r.data),
+
+  getMetricConfigs: (id: number) =>
+    api.get<{ data: TeamMetricConfig[] }>(`/teams/${id}/metric-configs`),
+
+  addMetricConfig: (id: number, data: TeamMetricConfigInput) =>
+    api.post<{ data: TeamMetricConfig }>(`/teams/${id}/metric-configs`, data),
+
+  updateMetricConfig: (id: number, configId: number, data: { goal?: number | null }) =>
+    api.patch<{ data: TeamMetricConfig }>(`/teams/${id}/metric-configs/${configId}`, data),
+
+  deleteMetricConfig: (id: number, configId: number) =>
+    api.delete<{ success: boolean }>(`/teams/${id}/metric-configs/${configId}`),
+
+  reorderMetricConfigs: (id: number, orderedIds: number[]) =>
+    api.put<{ success: boolean }>(`/teams/${id}/metric-configs/reorder`, { orderedIds }),
+
+  getMetricSnapshots: (id: number) =>
+    api.get<{ data: TeamMetricSnapshot[] }>(`/teams/${id}/metric-snapshots`),
+
+  captureMetricSnapshot: (id: number) =>
+    api.post<{ data: TeamMetricSnapshot[] }>(`/teams/${id}/metric-snapshots/capture`),
+
+  getCurrentMetrics: (id: number) =>
+    api.get<{ data: TeamMetricCurrent[] }>(`/teams/${id}/metric-current`),
+
+  getSnapshotSettings: (id: number) =>
+    api.get<{ data: TeamSnapshotSettings }>(`/teams/${id}/snapshot-settings`),
+
+  updateSnapshotSettings: (id: number, data: Omit<TeamSnapshotSettings, 'team_id'>) =>
+    api.put<{ data: TeamSnapshotSettings }>(`/teams/${id}/snapshot-settings`, data),
 };

@@ -881,6 +881,274 @@ class Team {
     `, [tenantId, employeeIds, limit]);
     return result.rows;
   }
+
+  // ── Metric Configs ──────────────────────────────────────────────────────────
+
+  static async getMetricConfigs(teamId, tenantId) {
+    const result = await db.query(`
+      SELECT tmc.*,
+             u.first_name || ' ' || u.last_name as member_name,
+             t.name as member_team_name
+      FROM team_metric_configs tmc
+      LEFT JOIN users u ON tmc.member_user_id = u.id
+      LEFT JOIN teams t ON tmc.member_team_id = t.id
+      WHERE tmc.team_id = $1 AND tmc.tenant_id = $2
+      ORDER BY tmc.display_order ASC, tmc.id ASC
+    `, [teamId, tenantId]);
+    return result.rows;
+  }
+
+  static async addMetricConfig(teamId, tenantId, data) {
+    const { member_user_id, member_team_id, metric_key, label, display_order } = data;
+    const uid = member_user_id || null;
+    const tid = member_team_id || null;
+
+    // Manual upsert using IS NOT DISTINCT FROM to handle NULLs correctly
+    const existing = await db.query(`
+      SELECT id FROM team_metric_configs
+      WHERE team_id = $1 AND tenant_id = $2 AND metric_key = $3
+        AND (member_user_id IS NOT DISTINCT FROM $4)
+        AND (member_team_id IS NOT DISTINCT FROM $5)
+    `, [teamId, tenantId, metric_key, uid, tid]);
+
+    if (existing.rows.length > 0) {
+      const r = await db.query(`
+        UPDATE team_metric_configs
+        SET label = $1, display_order = $2
+        WHERE id = $3
+        RETURNING *
+      `, [label, display_order || 0, existing.rows[0].id]);
+      return r.rows[0];
+    }
+
+    const r = await db.query(`
+      INSERT INTO team_metric_configs
+        (team_id, tenant_id, member_user_id, member_team_id, metric_key, label, display_order)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `, [teamId, tenantId, uid, tid, metric_key, label, display_order || 0]);
+    return r.rows[0];
+  }
+
+  static async deleteMetricConfig(teamId, tenantId, configId) {
+    await db.query(`
+      DELETE FROM team_metric_configs
+      WHERE id = $1 AND team_id = $2 AND tenant_id = $3
+    `, [configId, teamId, tenantId]);
+  }
+
+  static async reorderMetricConfigs(teamId, tenantId, orderedIds) {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.query(`
+        UPDATE team_metric_configs SET display_order = $1
+        WHERE id = $2 AND team_id = $3 AND tenant_id = $4
+      `, [i, orderedIds[i], teamId, tenantId]);
+    }
+  }
+
+  static async updateMetricConfig(teamId, tenantId, configId, data) {
+    const result = await db.query(`
+      UPDATE team_metric_configs
+      SET goal = $1
+      WHERE id = $2 AND team_id = $3 AND tenant_id = $4
+      RETURNING *
+    `, [data.goal ?? null, configId, teamId, tenantId]);
+    return result.rows[0];
+  }
+
+  // ── Snapshot Settings ────────────────────────────────────────────────────────
+
+  static async getSnapshotSettings(teamId, tenantId) {
+    const r = await db.query(`
+      SELECT * FROM team_metric_settings WHERE team_id = $1 AND tenant_id = $2
+    `, [teamId, tenantId]);
+    return r.rows[0] || { team_id: teamId, snapshot_day_of_week: 1, snapshot_hour: 18 };
+  }
+
+  static async upsertSnapshotSettings(teamId, tenantId, { snapshot_day_of_week, snapshot_hour }) {
+    const r = await db.query(`
+      INSERT INTO team_metric_settings (team_id, tenant_id, snapshot_day_of_week, snapshot_hour, updated_at)
+      VALUES ($1, $2, $3, $4, NOW())
+      ON CONFLICT (team_id) DO UPDATE
+        SET snapshot_day_of_week = EXCLUDED.snapshot_day_of_week,
+            snapshot_hour = EXCLUDED.snapshot_hour,
+            updated_at = NOW()
+      RETURNING *
+    `, [teamId, tenantId, snapshot_day_of_week, snapshot_hour]);
+    return r.rows[0];
+  }
+
+  // ── Metric Snapshots ─────────────────────────────────────────────────────────
+
+  static async getMetricSnapshots(teamId, tenantId, weeks = 12) {
+    const result = await db.query(`
+      SELECT member_user_id, member_team_id, metric_key, week_start, value
+      FROM team_metric_snapshots
+      WHERE team_id = $1 AND tenant_id = $2
+        AND week_start >= (
+          DATE_TRUNC('week', NOW()) - ((${weeks} - 1) * INTERVAL '1 week')
+        )::DATE
+      ORDER BY week_start ASC
+    `, [teamId, tenantId]);
+    return result.rows;
+  }
+
+  static async captureMetricSnapshot(teamId, tenantId) {
+    const configs = await this.getMetricConfigs(teamId, tenantId);
+    if (configs.length === 0) return [];
+
+    const weekStart = await db.query(`SELECT DATE_TRUNC('week', NOW())::DATE as ws`);
+    const ws = weekStart.rows[0].ws;
+
+    // Gather unique scopes to avoid redundant DB queries
+    const scopeMap = new Map();
+    for (const c of configs) {
+      const key = `${c.member_user_id ?? 'null'}_${c.member_team_id ?? 'null'}`;
+      if (!scopeMap.has(key)) {
+        scopeMap.set(key, { member_user_id: c.member_user_id, member_team_id: c.member_team_id });
+      }
+    }
+
+    const metricsByScope = {};
+    for (const [key, scope] of scopeMap) {
+      metricsByScope[key] = await this._computeCurrentMetrics(teamId, tenantId, scope.member_user_id, scope.member_team_id);
+    }
+
+    const saved = [];
+    for (const config of configs) {
+      const scopeKey = `${config.member_user_id ?? 'null'}_${config.member_team_id ?? 'null'}`;
+      const metrics = metricsByScope[scopeKey];
+      const value = this._extractMetricValue(metrics, config.metric_key);
+      if (value === null) continue;
+
+      // Manual upsert using IS NOT DISTINCT FROM
+      const existing = await db.query(`
+        SELECT id FROM team_metric_snapshots
+        WHERE team_id = $1 AND metric_key = $2 AND week_start = $3
+          AND (member_user_id IS NOT DISTINCT FROM $4)
+          AND (member_team_id IS NOT DISTINCT FROM $5)
+      `, [teamId, config.metric_key, ws, config.member_user_id, config.member_team_id]);
+
+      let r;
+      if (existing.rows.length > 0) {
+        r = await db.query(`
+          UPDATE team_metric_snapshots SET value = $1, updated_at = NOW()
+          WHERE id = $2 RETURNING *
+        `, [value, existing.rows[0].id]);
+      } else {
+        r = await db.query(`
+          INSERT INTO team_metric_snapshots
+            (team_id, tenant_id, member_user_id, member_team_id, metric_key, week_start, value)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          RETURNING *
+        `, [teamId, tenantId, config.member_user_id, config.member_team_id, config.metric_key, ws, value]);
+      }
+      saved.push(r.rows[0]);
+    }
+    return saved;
+  }
+
+  static _extractMetricValue(metrics, key) {
+    if (!metrics) return null;
+    const map = {
+      opportunities:      () => Number(metrics.opportunities?.total ?? 0),
+      opp_value:          () => Number(metrics.opportunities?.total_value ?? 0),
+      opp_weighted_value: () => Number(metrics.opportunities?.weighted_value ?? 0),
+      projects:           () => Number(metrics.projects?.active ?? 0),
+      contract_value:     () => Number(metrics.projects?.total_value ?? 0),
+      backlog:            () => Number(metrics.projects?.total_backlog ?? 0),
+      cash_flow:          () => Number(metrics.cashFlow?.net_cash_position ?? 0),
+      buyout_remaining:   () => Number(metrics.buyout?.total_buyout_remaining ?? 0),
+    };
+    return map[key] ? map[key]() : null;
+  }
+
+  // Compute live metrics for a scope: sub-team, individual, or whole parent team
+  static async _computeCurrentMetrics(teamId, tenantId, memberId, memberTeamId) {
+    const statuses = ['Open'];
+
+    if (memberTeamId) {
+      // Sub-team aggregate: delegate to the sub-team's getDashboardMetrics
+      return this.getDashboardMetrics(memberTeamId, tenantId, statuses);
+    }
+
+    if (!memberId) {
+      // Whole parent team
+      return this.getDashboardMetrics(teamId, tenantId, statuses);
+    }
+
+    // Individual member: look up their employee_id via user_id
+    const memberInfo = await db.query(`
+      SELECT tm.employee_id,
+             e.first_name || ' ' || e.last_name as full_name
+      FROM team_members tm
+      JOIN employees e ON tm.employee_id = e.id
+      WHERE tm.team_id = $1 AND e.user_id = $2
+      LIMIT 1
+    `, [teamId, memberId]);
+
+    if (memberInfo.rows.length === 0) return null;
+    const { employee_id } = memberInfo.rows[0];
+    const employeeIds = [employee_id];
+
+    const [opps, projects, cashFlow, buyout] = await Promise.all([
+      db.query(`
+        SELECT
+          COUNT(*) as total,
+          COALESCE(SUM(o.estimated_value), 0) as total_value,
+          COALESCE(SUM(o.estimated_value * CASE COALESCE(o.probability, ps.probability)
+            WHEN 'High' THEN 0.80 WHEN 'Medium' THEN 0.40 WHEN 'Low' THEN 0.15 ELSE 0 END), 0) as weighted_value
+        FROM opportunities o
+        LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
+        WHERE o.tenant_id = $1 AND o.assigned_to = ANY($2)
+          AND ps.name NOT IN ('Lost', 'Passed')
+          AND NOT (ps.name = 'Awarded' AND o.awarded_status IN ('In Progress', 'Completed'))
+      `, [tenantId, employeeIds]),
+
+      db.query(`
+        SELECT
+          COUNT(CASE WHEN p.status = 'Open' THEN 1 END) as active,
+          COALESCE(SUM(COALESCE(vc.contract_amount, p.contract_value)), 0) as total_value,
+          COALESCE(SUM(CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END), 0) as total_backlog
+        FROM projects p
+        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+        WHERE p.tenant_id = $1 AND p.manager_id = ANY($2) AND p.status = 'Open'
+      `, [tenantId, employeeIds]),
+
+      db.query(`
+        SELECT COALESCE(SUM(vc.cash_flow), 0) as net_cash_position
+        FROM projects p
+        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+        WHERE p.tenant_id = $1 AND p.manager_id = ANY($2) AND p.status = 'Open'
+      `, [tenantId, employeeIds]),
+
+      db.query(`
+        SELECT COALESCE(SUM(agg.projected_cost - agg.committed_cost - agg.jtd_cost), 0) as total_buyout_remaining
+        FROM (
+          SELECT p.id,
+            COALESCE(SUM(pc.jtd_cost), 0) as jtd_cost,
+            COALESCE(SUM(pc.committed_cost), 0) as committed_cost,
+            COALESCE(SUM(pc.projected_cost), 0) as projected_cost
+          FROM projects p
+          JOIN vp_phase_codes pc ON pc.linked_project_id = p.id AND pc.cost_type = ANY(ARRAY[3, 5])
+          WHERE p.tenant_id = $1 AND p.manager_id = ANY($2) AND p.status = 'Open'
+            AND EXISTS (
+              SELECT 1 FROM vp_contracts vc
+              WHERE vc.linked_project_id = p.id AND vc.projected_cost > 0
+                AND (vc.actual_cost / vc.projected_cost) >= 0.10
+            )
+          GROUP BY p.id
+        ) agg
+      `, [tenantId, employeeIds])
+    ]);
+
+    return {
+      opportunities: opps.rows[0],
+      projects:      projects.rows[0],
+      cashFlow:      cashFlow.rows[0],
+      buyout:        buyout.rows[0],
+    };
+  }
 }
 
 module.exports = Team;

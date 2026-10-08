@@ -1,0 +1,2 @@
+ALTER TABLE team_metric_configs
+  ADD COLUMN IF NOT EXISTS goal NUMERIC(20, 4) NULL;

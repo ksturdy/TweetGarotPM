@@ -5,6 +5,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { teamsApi, Team, TeamMember, TeamDashboard } from '../../services/teams';
 import { projectsApi, BacklogSnapshot } from '../../services/projects';
 import TeamFinancialsTab from '../../components/teams/TeamFinancialsTab';
+import TeamMetricsTab from '../../components/teams/TeamMetricsTab';
 import { employeesApi, AssignableEmployee } from '../../services/employees';
 import OpportunityModal from '../../components/opportunities/OpportunityModal';
 import { Opportunity } from '../../services/opportunities';
@@ -1062,8 +1063,8 @@ const TeamDetailPage: React.FC = () => {
 
         {/* Metrics Tab */}
         {activeTab === 'metrics' && (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>
-            Metrics dashboard coming soon.
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <TeamMetricsTab teamId={teamId} members={members} />
           </div>
         )}
       </div>

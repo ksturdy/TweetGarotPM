@@ -453,4 +453,160 @@ router.get('/:id/financials', async (req, res, next) => {
   }
 });
 
+// ── Team Metric Configs ───────────────────────────────────────────────────────
+
+router.get('/:id/metric-configs', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const configs = await Team.getMetricConfigs(req.params.id, req.tenantId);
+    res.json({ data: configs });
+  } catch (error) {
+    console.error('Error fetching metric configs:', error);
+    res.status(500).json({ error: 'Failed to fetch metric configs' });
+  }
+});
+
+router.post('/:id/metric-configs', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const config = await Team.addMetricConfig(req.params.id, req.tenantId, req.body);
+    res.status(201).json({ data: config });
+  } catch (error) {
+    console.error('Error adding metric config:', error);
+    res.status(500).json({ error: 'Failed to add metric config' });
+  }
+});
+
+router.patch('/:id/metric-configs/:configId', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const config = await Team.updateMetricConfig(req.params.id, req.tenantId, req.params.configId, req.body);
+    res.json({ data: config });
+  } catch (error) {
+    console.error('Error updating metric config:', error);
+    res.status(500).json({ error: 'Failed to update metric config' });
+  }
+});
+
+router.delete('/:id/metric-configs/:configId', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    await Team.deleteMetricConfig(req.params.id, req.tenantId, req.params.configId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting metric config:', error);
+    res.status(500).json({ error: 'Failed to delete metric config' });
+  }
+});
+
+router.put('/:id/metric-configs/reorder', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    await Team.reorderMetricConfigs(req.params.id, req.tenantId, req.body.orderedIds);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error reordering metric configs:', error);
+    res.status(500).json({ error: 'Failed to reorder metric configs' });
+  }
+});
+
+// ── Team Metric Snapshots ─────────────────────────────────────────────────────
+
+router.get('/:id/metric-snapshots', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const snapshots = await Team.getMetricSnapshots(req.params.id, req.tenantId, 12);
+    res.json({ data: snapshots });
+  } catch (error) {
+    console.error('Error fetching metric snapshots:', error);
+    res.status(500).json({ error: 'Failed to fetch metric snapshots' });
+  }
+});
+
+router.post('/:id/metric-snapshots/capture', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const saved = await Team.captureMetricSnapshot(req.params.id, req.tenantId);
+    res.json({ data: saved });
+  } catch (error) {
+    console.error('Error capturing metric snapshots:', error);
+    res.status(500).json({ error: 'Failed to capture metric snapshots' });
+  }
+});
+
+// Live current values — computes without saving to DB
+router.get('/:id/metric-current', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+
+    const configs = await Team.getMetricConfigs(req.params.id, req.tenantId);
+    if (configs.length === 0) return res.json({ data: [] });
+
+    const scopeMap = new Map();
+    for (const c of configs) {
+      const key = `${c.member_user_id ?? 'null'}_${c.member_team_id ?? 'null'}`;
+      if (!scopeMap.has(key)) {
+        scopeMap.set(key, { member_user_id: c.member_user_id, member_team_id: c.member_team_id });
+      }
+    }
+
+    const metricsByScope = {};
+    for (const [key, scope] of scopeMap) {
+      metricsByScope[key] = await Team._computeCurrentMetrics(
+        req.params.id, req.tenantId, scope.member_user_id, scope.member_team_id
+      );
+    }
+
+    const current = configs.map(c => {
+      const key = `${c.member_user_id ?? 'null'}_${c.member_team_id ?? 'null'}`;
+      const value = Team._extractMetricValue(metricsByScope[key], c.metric_key);
+      return {
+        member_user_id: c.member_user_id,
+        member_team_id: c.member_team_id,
+        metric_key: c.metric_key,
+        value,
+      };
+    });
+
+    res.json({ data: current });
+  } catch (error) {
+    console.error('Error fetching current metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch current metrics' });
+  }
+});
+
+// ── Snapshot Settings ─────────────────────────────────────────────────────────
+
+router.get('/:id/snapshot-settings', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const settings = await Team.getSnapshotSettings(req.params.id, req.tenantId);
+    res.json({ data: settings });
+  } catch (error) {
+    console.error('Error fetching snapshot settings:', error);
+    res.status(500).json({ error: 'Failed to fetch snapshot settings' });
+  }
+});
+
+router.put('/:id/snapshot-settings', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const settings = await Team.upsertSnapshotSettings(req.params.id, req.tenantId, req.body);
+    res.json({ data: settings });
+  } catch (error) {
+    console.error('Error saving snapshot settings:', error);
+    res.status(500).json({ error: 'Failed to save snapshot settings' });
+  }
+});
+
 module.exports = router;
