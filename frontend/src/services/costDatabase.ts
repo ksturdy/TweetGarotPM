@@ -217,6 +217,8 @@ export interface EstimateListRow {
   status: string;
   bid_date: string | null;
   total_cost: number;
+  subtotal: number;
+  square_footage: number | null;
   labor_cost: number;
   material_cost: number;
   equipment_cost: number;
@@ -248,4 +250,6 @@ export const estimateDbService = {
     api.get<EstSectionRow[]>('/cost-database/estimates/by-section', { params: toEstParams(filters) }).then(r => r.data),
   getList: (filters: EstDbFilters) =>
     api.get<EstimateListRow[]>('/cost-database/estimates/list', { params: toEstParams(filters) }).then(r => r.data),
+  updateEstimateSqft: (estimateId: number, sqft: number | null) =>
+    api.patch(`/cost-database/estimates/${estimateId}/sqft`, { sqft }),
 };

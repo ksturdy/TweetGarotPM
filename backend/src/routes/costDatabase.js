@@ -179,4 +179,12 @@ router.get('/estimates/list', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.patch('/estimates/:id/sqft', async (req, res, next) => {
+  try {
+    const { sqft } = req.body;
+    await CostDatabase.estimates.updateSqft(parseInt(req.params.id, 10), sqft, req.tenantId);
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

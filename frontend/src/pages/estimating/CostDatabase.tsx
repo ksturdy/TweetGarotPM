@@ -99,6 +99,17 @@ const CostDatabase: React.FC = () => {
     }
   };
 
+  const handleEstSqftSave = async (estimateId: number, sqft: number | null) => {
+    try {
+      await estimateDbService.updateEstimateSqft(estimateId, sqft);
+      queryClient.setQueryData<EstimateListRow[]>(['estDb', 'list', estFilters], old =>
+        old ? old.map(r => r.id === estimateId ? { ...r, square_footage: sqft } : r) : old
+      );
+    } catch {
+      toast.error('Failed to save square footage');
+    }
+  };
+
   // Budget generation modal state
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [budgetName, setBudgetName] = useState('');
@@ -129,6 +140,8 @@ const CostDatabase: React.FC = () => {
   const [estExcluded, setEstExcluded] = useState<Set<number>>(new Set());
   const [estTab, setEstTab] = useState<'cost-type' | 'section' | 'list'>('cost-type');
   const [estSearch, setEstSearch] = useState('');
+  const [estEditingId, setEstEditingId] = useState<number | null>(null);
+  const [estEditingVal, setEstEditingVal] = useState('');
 
   // Persist filters to sessionStorage
   useEffect(() => { try { sessionStorage.setItem(FILTER_KEY, JSON.stringify(filters)); } catch {} }, [filters]);
@@ -1149,13 +1162,18 @@ const CostDatabase: React.FC = () => {
                     <Th>Subcontracts</Th>
                     <Th>Equipment</Th>
                     <Th>Rentals</Th>
-                    <Th>Bid Value</Th>
+                    <Th>Cost</Th>
+                    <Th>Sell</Th>
+                    <Th>SF <span style={{ fontWeight: 400, textTransform: 'none', fontSize: '0.6rem', color: '#94a3b8' }}>(click to edit)</span></Th>
+                    <Th>Cost/SF</Th>
                     <Th>% of Total</Th>
                   </tr></thead>
                   <tbody>
                     {filteredEstList.map(r => {
                       const isExcluded = estExcluded.has(r.id);
                       const pct = includedTotal > 0 && !isExcluded ? r.total_cost / includedTotal : 0;
+                      const costPerSf = r.subtotal > 0 && r.square_footage ? r.subtotal / r.square_footage : null;
+                      const isEditingSf = estEditingId === r.id;
                       return (
                         <tr key={r.id} style={{
                           borderBottom: '1px solid #f1f5f9',
@@ -1176,7 +1194,40 @@ const CostDatabase: React.FC = () => {
                           <Td align="right">{r.subcontractor_cost > 0 ? fmt(r.subcontractor_cost) : '-'}</Td>
                           <Td align="right">{r.equipment_cost > 0 ? fmt(r.equipment_cost) : '-'}</Td>
                           <Td align="right">{r.rental_cost > 0 ? fmt(r.rental_cost) : '-'}</Td>
+                          <Td align="right" style={{ fontWeight: 600 }}>{r.subtotal > 0 ? fmt(r.subtotal) : '-'}</Td>
                           <Td align="right" style={{ fontWeight: 600 }}>{fmt(r.total_cost)}</Td>
+                          <Td align="right">
+                            {isEditingSf ? (
+                              <input
+                                autoFocus
+                                type="text"
+                                value={estEditingVal}
+                                onChange={e => setEstEditingVal(e.target.value.replace(/[^\d]/g, ''))}
+                                onBlur={() => {
+                                  const sqft = estEditingVal === '' ? null : parseInt(estEditingVal, 10);
+                                  handleEstSqftSave(r.id, sqft);
+                                  setEstEditingId(null);
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                  if (e.key === 'Escape') setEstEditingId(null);
+                                }}
+                                style={{ width: '80px', textAlign: 'right', border: '1px solid #3b82f6', borderRadius: '3px', padding: '1px 4px', fontSize: 'inherit' }}
+                              />
+                            ) : (
+                              <span
+                                onClick={() => { setEstEditingId(r.id); setEstEditingVal(r.square_footage != null ? String(r.square_footage) : ''); }}
+                                title="Click to edit square footage"
+                                style={{ cursor: 'text', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                              >
+                                {r.square_footage != null ? fmtNum(r.square_footage) : <span style={{ color: '#94a3b8' }}>—</span>}
+                                <span style={{ color: '#cbd5e1', fontSize: '0.65rem' }}>✎</span>
+                              </span>
+                            )}
+                          </Td>
+                          <Td align="right" style={{ color: costPerSf ? '#0f766e' : '#94a3b8' }}>
+                            {costPerSf != null ? `$${costPerSf.toFixed(2)}` : '—'}
+                          </Td>
                           <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>
                             {isExcluded ? '—' : `${(pct * 100).toFixed(1)}%`}
                           </Td>

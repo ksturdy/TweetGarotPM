@@ -675,7 +675,8 @@ const EstimateDb = {
     const { whereSql, params } = buildEstimateFilter(tenantId, filters);
     const sql = `
       SELECT e.id, e.estimate_number, e.project_name, e.customer_name, e.status,
-             e.bid_date, e.total_cost, e.labor_cost, e.material_cost,
+             e.bid_date, e.total_cost, e.subtotal, e.square_footage,
+             e.labor_cost, e.material_cost,
              e.equipment_cost, e.subcontractor_cost, e.rental_cost,
              emp.first_name || ' ' || emp.last_name AS estimator_name
       FROM estimates e
@@ -691,6 +692,8 @@ const EstimateDb = {
       status: r.status,
       bid_date: r.bid_date,
       total_cost: parseFloat(r.total_cost || 0),
+      subtotal: parseFloat(r.subtotal || 0),
+      square_footage: r.square_footage != null ? parseInt(r.square_footage, 10) : null,
       labor_cost: parseFloat(r.labor_cost || 0),
       material_cost: parseFloat(r.material_cost || 0),
       equipment_cost: parseFloat(r.equipment_cost || 0),
@@ -698,6 +701,13 @@ const EstimateDb = {
       rental_cost: parseFloat(r.rental_cost || 0),
       estimator_name: r.estimator_name,
     }));
+  },
+
+  async updateSqft(estimateId, sqft, tenantId) {
+    await db.query(
+      `UPDATE estimates SET square_footage = $1 WHERE id = $2 AND tenant_id = $3`,
+      [sqft ?? null, estimateId, tenantId]
+    );
   },
 };
 
