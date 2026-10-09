@@ -566,7 +566,10 @@ const TradeShowList: React.FC = () => {
                       </td>
                       <td>{show.event_type ? (EVENT_TYPE_OPTIONS.find(o => o.value === show.event_type)?.label ?? show.event_type) : '—'}</td>
                       <td>{show.market ? (MARKETS.find(o => o.value === show.market)?.label ?? show.market) : '—'}</td>
-                      <td className="sales-date-cell">{formatDateRange(show.event_start_date, show.event_end_date)}</td>
+                      <td className="sales-date-cell" style={show.dates_tentative ? { color: '#ef4444', fontWeight: 500 } : undefined}>
+                        {formatDateRange(show.event_start_date, show.event_end_date)}
+                        {show.dates_tentative && <span style={{ fontSize: '0.65rem', marginLeft: 4, opacity: 0.8 }}>(Tentative)</span>}
+                      </td>
                       <td>{show.venue || '—'}</td>
                       <td>{[show.city, show.state].filter(Boolean).join(', ') || '—'}</td>
                       <td>{show.sales_lead_name || '—'}</td>

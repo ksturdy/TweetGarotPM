@@ -42,6 +42,8 @@ const ProjectList: React.FC = () => {
         sortColumn?: string;
         sortDirection?: 'asc' | 'desc';
         hasUserSorted?: boolean;
+        startDateFrom?: string;
+        startDateTo?: string;
       } : {};
     } catch { return {}; }
   })();
@@ -64,6 +66,8 @@ const ProjectList: React.FC = () => {
   const [myProjectsOnly, setMyProjectsOnly] = useState(locationState?.myItemsOnly ?? savedFilters.myProjectsOnly ?? false);
   const [myTeamOnly, setMyTeamOnly] = useState(savedFilters.myTeamOnly ?? false);
   const [teamFilter, setTeamFilter] = useState<string>(savedFilters.teamFilter ?? '');
+  const [startDateFrom, setStartDateFrom] = useState<string>(savedFilters.startDateFrom ?? '');
+  const [startDateTo, setStartDateTo] = useState<string>(savedFilters.startDateTo ?? '');
 
   useEffect(() => {
     try {
@@ -71,9 +75,10 @@ const ProjectList: React.FC = () => {
         searchTerm, statusFilter, departmentFilter, marketFilter,
         projectManagerFilter, myProjectsOnly, myTeamOnly, teamFilter,
         sortColumn, sortDirection, hasUserSorted,
+        startDateFrom, startDateTo,
       }));
     } catch {}
-  }, [searchTerm, statusFilter, departmentFilter, marketFilter, projectManagerFilter, myProjectsOnly, myTeamOnly, teamFilter, sortColumn, sortDirection, hasUserSorted]);
+  }, [searchTerm, statusFilter, departmentFilter, marketFilter, projectManagerFilter, myProjectsOnly, myTeamOnly, teamFilter, sortColumn, sortDirection, hasUserSorted, startDateFrom, startDateTo]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -455,6 +460,8 @@ const ProjectList: React.FC = () => {
     if (myProjectsOnly && project.manager_id !== currentEmployeeId) return false;
     if (myTeamOnly && teamMemberEmployeeIds.size > 0 && !teamMemberEmployeeIds.has(project.manager_id)) return false;
     if (teamFilter && selectedTeamEmployeeIds.size > 0 && !selectedTeamEmployeeIds.has(project.manager_id)) return false;
+    if (startDateFrom && (!project.start_date || project.start_date.substring(0, 7) < startDateFrom)) return false;
+    if (startDateTo && (!project.start_date || project.start_date.substring(0, 7) > startDateTo)) return false;
 
     // Then apply search filter
     if (!searchTerm) return true;
@@ -1024,6 +1031,27 @@ const ProjectList: React.FC = () => {
             ))}
           </select>
         </div>
+        {/* Start Date Range */}
+        <div style={{ minWidth: '130px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Start From</label>
+          <input
+            type="month"
+            className="form-input"
+            value={startDateFrom}
+            onChange={(e) => setStartDateFrom(e.target.value)}
+            style={{ padding: '0.5rem 0.4rem', fontSize: '0.875rem', width: '100%' }}
+          />
+        </div>
+        <div style={{ minWidth: '130px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Start To</label>
+          <input
+            type="month"
+            className="form-input"
+            value={startDateTo}
+            onChange={(e) => setStartDateTo(e.target.value)}
+            style={{ padding: '0.5rem 0.4rem', fontSize: '0.875rem', width: '100%' }}
+          />
+        </div>
         {/* GM Override Control */}
         <div className="projects-gm-override" style={{ minWidth: '200px', display: 'flex', alignItems: 'flex-end', gap: '0.25rem' }}>
           <div>
@@ -1072,7 +1100,7 @@ const ProjectList: React.FC = () => {
           </div>
         </div>
 
-        {(statusFilter.length > 0 || departmentFilter !== 'all' || marketFilter !== 'all' || projectManagerFilter || myProjectsOnly || myTeamOnly || teamFilter || searchTerm) && (
+        {(statusFilter.length > 0 || departmentFilter !== 'all' || marketFilter !== 'all' || projectManagerFilter || myProjectsOnly || myTeamOnly || teamFilter || searchTerm || startDateFrom || startDateTo) && (
           <button
             className="sales-filter-btn"
             onClick={() => {
@@ -1084,6 +1112,8 @@ const ProjectList: React.FC = () => {
               setMyTeamOnly(false);
               setTeamFilter('');
               setSearchTerm('');
+              setStartDateFrom('');
+              setStartDateTo('');
             }}
             style={{ padding: '0.5rem 1rem', height: 'fit-content' }}
           >
