@@ -375,6 +375,9 @@ async function generateHandler(req, res, next) {
       location,
       selectedProjectIds
     } = req.body;
+    const scopesOfWork = Array.isArray(req.body.scopesOfWork)
+      ? req.body.scopesOfWork.filter(Boolean)
+      : (req.body.scopesOfWork ? String(req.body.scopesOfWork).split(',').map(s => s.trim()).filter(Boolean) : []);
     const buildingTypeArr = req.body.buildingType
       ? String(req.body.buildingType).split(',').map(s => s.trim()).filter(Boolean)
       : [];
@@ -467,7 +470,8 @@ async function generateHandler(req, res, next) {
       averages,
       location,
       narrativeText,
-      !!(selectedProjectIds && selectedProjectIds.length > 0)
+      !!(selectedProjectIds && selectedProjectIds.length > 0),
+      scopesOfWork
     );
 
     // Call Claude to generate budget
@@ -660,7 +664,7 @@ function calcCostTypeBreakdown(projectDetails) {
 }
 
 // Helper function to build AI system prompt
-function buildBudgetSystemPrompt(projectName, market, buildingType, projectType, bidType, sqft, scope, projectDetails, averages, location, narrativeText = null, userSelectedProjects = false) {
+function buildBudgetSystemPrompt(projectName, market, buildingType, projectType, bidType, sqft, scope, projectDetails, averages, location, narrativeText = null, userSelectedProjects = false, scopesOfWork = []) {
   const formatCurrency = (val) => val ? `$${Math.round(val).toLocaleString()}` : '$0';
   const formatNumber = (val) => val ? Math.round(val).toLocaleString() : '0';
   const fmtPct = (v) => v != null ? `${(v * 100).toFixed(1)}%` : 'N/A';
@@ -683,6 +687,7 @@ ${buildingType ? `- Scope: ${buildingType}` : ''}
 - Bid Type: ${bidType || 'Not specified'}
 ${location ? `- Location: ${location}` : ''}
 - Square Footage: ${formatNumber(sqft)} SF
+${scopesOfWork.length > 0 ? `- Scopes of Work to Budget: ${scopesOfWork.join(', ')}` : '- Scopes of Work: All (Plumbing, Sheet Metal, Piping, BAS)'}
 ${scope ? `- Additional Scope Notes: ${scope}` : ''}
 ${narrativeText ? `
 ## PROJECT DESIGN NARRATIVE:
@@ -759,6 +764,7 @@ ${projectDetails.map((p, i) => {
   return `
 ### Project ${i + 1}: ${p.name}
 - Building Type: ${p.building_type}, Project Type: ${p.project_type}, Bid Type: ${p.bid_type || 'N/A'}
+- Scopes in this contract: ${Array.isArray(p.scopes) && p.scopes.length > 0 ? p.scopes.join(', ') : 'Not specified'}
 - Square Footage: ${formatNumber(p.total_sqft)} SF
 - Total Cost (Adjusted): ${formatCurrency(p.total_cost)}${p.original_total_cost ? ` (Original ${bidYear}: ${formatCurrency(p.original_total_cost)})` : ''}
 - Cost per SF (Adjusted): $${(parseFloat(p.total_cost_per_sqft) || 0).toFixed(2)}
@@ -793,6 +799,13 @@ Equipment Counts:
 
 ## YOUR TASK:
 Generate a detailed HVAC budget estimate for the new ${formatNumber(sqft)} SF project.
+
+${scopesOfWork.length > 0 ? `
+SCOPE CONSTRAINT: This budget must include ONLY the following scopes of work: **${scopesOfWork.join(', ')}**.
+- Omit all sections unrelated to these scopes (e.g., if only "Sheet Metal" is requested, exclude Plumbing sections and Plumbing Equipment).
+- The comparable projects listed above may have contracts covering additional scopes not in this budget. Their "Scopes in this contract" field shows what was included. When using a comparable project's total cost or $/SF as a benchmark, mentally subtract the cost contribution of scopes NOT in our budget before scaling. For example, if a comparable is Sheet Metal + Piping but this budget is Sheet Metal only, use only the ductwork-related costs from that comparable.
+- If a comparable project has no scopes listed, include it as-is but note the uncertainty.
+` : ''}
 
 ${userSelectedProjects
   ? `WEIGHTING INSTRUCTION: The user manually selected these specific comparable projects. They are the PRIMARY basis for this estimate. Anchor your total cost/SF to the range established by these comparables ($${Math.min(...projectDetails.map(p => parseFloat(p.total_cost_per_sqft) || 0)).toFixed(2)}–$${Math.max(...projectDetails.map(p => parseFloat(p.total_cost_per_sqft) || 0)).toFixed(2)}/SF after inflation adjustment). Adjust within that range for size differences — larger projects typically achieve modest economies of scale (5–15% reduction per doubling of SF), but do NOT go below the comparable range without a specific justification. The historical averages above are provided as secondary context for category-level breakdowns only; do not let them pull your total cost/SF outside the comparable range.`

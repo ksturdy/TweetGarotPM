@@ -58,6 +58,8 @@ const BudgetGenerator: React.FC = () => {
   const [market, setMarket] = useState('');
   const [buildingType, setBuildingType] = useState<string[]>([]);
   const CONSTRUCTION_TYPE_OPTIONS = ['New Construction', 'Addition', 'Renovation', 'Buildout'];
+  const SCOPE_OPTIONS = ['Plumbing', 'Sheet Metal', 'Piping', 'BAS'];
+  const [scopesOfWork, setScopesOfWork] = useState<string[]>([]);
   const [projectTypes, setProjectTypes] = useState<string[]>([]);
   const [bidType, setBidType] = useState('');
   const [projectStatuses, setProjectStatuses] = useState<string[]>(['Open', 'Soft-Closed', 'Hard-Closed']);
@@ -467,7 +469,8 @@ const BudgetGenerator: React.FC = () => {
         scope: scope || undefined,
         location: location || undefined,
         selectedProjectIds: selectedProjectIds.length > 0 ? selectedProjectIds : undefined,
-        projectStatuses: projectStatuses.length > 0 ? projectStatuses : undefined
+        projectStatuses: projectStatuses.length > 0 ? projectStatuses : undefined,
+        scopesOfWork: scopesOfWork.length > 0 ? scopesOfWork : undefined
       };
 
       const result = narrativeFile
@@ -623,6 +626,7 @@ const BudgetGenerator: React.FC = () => {
     setProjectName('');
     setMarket('');
     setBuildingType([]);
+    setScopesOfWork([]);
     setProjectTypes([]);
     setBidType('');
     setLocation('');
@@ -1479,6 +1483,30 @@ const BudgetGenerator: React.FC = () => {
                       <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>Pre-filled from your filter selection</p>
                     </div>
                     <div className="form-group">
+                      <label className="form-label">Scopes of Work</label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                        {SCOPE_OPTIONS.map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setScopesOfWork(prev =>
+                              prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+                            )}
+                            style={{
+                              fontSize: '13px', padding: '4px 12px', borderRadius: '4px',
+                              border: scopesOfWork.includes(s) ? '2px solid #002356' : '1px solid #d1d5db',
+                              background: scopesOfWork.includes(s) ? '#002356' : '#fff',
+                              color: scopesOfWork.includes(s) ? '#fff' : '#374151',
+                              fontWeight: 600, cursor: 'pointer',
+                            }}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                      <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>Select which trade scopes Titan should budget. Comparable project costs will be filtered to matching scopes.</p>
+                    </div>
+                    <div className="form-group">
                       <label className="form-label">Square Footage *</label>
                       <input
                         type="text"
@@ -1696,6 +1724,31 @@ const BudgetGenerator: React.FC = () => {
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Scopes of Work</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                  {SCOPE_OPTIONS.map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setScopesOfWork(prev =>
+                        prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+                      )}
+                      style={{
+                        fontSize: '13px', padding: '4px 12px', borderRadius: '4px',
+                        border: scopesOfWork.includes(s) ? '2px solid #002356' : '1px solid #d1d5db',
+                        background: scopesOfWork.includes(s) ? '#002356' : '#fff',
+                        color: scopesOfWork.includes(s) ? '#fff' : '#374151',
+                        fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>Trade scopes to include in this budget</p>
               </div>
 
               <div className="form-group">

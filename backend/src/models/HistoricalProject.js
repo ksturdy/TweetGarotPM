@@ -248,7 +248,7 @@ const HistoricalProject = {
           THEN p.contract_value / COALESCE(pcm.total_sqft, p.square_footage::DECIMAL)
           ELSE NULL END AS total_cost_per_sqft,
         COALESCE(p.end_date, p.start_date) AS bid_date,
-        pcm.notes,
+        pcm.notes, COALESCE(pcm.scopes, '{}') AS scopes,
         NULL::DECIMAL AS pm_hours, NULL::DECIMAL AS pm_cost,
         NULL::DECIMAL AS sm_equip_cost, NULL::DECIMAL AS pf_equip_cost,
         NULL::DECIMAL AS controls, NULL::DECIMAL AS insulation,
