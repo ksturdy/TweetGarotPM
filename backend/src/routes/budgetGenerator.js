@@ -252,7 +252,11 @@ router.get('/stats', async (req, res, next) => {
 // Find similar projects (preview before generating)
 router.post('/similar', async (req, res, next) => {
   try {
-    const { market, buildingType, bidType, sqft, sqftMin, sqftMax, yearFrom, yearTo } = req.body;
+    const { market, bidType, sqft, sqftMin, sqftMax, yearFrom, yearTo } = req.body;
+    const buildingTypes = req.body.buildingType
+      ? String(req.body.buildingType).split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+    const buildingType = buildingTypes.length > 0 ? buildingTypes[0] : null; // keep compat
     const projectTypes = Array.isArray(req.body.projectType)
       ? req.body.projectType.filter(Boolean)
       : (req.body.projectType ? [req.body.projectType] : []);
@@ -316,7 +320,7 @@ router.post('/similar', async (req, res, next) => {
         inflation_adjusted: true,
         match_details: {
           market: !market ? null : (p.market === market),
-          building_type: !buildingType ? null : (p.building_type === buildingType),
+          building_type: buildingTypes.length === 0 ? null : buildingTypes.includes(p.building_type),
           project_type: projectTypes.length === 0 ? null : projectTypes.includes(p.project_type),
           bid_type: !bidType ? null : (p.bid_type === bidType),
           sqft_within_25: sqftDiff !== null && sqftDiff <= 0.25,
@@ -365,13 +369,16 @@ async function generateHandler(req, res, next) {
     const {
       projectName,
       market,
-      buildingType,
       bidType,
       sqft,
       scope,
       location,
       selectedProjectIds
     } = req.body;
+    const buildingTypeArr = req.body.buildingType
+      ? String(req.body.buildingType).split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+    const buildingType = buildingTypeArr.length > 0 ? buildingTypeArr.join(', ') : null;
     const projectTypes = Array.isArray(req.body.projectType)
       ? req.body.projectType.filter(Boolean)
       : (req.body.projectType ? [req.body.projectType] : []);

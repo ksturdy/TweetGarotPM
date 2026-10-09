@@ -13,6 +13,7 @@ const BudgetsList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [buildingTypeFilter, setBuildingTypeFilter] = useState('');
   const [marketFilter, setMarketFilter] = useState('');
+  const [constructionTypeFilter, setConstructionTypeFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [stats, setStats] = useState<BudgetStats | null>(null);
@@ -28,7 +29,8 @@ const BudgetsList: React.FC = () => {
   const DEFAULT_WIDTHS: Record<string, number> = {
     project: 220,
     market: 110,
-    type: 130,
+    bldgType: 140,
+    type: 120,
     sqft: 100,
     grandTotal: 120,
     costSf: 80,
@@ -195,6 +197,11 @@ const BudgetsList: React.FC = () => {
     return Array.from(types).sort();
   }, [budgets]);
 
+  const constructionTypes = useMemo(() => {
+    const types = new Set(budgets.map(b => b.building_type).filter(Boolean));
+    return Array.from(types).sort();
+  }, [budgets]);
+
   const markets = useMemo(() => {
     const m = new Set(budgets.map(b => b.market).filter(Boolean) as string[]);
     return Array.from(m).sort();
@@ -216,11 +223,12 @@ const BudgetsList: React.FC = () => {
       const matchesStatus = !statusFilter || budget.status === statusFilter;
       const matchesBuildingType = !buildingTypeFilter || budget.project_type === buildingTypeFilter;
       const matchesMarket = !marketFilter || budget.market === marketFilter;
+      const matchesConstructionType = !constructionTypeFilter || budget.building_type === constructionTypeFilter;
       const matchesSearch = !searchQuery ||
         budget.project_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         budget.building_type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         budget.project_type?.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesStatus && matchesBuildingType && matchesMarket && matchesSearch;
+      return matchesStatus && matchesBuildingType && matchesMarket && matchesConstructionType && matchesSearch;
     });
     list.sort((a, b) => {
       let av: any = (a as any)[sortKey];
@@ -233,7 +241,7 @@ const BudgetsList: React.FC = () => {
       return sortDir === 'asc' ? av - bv : bv - av;
     });
     return list;
-  }, [budgets, statusFilter, buildingTypeFilter, marketFilter, searchQuery, sortKey, sortDir]);
+  }, [budgets, statusFilter, buildingTypeFilter, marketFilter, constructionTypeFilter, searchQuery, sortKey, sortDir]);
 
   const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null) return '$0';
@@ -309,6 +317,17 @@ const BudgetsList: React.FC = () => {
                 <option key={type} value={type}>{type}</option>
               ))}
             </select>
+            <select
+              value={constructionTypeFilter}
+              onChange={(e) => setConstructionTypeFilter(e.target.value)}
+              className="filter-select"
+              style={{ fontSize: '12px', padding: '4px 6px', width: 'auto' }}
+            >
+              <option value="">All Construction Types</option>
+              {constructionTypes.map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
             <div className="sales-search-box">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8"/>
@@ -341,7 +360,8 @@ const BudgetsList: React.FC = () => {
               {([
                 ['project',     'project_name',     'Project'],
                 ['market',      'market',           'Market'],
-                ['type',        'project_type',     'Type'],
+                ['bldgType',    'project_type',     'Building Type'],
+                ['type',        'building_type',    'Construction Type'],
                 ['sqft',        'square_footage',   'Square Ft'],
                 ['grandTotal',  'grand_total',      'Grand Total'],
                 ['costSf',      'cost_per_sqft',    '$/SF'],
@@ -368,9 +388,7 @@ const BudgetsList: React.FC = () => {
           </thead>
           <tbody>
             {filteredBudgets.map((budget) => {
-              const actualBuildingType = budget.project_type || budget.building_type;
-              const actualProjectType = budget.building_type || budget.project_type;
-              const buildingIcon = getBuildingTypeIcon(actualBuildingType);
+              const buildingIcon = getBuildingTypeIcon(budget.project_type || budget.building_type);
 
               return (
                 <tr key={budget.id} onClick={() => navigate(`/estimating/budgets/${budget.id}/edit`)} style={{ cursor: 'pointer' }}>
@@ -381,12 +399,13 @@ const BudgetsList: React.FC = () => {
                       </div>
                       <div>
                         <div style={{ fontWeight: 600, fontSize: '14px' }}>{budget.project_name}</div>
-                        <div style={{ fontSize: '12px', color: '#6b7280' }}>{actualBuildingType}</div>
+                        <div style={{ fontSize: '12px', color: '#6b7280' }}>{budget.project_type || budget.building_type || '—'}</div>
                       </div>
                     </div>
                   </td>
                   <td>{budget.market || '—'}</td>
-                  <td>{actualProjectType}</td>
+                  <td>{budget.project_type || '—'}</td>
+                  <td>{budget.building_type || '—'}</td>
                   <td>{formatNumber(budget.square_footage)}</td>
                   <td>{formatCurrency(budget.grand_total)}</td>
                   <td>${Number(budget.cost_per_sqft || 0).toFixed(2)}</td>
@@ -464,7 +483,7 @@ const BudgetsList: React.FC = () => {
             })}
             {filteredBudgets.length === 0 && (
               <tr>
-                <td colSpan={12} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={13} style={{ textAlign: 'center', padding: '40px' }}>
                   <svg style={{ margin: '0 auto 12px', display: 'block', color: '#9ca3af' }} width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     <path d="M12 12v4M12 16h.01" />

@@ -56,7 +56,8 @@ const BudgetGenerator: React.FC = () => {
   // Form state
   const [projectName, setProjectName] = useState('');
   const [market, setMarket] = useState('');
-  const [buildingType, setBuildingType] = useState('');
+  const [buildingType, setBuildingType] = useState<string[]>([]);
+  const CONSTRUCTION_TYPE_OPTIONS = ['New Construction', 'Addition', 'Renovation', 'Buildout'];
   const [projectTypes, setProjectTypes] = useState<string[]>([]);
   const [bidType, setBidType] = useState('');
   const [projectStatuses, setProjectStatuses] = useState<string[]>(['Open', 'Soft-Closed', 'Hard-Closed']);
@@ -155,7 +156,7 @@ const BudgetGenerator: React.FC = () => {
       // Populate form fields
       setProjectName(existingBudget.project_name || '');
       setMarket(existingBudget.market || '');
-      setBuildingType(existingBudget.building_type || '');
+      setBuildingType(existingBudget.building_type ? existingBudget.building_type.split(', ').filter(Boolean) : []);
       setProjectTypes(existingBudget.project_type ? [existingBudget.project_type] : []);
       setBidType(existingBudget.bid_type || '');
       setSqft(existingBudget.square_footage?.toString() || '');
@@ -262,7 +263,7 @@ const BudgetGenerator: React.FC = () => {
       setPreviewLoading(true);
       const result = await budgetGeneratorService.findSimilar({
         market: market || undefined,
-        buildingType: buildingType || undefined,
+        buildingType: buildingType.length > 0 ? buildingType.join(',') : undefined,
         projectType: projectTypes.length > 0 ? projectTypes : undefined,
         bidType: bidType || undefined,
         sqft: sqft ? parseFloat(sqft) : undefined,
@@ -459,7 +460,7 @@ const BudgetGenerator: React.FC = () => {
       const generateParams = {
         projectName,
         market: market || undefined,
-        buildingType: buildingType || undefined,
+        buildingType: buildingType.length > 0 ? buildingType.join(',') : undefined,
         projectType: projectTypes.length > 0 ? projectTypes : undefined,
         bidType: bidType || undefined,
         sqft: parseFloat(sqft),
@@ -535,7 +536,7 @@ const BudgetGenerator: React.FC = () => {
             risks: result.budget.risks,
             comparable_projects: result.similarProjects.map(p => ({
               name: p.name,
-              building_type: buildingType,
+              building_type: buildingType.join(', '),
               square_footage: p.sqft,
               total_cost: p.totalCost,
               cost_per_sqft: p.costPerSqft,
@@ -621,7 +622,7 @@ const BudgetGenerator: React.FC = () => {
   const handleReset = () => {
     setProjectName('');
     setMarket('');
-    setBuildingType('');
+    setBuildingType([]);
     setProjectTypes([]);
     setBidType('');
     setLocation('');
@@ -694,7 +695,7 @@ const BudgetGenerator: React.FC = () => {
         risks: currentBudget.risks,
         comparable_projects: comparableProjects.map(p => ({
           name: p.name,
-          building_type: buildingType,
+          building_type: buildingType.join(', '),
           square_footage: p.sqft,
           total_cost: p.totalCost,
           cost_per_sqft: p.costPerSqft,
@@ -1084,18 +1085,22 @@ const BudgetGenerator: React.FC = () => {
                       {options.markets.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </div>
-                  {/* Building Type */}
+                  {/* Construction Type */}
                   <div className="browser-page-filter-group">
-                    <span className="browser-filter-label">SCOPE</span>
-                    <select
-                      className="form-input"
-                      style={{ minWidth: '130px' }}
-                      value={buildingType}
-                      onChange={e => setBuildingType(e.target.value)}
-                    >
-                      <option value="">Any scope</option>
-                      {options.buildingTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    <span className="browser-filter-label">CONSTRUCTION TYPE</span>
+                    <div className="browser-status-pills">
+                      {CONSTRUCTION_TYPE_OPTIONS.map(t => (
+                        <button
+                          key={t}
+                          className={`browser-status-pill ${buildingType.includes(t) ? 'active' : ''}`}
+                          onClick={() => setBuildingType(prev =>
+                            prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]
+                          )}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   {/* Bid Type */}
                   <div className="browser-page-filter-group">
@@ -1172,11 +1177,11 @@ const BudgetGenerator: React.FC = () => {
                     </div>
                   </div>
                   {/* Clear filters */}
-                  {(buildingType || bidType || browserSqftMin || browserSqftMax || browserYearFrom || browserYearTo) && (
+                  {(buildingType.length > 0 || bidType || browserSqftMin || browserSqftMax || browserYearFrom || browserYearTo) && (
                     <button
                       className="browser-clear-btn"
                       onClick={() => {
-                        setBuildingType('');
+                        setBuildingType([]);
                         setBidType('');
                         setBrowserSqftMin('');
                         setBrowserSqftMax('');
@@ -1191,7 +1196,7 @@ const BudgetGenerator: React.FC = () => {
                 {/* Project Type row (only show when market selected) */}
                 {market && (options.projectTypesByMarket[market] || options.projectTypes).length > 0 && (
                   <div style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                    <span className="browser-filter-label" style={{ marginRight: '4px' }}>PROJECT TYPE:</span>
+                    <span className="browser-filter-label" style={{ marginRight: '4px' }}>BUILDING TYPE:</span>
                     {(market ? (options.projectTypesByMarket[market] || []) : options.projectTypes).map(type => (
                       <button
                         key={type}
@@ -1695,7 +1700,7 @@ const BudgetGenerator: React.FC = () => {
 
               <div className="form-group">
                 <label className="form-label">
-                  Project Type (Facility)
+                  Building Type
                   {projectTypes.length > 0 && (
                     <span style={{ fontWeight: 400, marginLeft: '8px', color: '#6b7280', fontSize: '13px' }}>
                       ({projectTypes.length} selected)
@@ -1741,22 +1746,32 @@ const BudgetGenerator: React.FC = () => {
                   })()}
                 </div>
                 {projectTypes.length === 0 && (
-                  <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>No selection = any facility type within market</p>
+                  <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>No selection = any building type within market</p>
                 )}
               </div>
 
               <div className="form-group">
-                <label className="form-label">Scope</label>
-                <select
-                  className="form-input"
-                  value={buildingType}
-                  onChange={(e) => setBuildingType(e.target.value)}
-                >
-                  <option value="">Any scope</option>
-                  {options.buildingTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
+                <label className="form-label">Construction Type</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                  {CONSTRUCTION_TYPE_OPTIONS.map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setBuildingType(prev =>
+                        prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]
+                      )}
+                      style={{
+                        fontSize: '13px', padding: '4px 12px', borderRadius: '4px',
+                        border: buildingType.includes(t) ? '2px solid #002356' : '1px solid #d1d5db',
+                        background: buildingType.includes(t) ? '#002356' : '#fff',
+                        color: buildingType.includes(t) ? '#fff' : '#374151',
+                        fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      {t}
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
               <div className="form-group">
