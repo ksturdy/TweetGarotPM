@@ -1901,18 +1901,40 @@ const BudgetGenerator: React.FC = () => {
                             />
                             <span className="project-rank">#{index + 1}</span>
                             <span className="match-badge">{project.similarity_score}% match</span>
-                            <span style={{
-                              marginLeft: 'auto',
-                              fontSize: '10px',
-                              fontWeight: 600,
-                              padding: '2px 6px',
-                              borderRadius: '10px',
-                              backgroundColor: project.source === 'project' ? '#dbeafe' : '#f3f4f6',
-                              color: project.source === 'project' ? '#1d4ed8' : '#6b7280',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {project.source === 'project' ? 'Live' : 'Historical'}
-                            </span>
+                            {project.source === 'project' && project.id ? (
+                              <a
+                                href={`/projects/${project.id}/cost-model`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  marginLeft: 'auto',
+                                  fontSize: '10px',
+                                  fontWeight: 600,
+                                  padding: '2px 6px',
+                                  borderRadius: '10px',
+                                  backgroundColor: '#dbeafe',
+                                  color: '#1d4ed8',
+                                  whiteSpace: 'nowrap',
+                                  textDecoration: 'none',
+                                  cursor: 'pointer'
+                                }}>
+                                Live ↗
+                              </a>
+                            ) : (
+                              <span style={{
+                                marginLeft: 'auto',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                padding: '2px 6px',
+                                borderRadius: '10px',
+                                backgroundColor: '#f3f4f6',
+                                color: '#6b7280',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                Historical
+                              </span>
+                            )}
                           </div>
                           <div className="preview-project-name" title={project.name}>{project.name}</div>
 
@@ -1984,8 +2006,27 @@ const BudgetGenerator: React.FC = () => {
                             </div>
                           </div>
 
-                          {/* Detail button — lower right */}
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                          {/* Bottom row — project link left, detail button right */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                            {project.source === 'project' && project.id ? (
+                              <a
+                                href={`/projects/${project.id}/cost-model`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  fontSize: '10px',
+                                  color: '#1d4ed8',
+                                  textDecoration: 'none',
+                                  border: '1px solid #bfdbfe',
+                                  borderRadius: '4px',
+                                  padding: '2px 6px',
+                                  lineHeight: 1.4
+                                }}
+                              >
+                                Open Project ↗
+                              </a>
+                            ) : <span />}
                             <button
                               onClick={(e) => handleOpenDetail(e, project.id, project.source === 'project' ? 'project' : 'historical')}
                               title="View cost model details"
