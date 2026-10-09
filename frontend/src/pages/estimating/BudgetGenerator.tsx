@@ -156,7 +156,7 @@ const BudgetGenerator: React.FC = () => {
       // Populate form fields
       setProjectName(existingBudget.project_name || '');
       setMarket(existingBudget.market || '');
-      setBuildingType(existingBudget.building_type ? existingBudget.building_type.split(', ').filter(Boolean) : []);
+      setBuildingType(existingBudget.building_type ? existingBudget.building_type.split(', ').filter((t: string) => CONSTRUCTION_TYPE_OPTIONS.includes(t)) : []);
       setProjectTypes(existingBudget.project_type ? [existingBudget.project_type] : []);
       setBidType(existingBudget.bid_type || '');
       setSqft(existingBudget.square_footage?.toString() || '');
@@ -668,7 +668,7 @@ const BudgetGenerator: React.FC = () => {
       const budgetData: Partial<Budget> = {
         project_name: currentBudget.summary.projectName,
         market: market || undefined,
-        building_type: buildingType.length > 0 ? buildingType.join(', ') : (currentBudget.summary.buildingType || undefined),
+        building_type: buildingType.length > 0 ? buildingType.join(', ') : undefined,
         project_type: currentBudget.summary.projectType,
         bid_type: bidType || undefined,
         location: location || undefined,
