@@ -56,6 +56,7 @@ export interface Budget {
   profit_percent: number;
   contingency_percent: number;
   sections: BudgetSection[];
+  baseline_sections?: BudgetSection[] | null;
   assumptions: string[];
   risks: string[];
   comparable_projects: ComparableProject[];

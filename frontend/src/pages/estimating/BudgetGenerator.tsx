@@ -82,6 +82,9 @@ const BudgetGenerator: React.FC = () => {
   const [comparableProjects, setComparableProjects] = useState<SimilarProject[]>([]);
   const [expandedSections, setExpandedSections] = useState<{ [key: string]: boolean }>({});
 
+  // Baseline sections (AI-generated original, persisted on first save)
+  const [baselineSections, setBaselineSections] = useState<any[] | null>(null);
+
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
   const [editableValues, setEditableValues] = useState<EditableValues>({
@@ -187,6 +190,7 @@ const BudgetGenerator: React.FC = () => {
       };
 
       setBudget(reconstructedBudget);
+      setBaselineSections(existingBudget.baseline_sections || null);
 
       // Load comparable projects if available
       if (existingBudget.comparable_projects) {
@@ -454,6 +458,7 @@ const BudgetGenerator: React.FC = () => {
       if (result.narrativeAttachmentId) setNarrativeAttachmentId(result.narrativeAttachmentId);
 
       setBudget(result.budget);
+      setBaselineSections(result.budget.sections);
       setComparableProjects(result.similarProjects);
 
       // Initialize editable values from generated budget - derive actual percentages from AI output
@@ -548,6 +553,7 @@ const BudgetGenerator: React.FC = () => {
     setNarrativeWarning('');
     setBudget(null);
     setAdjustedBudget(null);
+    setBaselineSections(null);
     setComparableProjects([]);
     setShowPreview(false);
     setPreviewProjects([]);
@@ -614,6 +620,11 @@ const BudgetGenerator: React.FC = () => {
         status,
         ...(narrativeAttachmentId ? { narrative_attachment_id: narrativeAttachmentId } : {})
       };
+
+      if (!isEditing) {
+        // Capture the original AI-generated sections as baseline on first save
+        budgetData.baseline_sections = budget?.sections || currentBudget.sections;
+      }
 
       if (isEditing && id) {
         const budgetId = parseInt(id, 10);
@@ -1544,6 +1555,20 @@ const BudgetGenerator: React.FC = () => {
                       <span className="section-subtotal">
                         {isExcluded ? <span className="excluded-amount">Excluded</span> : formatCurrency(section.subtotal)}
                       </span>
+                      {!isExcluded && baselineSections && (() => {
+                        const baseline = baselineSections.find((bs: any) => bs.name === section.name);
+                        if (!baseline || Math.round(baseline.subtotal) === Math.round(section.subtotal)) return null;
+                        const delta = section.subtotal - baseline.subtotal;
+                        const pct = baseline.subtotal > 0 ? (delta / baseline.subtotal) * 100 : 0;
+                        return (
+                          <span className="section-baseline-hint">
+                            baseline {formatCurrency(baseline.subtotal)}
+                            <span className={delta >= 0 ? 'baseline-delta-pos' : 'baseline-delta-neg'}>
+                              {' '}{delta >= 0 ? '+' : ''}{formatCurrency(delta)} ({pct >= 0 ? '+' : ''}{pct.toFixed(0)}%)
+                            </span>
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     {expandedSections[section.name] && section.items.length > 0 && (
@@ -1675,6 +1700,24 @@ const BudgetGenerator: React.FC = () => {
                     <span>GRAND TOTAL</span>
                     <span>{formatCurrency(currentBudget.totals.grandTotal)}</span>
                   </div>
+                  {baselineSections && (() => {
+                    const baselineDirectCost = baselineSections.reduce((sum: number, s: any) => sum + (s.subtotal || 0), 0);
+                    const baselineGrandTotal = baselineDirectCost * (1 + editableValues.overheadPercent / 100 + editableValues.profitPercent / 100 + editableValues.contingencyPercent / 100);
+                    if (Math.round(baselineGrandTotal) === Math.round(currentBudget.totals.grandTotal)) return null;
+                    const delta = currentBudget.totals.grandTotal - baselineGrandTotal;
+                    const pct = baselineGrandTotal > 0 ? (delta / baselineGrandTotal) * 100 : 0;
+                    return (
+                      <div className="totals-row baseline-total-row">
+                        <span>Baseline Total</span>
+                        <span>
+                          {formatCurrency(baselineGrandTotal)}
+                          <span className={delta >= 0 ? 'baseline-delta-pos' : 'baseline-delta-neg'}>
+                            {' '}({delta >= 0 ? '+' : ''}{pct.toFixed(0)}%)
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 

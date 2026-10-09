@@ -1743,3 +1743,28 @@
   color: #92400e;
   margin-bottom: 1rem;
 }
+
+/* Baseline comparison indicators */
+.section-baseline-hint {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  white-space: nowrap;
+  margin-left: 0.5rem;
+  font-weight: 400;
+}
+
+.baseline-delta-pos {
+  color: #ef4444;
+}
+
+.baseline-delta-neg {
+  color: #10b981;
+}
+
+.totals-row.baseline-total-row {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  border-top: 1px dashed #e5e7eb;
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+}

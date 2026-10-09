@@ -32,7 +32,8 @@ class Budget {
       comparable_projects,
       status,
       created_by,
-      narrative_attachment_id
+      narrative_attachment_id,
+      baseline_sections
     } = budgetData;
 
     const result = await pool.query(
@@ -43,8 +44,9 @@ class Budget {
         equipment_subtotal, subcontract_subtotal, direct_cost_subtotal,
         overhead, profit, contingency, grand_total, overhead_percent,
         profit_percent, contingency_percent, sections, assumptions, risks,
-        comparable_projects, status, created_by, narrative_attachment_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+        comparable_projects, status, created_by, narrative_attachment_id,
+        baseline_sections
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
       RETURNING *`,
       [
         tenant_id, project_name, building_type, project_type, bid_type,
@@ -55,7 +57,8 @@ class Budget {
         profit_percent || 10, contingency_percent || 5, JSON.stringify(sections || []),
         JSON.stringify(assumptions || []), JSON.stringify(risks || []),
         JSON.stringify(comparable_projects || []), status || 'draft', created_by,
-        narrative_attachment_id || null
+        narrative_attachment_id || null,
+        baseline_sections ? JSON.stringify(baseline_sections) : null
       ]
     );
     return result.rows[0];
@@ -120,7 +123,8 @@ class Budget {
       'equipment_subtotal', 'subcontract_subtotal', 'direct_cost_subtotal',
       'overhead', 'profit', 'contingency', 'grand_total', 'overhead_percent',
       'profit_percent', 'contingency_percent', 'sections', 'assumptions',
-      'risks', 'comparable_projects', 'status', 'narrative_attachment_id'
+      'risks', 'comparable_projects', 'status', 'narrative_attachment_id',
+      'baseline_sections'
     ];
 
     const setClauses = [];
@@ -131,7 +135,7 @@ class Budget {
       if (allowedFields.includes(key)) {
         setClauses.push(`${key} = $${paramIndex}`);
         // Stringify JSON fields
-        if (['sections', 'assumptions', 'risks', 'comparable_projects'].includes(key)) {
+        if (['sections', 'assumptions', 'risks', 'comparable_projects', 'baseline_sections'].includes(key)) {
           params.push(JSON.stringify(value));
         } else {
           params.push(value);
