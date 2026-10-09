@@ -146,6 +146,7 @@ const projectPhotoRoutes = require('./routes/projectPhotos');
 const marketingMediaRoutes = require('./routes/marketingMedia');
 const preJobChecklistRoutes = require('./routes/preJobChecklist');
 const itemCommentRoutes = require('./routes/itemComments');
+const plumbingDesignRoutes = require('./routes/plumbingDesigns');
 
 const app = express();
 const server = http.createServer(app);
@@ -285,6 +286,7 @@ app.use('/api/field-purchase-orders', fieldPurchaseOrderRoutes);
 app.use('/api/sm-fitting-orders', smFittingOrderRoutes);
 app.use('/api/piping-fitting-orders', pipingFittingOrderRoutes);
 app.use('/api/plumbing-fitting-orders', plumbingFittingOrderRoutes);
+app.use('/api/plumbing-designs', plumbingDesignRoutes);
 app.use('/api/sheet-metal-fitting-orders', sheetMetalFittingOrderRoutes);
 app.use('/api/safety-jsa', safetyJsaRoutes);
 app.use('/api/safety-observations', safetyObservationRoutes);

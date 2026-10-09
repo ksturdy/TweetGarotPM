@@ -523,7 +523,7 @@ const FeedbackPage: React.FC = () => {
         <div className="feedback-right">
           {showForm ? (
             <FeedbackForm onSubmit={async (data) => {
-              const { files, ...feedbackData } = data;
+              const { files, watcherIds, ...feedbackData } = data;
               const created = await createFeedbackMutation.mutateAsync(feedbackData);
               if (files && files.length > 0 && created?.id) {
                 for (const file of files) {
@@ -531,6 +531,15 @@ const FeedbackPage: React.FC = () => {
                     await attachmentsApi.upload('feedback', created.id, file);
                   } catch (err) {
                     console.error('Failed to upload attachment:', file.name, err);
+                  }
+                }
+              }
+              if (watcherIds && watcherIds.length > 0 && created?.id) {
+                for (const userId of watcherIds) {
+                  try {
+                    await feedbackService.addFollower(created.id, userId);
+                  } catch (err) {
+                    console.error('Failed to add watcher:', userId, err);
                   }
                 }
               }

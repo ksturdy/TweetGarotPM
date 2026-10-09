@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { MODULE_OPTIONS, SUBMODULE_OPTIONS } from '../../services/feedback';
+import React, { useEffect, useRef, useState } from 'react';
+import { MODULE_OPTIONS, SUBMODULE_OPTIONS, feedbackService, UserSearchResult } from '../../services/feedback';
 import './FeedbackForm.css';
 
 interface FeedbackFormProps {
@@ -11,6 +11,7 @@ interface FeedbackFormProps {
     type: 'bug' | 'enhancement' | 'feature_request' | 'improvement' | 'other';
     priority?: 'low' | 'medium' | 'high' | 'critical';
     files?: File[];
+    watcherIds?: number[];
   }) => Promise<void>;
 }
 
@@ -45,6 +46,42 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
   const [files, setFiles] = useState<File[]>([]);
   const [pasteFlash, setPasteFlash] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Watcher typeahead state
+  const [watchers, setWatchers] = useState<UserSearchResult[]>([]);
+  const [addingWatcher, setAddingWatcher] = useState(false);
+  const [watcherSearch, setWatcherSearch] = useState('');
+  const [watcherResults, setWatcherResults] = useState<UserSearchResult[]>([]);
+  const [watcherSearchLoading, setWatcherSearchLoading] = useState(false);
+  const watcherInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (addingWatcher) watcherInputRef.current?.focus();
+  }, [addingWatcher]);
+
+  useEffect(() => {
+    if (!watcherSearch.trim() || watcherSearch.length < 2) { setWatcherResults([]); return; }
+    const tid = setTimeout(async () => {
+      setWatcherSearchLoading(true);
+      try { setWatcherResults(await feedbackService.searchUsers(watcherSearch)); }
+      catch { setWatcherResults([]); }
+      finally { setWatcherSearchLoading(false); }
+    }, 250);
+    return () => clearTimeout(tid);
+  }, [watcherSearch]);
+
+  const handlePickWatcher = (result: UserSearchResult) => {
+    if (!watchers.some(w => w.id === result.id)) {
+      setWatchers(prev => [...prev, result]);
+    }
+    setAddingWatcher(false);
+    setWatcherSearch('');
+    setWatcherResults([]);
+  };
+
+  const removeWatcher = (id: number) => {
+    setWatchers(prev => prev.filter(w => w.id !== id));
+  };
 
   const addFiles = (incoming: File[]) => {
     if (incoming.length === 0) return;
@@ -148,7 +185,8 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
       await onSubmit({
         ...formData,
         submodule: formData.submodule || undefined,
-        files: files.length > 0 ? files : undefined
+        files: files.length > 0 ? files : undefined,
+        watcherIds: watchers.length > 0 ? watchers.map(w => w.id) : undefined,
       });
 
       // Reset form
@@ -161,6 +199,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
         priority: 'medium'
       });
       setFiles([]);
+      setWatchers([]);
       setErrors({});
     } catch (error) {
       console.error('Error submitting feedback:', error);
@@ -326,6 +365,80 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
             </ul>
           )}
           {errors.files && <div className="invalid-feedback">{errors.files}</div>}
+        </div>
+
+        {/* Watchers */}
+        <div className="form-group">
+          <label>Watching</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem', minHeight: 28 }}>
+            {watchers.map(w => (
+              <span
+                key={w.id}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  fontSize: '0.75rem', padding: '2px 8px', borderRadius: 99,
+                  background: '#f0f4ff', border: '1px solid #c7d4f0', color: '#1e3a6e',
+                }}
+              >
+                {w.first_name} {w.last_name}
+                <button
+                  type="button"
+                  onClick={() => removeWatcher(w.id)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '0.65rem', padding: 0, lineHeight: 1 }}
+                  aria-label={`Remove ${w.first_name}`}
+                >✕</button>
+              </span>
+            ))}
+
+            {addingWatcher ? (
+              <div style={{ position: 'relative' }}>
+                <input
+                  ref={watcherInputRef}
+                  value={watcherSearch}
+                  onChange={e => setWatcherSearch(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') { setAddingWatcher(false); setWatcherSearch(''); setWatcherResults([]); }
+                  }}
+                  placeholder="Search name…"
+                  style={{ fontSize: '0.75rem', padding: '3px 7px', borderRadius: 6, border: '1px solid #d1d5db', width: 140, outline: 'none' }}
+                />
+                {(watcherSearchLoading || watcherResults.length > 0) && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 50, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', minWidth: 200, marginTop: 2 }}>
+                    {watcherSearchLoading && <div style={{ padding: '6px 10px', fontSize: '0.75rem', color: '#9ca3af' }}>Searching…</div>}
+                    {watcherResults.map(r => {
+                      const already = watchers.some(w => w.id === r.id);
+                      return (
+                        <div
+                          key={r.id}
+                          onClick={() => !already && handlePickWatcher(r)}
+                          style={{
+                            padding: '6px 10px', fontSize: '0.8rem',
+                            cursor: already ? 'default' : 'pointer',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            color: already ? '#9ca3af' : '#111827',
+                            borderBottom: '1px solid #f3f4f6',
+                          }}
+                          onMouseEnter={e => { if (!already) (e.currentTarget as HTMLDivElement).style.background = '#f9fafb'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = ''; }}
+                        >
+                          <span>{r.first_name} {r.last_name}</span>
+                          {already && <span style={{ fontSize: '0.65rem' }}>already added</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAddingWatcher(true)}
+                style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 99, border: '1px dashed #d1d5db', background: 'transparent', color: '#6b7280', cursor: 'pointer' }}
+              >
+                + Add
+              </button>
+            )}
+          </div>
         </div>
 
         {errors.submit && (

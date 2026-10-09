@@ -131,12 +131,17 @@ const HistoricalProject = {
   },
 
 
-  // Find similar projects from both historical_projects and live projects
-  // Scoring: market(30) + projectType(30) + buildingType/scope(15) + bidType(10) + sqft(15) = 100
+  // Find projects matching the given criteria. Hard-filters on each criterion that is
+  // provided; SF proximity score is used only for sort order so all matches are returned.
+  // $1=market $2=projectType[] $3=buildingType $4=bidType $5=sqft(ref)
+  // $6=tenantId $7=projectStatuses[] $8=sqftMin $9=sqftMax $10=yearFrom $11=yearTo
   async findSimilar(criteria) {
-    const { market, buildingType, projectType, bidType, sqft, limit = 5, tenantId = null, projectStatuses = null } = criteria;
+    const {
+      market, buildingType, projectType, bidType, sqft,
+      tenantId = null, projectStatuses = null,
+      sqftMin = null, sqftMax = null, yearFrom = null, yearTo = null
+    } = criteria;
 
-    // $1=market $2=projectType[] $3=buildingType(scope) $4=bidType $5=sqft $6=limit $7=tenantId $8=projectStatuses[]
     const query = `
       SELECT
         id, name, market, building_type, project_type, bid_type,
@@ -148,19 +153,13 @@ const HistoricalProject = {
         hw_material_with_esc, chw_material_with_esc,
         ahu, rtu, vav, boilers, pumps, chiller,
         source, status,
-        (
-          CASE WHEN $1::text IS NULL THEN 30 WHEN market = $1::text THEN 30 ELSE 0 END +
-          CASE WHEN $2::text[] IS NULL THEN 30 WHEN project_type = ANY($2::text[]) THEN 30 ELSE 0 END +
-          CASE WHEN $3::text IS NULL THEN 15 WHEN building_type = $3::text THEN 15 ELSE 0 END +
-          CASE WHEN $4::text IS NULL OR bid_type = $4::text THEN 10 ELSE 0 END +
-          CASE
-            WHEN total_sqft IS NULL OR $5::decimal IS NULL THEN 0
-            WHEN ABS(total_sqft - $5::decimal) / GREATEST($5::decimal, 1) <= 0.25 THEN 15
-            WHEN ABS(total_sqft - $5::decimal) / GREATEST($5::decimal, 1) <= 0.5 THEN 10
-            WHEN ABS(total_sqft - $5::decimal) / GREATEST($5::decimal, 1) <= 1.0 THEN 5
-            ELSE 0
-          END
-        ) AS similarity_score
+        CASE
+          WHEN total_sqft IS NULL OR $5::decimal IS NULL THEN 0
+          WHEN ABS(total_sqft - $5::decimal) / GREATEST($5::decimal, 1) <= 0.25 THEN 15
+          WHEN ABS(total_sqft - $5::decimal) / GREATEST($5::decimal, 1) <= 0.50 THEN 10
+          WHEN ABS(total_sqft - $5::decimal) / GREATEST($5::decimal, 1) <= 1.00 THEN 5
+          ELSE 0
+        END AS similarity_score
       FROM (
         SELECT
           id, name, market, building_type, project_type, bid_type,
@@ -175,6 +174,14 @@ const HistoricalProject = {
           NULL::VARCHAR AS status
         FROM historical_projects
         WHERE total_cost IS NOT NULL AND total_cost > 0
+          AND ($1::text IS NULL OR market = $1::text)
+          AND ($3::text IS NULL OR building_type = $3::text)
+          AND ($2::text[] IS NULL OR project_type = ANY($2::text[]))
+          AND ($4::text IS NULL OR bid_type = $4::text)
+          AND ($8::decimal IS NULL OR total_sqft >= $8::decimal)
+          AND ($9::decimal IS NULL OR total_sqft <= $9::decimal)
+          AND ($10::int IS NULL OR EXTRACT(YEAR FROM bid_date) >= $10::int)
+          AND ($11::int IS NULL OR EXTRACT(YEAR FROM bid_date) <= $11::int)
 
         UNION ALL
 
@@ -207,16 +214,22 @@ const HistoricalProject = {
           p.status
         FROM projects p
         LEFT JOIN project_cost_models pcm ON pcm.project_id = p.id
-        WHERE p.tenant_id = $7::integer
+        WHERE p.tenant_id = $6::integer
           AND p.contract_value IS NOT NULL AND p.contract_value > 0
           AND p.market IS NOT NULL
-          AND ($8::text[] IS NULL OR p.status = ANY($8::text[]))
+          AND ($7::text[] IS NULL OR p.status = ANY($7::text[]))
+          AND ($1::text IS NULL OR p.market = $1::text)
+          AND ($2::text[] IS NULL OR pcm.project_type = ANY($2::text[]))
+          AND ($4::text IS NULL OR pcm.bid_type = $4::text)
+          AND ($8::decimal IS NULL OR COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) >= $8::decimal)
+          AND ($9::decimal IS NULL OR COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) <= $9::decimal)
+          AND ($10::int IS NULL OR EXTRACT(YEAR FROM COALESCE(p.end_date, p.start_date)) >= $10::int)
+          AND ($11::int IS NULL OR EXTRACT(YEAR FROM COALESCE(p.end_date, p.start_date)) <= $11::int)
       ) combined
       ORDER BY similarity_score DESC, bid_date DESC NULLS LAST
-      LIMIT $6::integer
     `;
 
-    const params = [market, projectType, buildingType, bidType, sqft, limit, tenantId, projectStatuses];
+    const params = [market, projectType, buildingType, bidType, sqft, tenantId, projectStatuses, sqftMin, sqftMax, yearFrom, yearTo];
     const result = await db.query(query, params);
     return result.rows;
   },

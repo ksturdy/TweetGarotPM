@@ -2222,7 +2222,6 @@
 /* Highlight mark for mention text — same characters as raw markup but styled */
 .mention-hl {
   color: #667eea;
-  font-weight: 600;
   background: #eef2ff;
   border-radius: 3px;
   padding: 0;

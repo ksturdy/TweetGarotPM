@@ -39,9 +39,19 @@ export interface BudgetSectionItem {
 
 export interface BudgetSection {
   name: string;
+  costType?: number; // 1=Labor 2=Material 3=Subcontracts 4=Rentals 5=MEP Equipment 6=General Conditions
   subtotal: number;
   items: BudgetSectionItem[];
 }
+
+export const COST_TYPES: { id: number; label: string; color: string }[] = [
+  { id: 1, label: 'Labor',              color: '#2563eb' },
+  { id: 2, label: 'Material',           color: '#10b981' },
+  { id: 3, label: 'Subcontracts',       color: '#f59e0b' },
+  { id: 4, label: 'Rentals',            color: '#8b5cf6' },
+  { id: 5, label: 'MEP Equipment',      color: '#06b6d4' },
+  { id: 6, label: 'General Conditions', color: '#ec4899' },
+];
 
 export interface GeneratedBudget {
   summary: {
@@ -138,6 +148,10 @@ export const budgetGeneratorService = {
     bidType?: string;
     sqft?: number;
     projectStatuses?: string[];
+    sqftMin?: number;
+    sqftMax?: number;
+    yearFrom?: number;
+    yearTo?: number;
   }): Promise<SimilarProjectsResponse> {
     const response = await api.post<SimilarProjectsResponse>('/budget-generator/similar', criteria);
     return response.data;

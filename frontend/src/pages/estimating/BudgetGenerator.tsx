@@ -12,7 +12,8 @@ import {
   BarElement,
   Title
 } from 'chart.js';
-import { budgetGeneratorService, BudgetOptions, GeneratedBudget, SimilarProject } from '../../services/budgetGenerator';
+import { budgetGeneratorService, BudgetOptions, GeneratedBudget, SimilarProject, COST_TYPES } from '../../services/budgetGenerator';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import { budgetsApi, Budget } from '../../services/budgets';
 import { createMatrixFromBudget, getMatrixForBudget } from '../../services/costControl';
 import BudgetReportModal from '../../components/estimates/BudgetReportModal';
@@ -43,6 +44,14 @@ const BudgetGenerator: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isEditing = Boolean(id);
+  const { confirm, toast } = useTitanFeedback();
+
+  // New budgets start at the Cost Database browser
+  useEffect(() => {
+    if (!isEditing) {
+      navigate('/estimating/cost-database?budgetMode=true', { replace: true });
+    }
+  }, [isEditing, navigate]);
 
   // Form state
   const [projectName, setProjectName] = useState('');
@@ -72,6 +81,12 @@ const BudgetGenerator: React.FC = () => {
   const [previewAverages, setPreviewAverages] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>([]);
+
+  // Browser filter state (independent of AI generation params)
+  const [browserSqftMin, setBrowserSqftMin] = useState('');
+  const [browserSqftMax, setBrowserSqftMax] = useState('');
+  const [browserYearFrom, setBrowserYearFrom] = useState('');
+  const [browserYearTo, setBrowserYearTo] = useState('');
 
   // Project detail modal state
   const [detailProject, setDetailProject] = useState<any>(null);
@@ -112,9 +127,12 @@ const BudgetGenerator: React.FC = () => {
   const [startingMatrix, setStartingMatrix] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
 
   // Ref for print
   const reportRef = useRef<HTMLDivElement>(null);
+  const resultsColumnRef = useRef<HTMLDivElement>(null);
+  const marketSelectRef = useRef<HTMLSelectElement>(null);
 
   // Load dropdown options on mount
   useEffect(() => {
@@ -136,6 +154,7 @@ const BudgetGenerator: React.FC = () => {
 
       // Populate form fields
       setProjectName(existingBudget.project_name || '');
+      setMarket(existingBudget.market || '');
       setBuildingType(existingBudget.building_type || '');
       setProjectTypes(existingBudget.project_type ? [existingBudget.project_type] : []);
       setBidType(existingBudget.bid_type || '');
@@ -227,7 +246,7 @@ const BudgetGenerator: React.FC = () => {
     }
   };
 
-  // Load preview when form changes — requires a market selection
+  // Load preview when form or browser filters change — requires a market selection
   useEffect(() => {
     if (market) {
       loadPreview();
@@ -236,7 +255,7 @@ const BudgetGenerator: React.FC = () => {
       setPreviewProjects([]);
       setPreviewAverages(null);
     }
-  }, [market, buildingType, projectTypes, bidType, sqft, projectStatuses]);
+  }, [market, buildingType, projectTypes, bidType, projectStatuses, browserSqftMin, browserSqftMax, browserYearFrom, browserYearTo]);
 
   const loadPreview = async () => {
     try {
@@ -247,15 +266,15 @@ const BudgetGenerator: React.FC = () => {
         projectType: projectTypes.length > 0 ? projectTypes : undefined,
         bidType: bidType || undefined,
         sqft: sqft ? parseFloat(sqft) : undefined,
-        projectStatuses: projectStatuses.length > 0 ? projectStatuses : undefined
+        projectStatuses: projectStatuses.length > 0 ? projectStatuses : undefined,
+        sqftMin: browserSqftMin ? parseFloat(browserSqftMin) : undefined,
+        sqftMax: browserSqftMax ? parseFloat(browserSqftMax) : undefined,
+        yearFrom: browserYearFrom ? parseInt(browserYearFrom) : undefined,
+        yearTo: browserYearTo ? parseInt(browserYearTo) : undefined,
       });
       setPreviewProjects(result.similarProjects);
       setPreviewAverages(result.averages);
       setShowPreview(true);
-      // Auto-select top 3 projects by default
-      setSelectedProjectIds(
-        result.similarProjects.slice(0, 3).map((p: any) => p.id).filter(Boolean)
-      );
     } catch (err) {
       console.error('Error loading preview:', err);
     } finally {
@@ -477,6 +496,66 @@ const BudgetGenerator: React.FC = () => {
       // Auto-expand summary section
       setExpandedSections({ 'summary': true });
 
+      // Auto-save when creating a new budget (not editing existing)
+      if (!isEditing) {
+        try {
+          const dc = result.budget.totals.directCostSubtotal;
+          const overheadPct = dc > 0 ? Math.round((result.budget.totals.overhead / dc) * 100) : 10;
+          const profitPct = dc > 0 ? Math.round((result.budget.totals.profit / dc) * 100) : 10;
+          const contingencyPct = dc > 0 ? Math.round((result.budget.totals.contingency / dc) * 100) : 5;
+
+          const autoSaveData: Partial<Budget> = {
+            project_name: result.budget.summary.projectName,
+            market: market || undefined,
+            building_type: result.budget.summary.buildingType,
+            project_type: result.budget.summary.projectType,
+            bid_type: bidType || undefined,
+            location: location || undefined,
+            square_footage: result.budget.summary.squareFootage,
+            scope_notes: scope || undefined,
+            estimated_total: result.budget.summary.estimatedTotalCost,
+            cost_per_sqft: result.budget.summary.costPerSquareFoot,
+            confidence_level: result.budget.summary.confidenceLevel as 'high' | 'medium' | 'low',
+            methodology: result.budget.summary.methodology,
+            labor_subtotal: result.budget.totals.laborSubtotal,
+            material_subtotal: result.budget.totals.materialSubtotal,
+            equipment_subtotal: result.budget.totals.equipmentSubtotal,
+            subcontract_subtotal: result.budget.totals.subcontractSubtotal,
+            direct_cost_subtotal: result.budget.totals.directCostSubtotal,
+            overhead: result.budget.totals.overhead,
+            profit: result.budget.totals.profit,
+            contingency: result.budget.totals.contingency,
+            grand_total: result.budget.totals.grandTotal,
+            overhead_percent: overheadPct,
+            profit_percent: profitPct,
+            contingency_percent: contingencyPct,
+            sections: result.budget.sections,
+            baseline_sections: result.budget.sections,
+            assumptions: result.budget.assumptions,
+            risks: result.budget.risks,
+            comparable_projects: result.similarProjects.map(p => ({
+              name: p.name,
+              building_type: buildingType,
+              square_footage: p.sqft,
+              total_cost: p.totalCost,
+              cost_per_sqft: p.costPerSqft,
+              year: new Date().getFullYear(),
+              similarity_score: p.similarityScore
+            })),
+            status: 'draft',
+            ...(result.narrativeAttachmentId ? { narrative_attachment_id: result.narrativeAttachmentId } : {})
+          };
+
+          setShowGenerateModal(false);
+          const res = await budgetsApi.create(autoSaveData);
+          navigate(`/estimating/budget-generator/${res.data.id}`, { replace: true });
+        } catch (saveErr: any) {
+          console.error('Auto-save failed:', saveErr);
+          setShowGenerateModal(false);
+          toast.error('Budget generated but could not be saved. Please save manually.');
+        }
+      }
+
     } catch (err: any) {
       console.error('Error generating budget:', err);
       setError(err.response?.data?.error || 'Failed to generate budget. Please try again.');
@@ -558,6 +637,10 @@ const BudgetGenerator: React.FC = () => {
     setShowPreview(false);
     setPreviewProjects([]);
     setPreviewAverages(null);
+    setBrowserSqftMin('');
+    setBrowserSqftMax('');
+    setBrowserYearFrom('');
+    setBrowserYearTo('');
     setError('');
     setSuccessMessage('');
     setIsEditMode(false);
@@ -583,6 +666,7 @@ const BudgetGenerator: React.FC = () => {
 
       const budgetData: Partial<Budget> = {
         project_name: currentBudget.summary.projectName,
+        market: market || undefined,
         building_type: currentBudget.summary.buildingType,
         project_type: currentBudget.summary.projectType,
         bid_type: bidType || undefined,
@@ -653,6 +737,37 @@ const BudgetGenerator: React.FC = () => {
   const handleExportReport = () => {
     // Open the professional report modal
     setShowReportModal(true);
+  };
+
+  const handleRegenerate = async () => {
+    if (!market) {
+      toast.error('Please select a Market — this budget was created before Market was tracked. Select it once and save to lock it in.');
+      marketSelectRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => marketSelectRef.current?.focus(), 400);
+      return;
+    }
+    if (!sqft) {
+      toast.error('Please enter a Square Footage before regenerating.');
+      return;
+    }
+
+    const ok = await confirm({
+      title: 'Regenerate Budget?',
+      message: 'Titan will generate a new AI estimate using the current project details. This will replace all existing cost breakdown data and any manual edits you have made. The original baseline will be preserved for comparison.',
+      confirmText: 'Regenerate',
+      cancelText: 'Cancel',
+      danger: true,
+    });
+    if (!ok) return;
+
+    // Scroll results column into view so the animation is visible
+    resultsColumnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Reset edits and fire generate using existing form state
+    setIsEditMode(false);
+    setAdjustedBudget(null);
+    setEditableValues(prev => ({ ...prev, sectionAdjustments: {}, excludedSections: {}, itemOverrides: {} }));
+    handleGenerate({ preventDefault: () => {} } as React.FormEvent);
   };
 
   const handleEditModeToggle = () => {
@@ -794,17 +909,46 @@ const BudgetGenerator: React.FC = () => {
     };
   };
 
-  // Chart data for section breakdown
-  const getSectionChartData = () => {
-    if (!currentBudget) return null;
+  // Group sections by cost type (fallback for old budgets without costType)
+  const getCostTypeGroups = () => {
+    if (!currentBudget) return [];
+    const EQUIPMENT_KW = ['equipment'];
+    const SUBCONTRACT_KW = ['controls', 'insulation', 'balancing', 'electrical'];
+    const GC_KW = ['general'];
+    const RENTAL_KW = ['rental', 'temp heat'];
 
+    const map: Record<number, { total: number; sections: typeof currentBudget.sections }> = {};
+    COST_TYPES.forEach(ct => { map[ct.id] = { total: 0, sections: [] }; });
+
+    currentBudget.sections.forEach(section => {
+      let typeId = section.costType;
+      if (!typeId) {
+        const n = section.name.toLowerCase();
+        if (EQUIPMENT_KW.some(k => n.includes(k))) typeId = 5;
+        else if (SUBCONTRACT_KW.some(k => n.includes(k))) typeId = 3;
+        else if (GC_KW.some(k => n.includes(k))) typeId = 6;
+        else if (RENTAL_KW.some(k => n.includes(k))) typeId = 4;
+        else typeId = 1;
+      }
+      map[typeId].sections.push(section);
+      map[typeId].total += section.subtotal;
+    });
+
+    return COST_TYPES.map(ct => ({ ...ct, ...map[ct.id] })).filter(g => g.total > 0);
+  };
+
+  // Chart data grouped by cost type
+  const getCostTypeChartData = () => {
+    const groups = getCostTypeGroups();
+    if (!groups.length) return null;
     return {
-      labels: currentBudget.sections.map(s => s.name),
+      labels: groups.map(g => g.label),
       datasets: [{
-        label: 'Section Cost',
-        data: currentBudget.sections.map(s => s.subtotal),
-        backgroundColor: '#002356',
-        borderRadius: 4
+        label: 'Cost',
+        data: groups.map(g => g.total),
+        backgroundColor: groups.map(g => g.color),
+        borderWidth: 0,
+        borderRadius: 4,
       }]
     };
   };
@@ -853,6 +997,8 @@ const BudgetGenerator: React.FC = () => {
     }
   };
 
+  if (!isEditing) return null;
+
   return (
     <>
     <div className="budget-generator" ref={reportRef}>
@@ -865,6 +1011,540 @@ const BudgetGenerator: React.FC = () => {
         </div>
       )}
 
+      {!isEditing ? (
+        /* ====== NEW BUDGET: Full-width project browser ====== */
+        <>
+          {loading && (
+            <div className="card loading-card">
+              <div className="titan-loading-container">
+                <div className="titan-logo-spinner">
+                  <div className="spinner-ring"></div>
+                  <div className="spinner-ring"></div>
+                  <div className="spinner-ring"></div>
+                  <span className="titan-icon">T</span>
+                </div>
+                <h3>Titan is Working...</h3>
+                <div className="titan-messages">
+                  <p className="titan-message">Analyzing historical project data...</p>
+                  <p className="titan-message">Comparing similar building types...</p>
+                  <p className="titan-message">Calculating cost projections...</p>
+                  <p className="titan-message">Applying regional labor rates...</p>
+                  <p className="titan-message">Reviewing material costs...</p>
+                  <p className="titan-message">Finalizing your estimate...</p>
+                </div>
+                <div className="titan-progress-bar">
+                  <div className="titan-progress-fill"></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!loading && (
+            <>
+              {/* Header */}
+              <div className="sales-page-header">
+                <div className="sales-page-title">
+                  <div>
+                    <Link to="/estimating/budgets" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+                      &larr; Back to Budgets
+                    </Link>
+                    <h1>💵 New Budget</h1>
+                    <div className="sales-subtitle">Browse and select comparable projects, then generate your estimate</div>
+                  </div>
+                </div>
+                <div className="sales-header-actions">
+                  <span style={{ color: '#6b7280', fontSize: '13px', alignSelf: 'center' }}>
+                    {selectedProjectIds.length > 0
+                      ? `${selectedProjectIds.length} project${selectedProjectIds.length !== 1 ? 's' : ''} selected`
+                      : 'Select projects or generate from filters'}
+                  </span>
+                  <button
+                    className="sales-btn sales-btn-primary"
+                    onClick={() => setShowGenerateModal(true)}
+                    disabled={!market}
+                  >
+                    Generate Budget
+                  </button>
+                </div>
+              </div>
+
+              {/* Full-width filter bar */}
+              <div className="browser-page-filter-bar">
+                <div className="browser-page-filter-row">
+                  {/* Market - required */}
+                  <div className="browser-page-filter-group">
+                    <span className="browser-filter-label">MARKET *</span>
+                    <select
+                      className="form-input"
+                      style={{ minWidth: '160px' }}
+                      value={market}
+                      onChange={e => { setMarket(e.target.value); setProjectTypes([]); }}
+                    >
+                      <option value="">All markets</option>
+                      {options.markets.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  {/* Building Type */}
+                  <div className="browser-page-filter-group">
+                    <span className="browser-filter-label">SCOPE</span>
+                    <select
+                      className="form-input"
+                      style={{ minWidth: '130px' }}
+                      value={buildingType}
+                      onChange={e => setBuildingType(e.target.value)}
+                    >
+                      <option value="">Any scope</option>
+                      {options.buildingTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  {/* Bid Type */}
+                  <div className="browser-page-filter-group">
+                    <span className="browser-filter-label">BID TYPE</span>
+                    <select
+                      className="form-input"
+                      style={{ minWidth: '130px' }}
+                      value={bidType}
+                      onChange={e => setBidType(e.target.value)}
+                    >
+                      <option value="">Any bid type</option>
+                      {options.bidTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  {/* Status pills */}
+                  <div className="browser-page-filter-group">
+                    <span className="browser-filter-label">LIVE PROJECT STATUS</span>
+                    <div className="browser-status-pills">
+                      {(['Open', 'Soft-Closed', 'Hard-Closed'] as const).map(s => (
+                        <button
+                          key={s}
+                          className={`browser-status-pill ${projectStatuses.includes(s) ? 'active' : ''}`}
+                          onClick={() => setProjectStatuses(prev =>
+                            prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+                          )}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* SF Range */}
+                  <div className="browser-page-filter-group">
+                    <span className="browser-filter-label">SQUARE FOOTAGE</span>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        className="browser-filter-input"
+                        placeholder="Min SF"
+                        value={browserSqftMin}
+                        onChange={e => setBrowserSqftMin(e.target.value)}
+                      />
+                      <span style={{ color: '#9ca3af' }}>–</span>
+                      <input
+                        type="number"
+                        className="browser-filter-input"
+                        placeholder="Max SF"
+                        value={browserSqftMax}
+                        onChange={e => setBrowserSqftMax(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  {/* Year Range */}
+                  <div className="browser-page-filter-group">
+                    <span className="browser-filter-label">YEAR</span>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        className="browser-filter-input"
+                        placeholder="From"
+                        value={browserYearFrom}
+                        onChange={e => setBrowserYearFrom(e.target.value)}
+                        style={{ width: '72px' }}
+                      />
+                      <span style={{ color: '#9ca3af' }}>–</span>
+                      <input
+                        type="number"
+                        className="browser-filter-input"
+                        placeholder="To"
+                        value={browserYearTo}
+                        onChange={e => setBrowserYearTo(e.target.value)}
+                        style={{ width: '72px' }}
+                      />
+                    </div>
+                  </div>
+                  {/* Clear filters */}
+                  {(buildingType || bidType || browserSqftMin || browserSqftMax || browserYearFrom || browserYearTo) && (
+                    <button
+                      className="browser-clear-btn"
+                      onClick={() => {
+                        setBuildingType('');
+                        setBidType('');
+                        setBrowserSqftMin('');
+                        setBrowserSqftMax('');
+                        setBrowserYearFrom('');
+                        setBrowserYearTo('');
+                      }}
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+                {/* Project Type row (only show when market selected) */}
+                {market && (options.projectTypesByMarket[market] || options.projectTypes).length > 0 && (
+                  <div style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                    <span className="browser-filter-label" style={{ marginRight: '4px' }}>PROJECT TYPE:</span>
+                    {(market ? (options.projectTypesByMarket[market] || []) : options.projectTypes).map(type => (
+                      <button
+                        key={type}
+                        className={`browser-status-pill ${projectTypes.includes(type) ? 'active' : ''}`}
+                        onClick={() => setProjectTypes(prev =>
+                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                        )}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                    {projectTypes.length > 0 && (
+                      <button className="browser-clear-btn" onClick={() => setProjectTypes([])}>Clear types</button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* KPI row */}
+              {previewAverages && (
+                <div className="browser-kpi-row" style={{ marginBottom: '12px' }}>
+                  <div className="browser-kpi">
+                    <span className="browser-kpi-label">PROJECTS</span>
+                    <span className="browser-kpi-value" style={{ color: '#1a56db' }}>
+                      {previewLoading ? '…' : (previewAverages.project_count ?? previewProjects.length)}
+                    </span>
+                  </div>
+                  <div className="browser-kpi">
+                    <span className="browser-kpi-label">AVG COST/SF</span>
+                    <span className="browser-kpi-value" style={{ color: '#7e3af2' }}>
+                      ${previewLoading ? '…' : (parseFloat(previewAverages.avg_cost_per_sqft) || 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="browser-kpi">
+                    <span className="browser-kpi-label">AVG TOTAL</span>
+                    <span className="browser-kpi-value" style={{ color: '#0e9f6e' }}>
+                      {previewLoading ? '…' : formatCurrency(previewAverages.avg_total_cost)}
+                    </span>
+                  </div>
+                  <div className="browser-kpi">
+                    <span className="browser-kpi-label">AVG SIZE</span>
+                    <span className="browser-kpi-value">
+                      {previewLoading ? '…' : `${formatNumber(previewAverages.avg_sqft)} SF`}
+                    </span>
+                  </div>
+                  <div style={{ marginLeft: 'auto', fontSize: '11px', color: '#9ca3af', fontStyle: 'italic', alignSelf: 'center' }}>
+                    * Costs in {new Date().getFullYear()} dollars
+                  </div>
+                </div>
+              )}
+
+              {/* Selection count */}
+              {selectedProjectIds.length > 0 && (
+                <div className="selected-projects-count">
+                  {selectedProjectIds.length} project{selectedProjectIds.length !== 1 ? 's' : ''} selected for generation
+                  <button
+                    style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#6b7280', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
+                    onClick={() => setSelectedProjectIds([])}
+                  >
+                    Clear selection
+                  </button>
+                </div>
+              )}
+
+              {/* Project grid */}
+              {showPreview ? (
+                <div className="preview-projects-grid" style={{ opacity: previewLoading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                  {previewProjects.map((project, index) => {
+                    const isSelected = project.id && selectedProjectIds.includes(project.id);
+                    return (
+                      <div
+                        key={project.id || index}
+                        className={`preview-project-card ${isSelected ? 'selected' : ''}`}
+                        onClick={() => project.id && handleToggleProjectSelection(project.id)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <div className="preview-project-header">
+                          <input
+                            type="checkbox"
+                            className="project-select-checkbox"
+                            checked={isSelected}
+                            onChange={() => project.id && handleToggleProjectSelection(project.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <span className="project-rank">#{index + 1}</span>
+                          {project.source === 'project' && project.id ? (
+                            <a
+                              href={`/projects/${project.id}/cost-model`}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                marginLeft: 'auto',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                padding: '2px 6px',
+                                borderRadius: '10px',
+                                backgroundColor: '#dbeafe',
+                                color: '#1d4ed8',
+                                whiteSpace: 'nowrap',
+                                textDecoration: 'none',
+                                cursor: 'pointer'
+                              }}>
+                              Live ↗
+                            </a>
+                          ) : (
+                            <span style={{
+                              marginLeft: 'auto',
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              padding: '2px 6px',
+                              borderRadius: '10px',
+                              backgroundColor: '#f3f4f6',
+                              color: '#6b7280',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              Historical
+                            </span>
+                          )}
+                        </div>
+                        <div className="preview-project-name" title={project.name}>{project.name}</div>
+                        <div className="match-criteria">
+                          {project.status && (
+                            <span className="criteria-tag" style={{
+                              background: project.status === 'Open' ? '#dcfce7' : project.status === 'Soft-Closed' ? '#fef3c7' : '#f3f4f6',
+                              color: project.status === 'Open' ? '#166534' : project.status === 'Soft-Closed' ? '#92400e' : '#374151'
+                            }}>
+                              {project.status}
+                            </span>
+                          )}
+                          {project.match_details?.market !== null && project.match_details?.market !== undefined && (
+                            <span className={`criteria-tag ${project.match_details.market ? 'match' : 'no-match'}`}>
+                              {project.match_details.market ? '✓' : '✗'} Market
+                            </span>
+                          )}
+                          {project.match_details?.building_type !== null && project.match_details?.building_type !== undefined && (
+                            <span className={`criteria-tag ${project.match_details.building_type ? 'match' : 'no-match'}`}>
+                              {project.match_details.building_type ? '✓' : '✗'} Building
+                            </span>
+                          )}
+                          {project.match_details?.project_type !== null && project.match_details?.project_type !== undefined && (
+                            <span className={`criteria-tag ${project.match_details.project_type ? 'match' : 'no-match'}`}>
+                              {project.match_details.project_type ? '✓' : '✗'} Project
+                            </span>
+                          )}
+                          {project.match_details?.bid_type !== null && project.match_details?.bid_type !== undefined && (
+                            <span className={`criteria-tag ${project.match_details.bid_type ? 'match' : 'no-match'}`}>
+                              {project.match_details.bid_type ? '✓' : '✗'} Bid Type
+                            </span>
+                          )}
+                          {project.match_details?.sqft_diff_percent !== null && (
+                            <span className={`criteria-tag ${project.match_details?.sqft_within_25 ? 'match' : project.match_details?.sqft_within_50 ? 'partial' : 'no-match'}`}>
+                              {project.match_details.sqft_diff_percent > 0 ? '+' : ''}{project.match_details.sqft_diff_percent}% SF
+                            </span>
+                          )}
+                        </div>
+                        <div className="preview-project-details" style={{ borderBottom: '1px solid #eee', paddingBottom: '3px', marginBottom: '3px' }}>
+                          <div className="detail-item">
+                            <span className="detail-label">{project.source === 'project' ? 'Project Year' : 'Bid Year'}</span>
+                            <span className="detail-value">{project.bid_date ? new Date(String(project.bid_date).slice(0, 10) + 'T00:00:00').getFullYear() : 'N/A'}</span>
+                          </div>
+                          <div className="detail-item">
+                            <span className="detail-label">Original Cost</span>
+                            <span className="detail-value">{formatCurrency(project.original_total_cost)}</span>
+                          </div>
+                          <div className="detail-item">
+                            <span className="detail-label">Orig Cost/SF</span>
+                            <span className="detail-value">${(project.original_total_cost && project.total_sqft ? (project.original_total_cost / project.total_sqft) : 0).toFixed(2)}</span>
+                          </div>
+                        </div>
+                        <div className="preview-project-details">
+                          <div className="detail-item">
+                            <span className="detail-label">Size</span>
+                            <span className="detail-value" style={{ fontWeight: 600 }}>{formatNumber(project.total_sqft)} SF</span>
+                          </div>
+                          <div className="detail-item">
+                            <span className="detail-label">Today's Cost</span>
+                            <span className="detail-value" style={{ fontWeight: 600 }}>{formatCurrency(project.total_cost)}</span>
+                          </div>
+                          <div className="detail-item">
+                            <span className="detail-label">Today's $/SF</span>
+                            <span className="detail-value" style={{ fontWeight: 600 }}>${(parseFloat(project.total_cost_per_sqft) || 0).toFixed(2)}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                          {project.source === 'project' && project.id ? (
+                            <a
+                              href={`/projects/${project.id}/cost-model`}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                fontSize: '10px',
+                                color: '#1d4ed8',
+                                textDecoration: 'none',
+                                border: '1px solid #bfdbfe',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                lineHeight: 1.4
+                              }}
+                            >
+                              Open Project ↗
+                            </a>
+                          ) : <span />}
+                          <button
+                            onClick={(e) => handleOpenDetail(e, project.id, project.source === 'project' ? 'project' : 'historical')}
+                            title="View cost model details"
+                            style={{
+                              background: 'none',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '4px',
+                              padding: '2px 6px',
+                              fontSize: '10px',
+                              color: '#6b7280',
+                              cursor: 'pointer',
+                              lineHeight: 1.4
+                            }}
+                          >
+                            Details ↗
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="card empty-state-card">
+                  <div className="empty-state-icon">🔧</div>
+                  <h3>Select a Market to Browse Projects</h3>
+                  <p>Pick a <strong>Market</strong> above to browse all comparable projects. Narrow by building type, project type, SF range, or year — then select the ones you want Titan to use as comparables.</p>
+                </div>
+              )}
+
+              {/* No-results state */}
+              {showPreview && !previewLoading && previewProjects.length === 0 && (
+                <div className="no-projects-message">
+                  <p>No projects match the current filters.</p>
+                  <p>Try removing a filter or broadening the SF / year range.</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Generate Budget Modal */}
+          {showGenerateModal && (
+            <div className="modal-overlay" onClick={() => setShowGenerateModal(false)}>
+              <div className="modal-container" style={{ maxWidth: '540px' }} onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2>Generate Budget</h2>
+                  <button className="modal-close" onClick={() => setShowGenerateModal(false)}>×</button>
+                </div>
+                <div className="modal-body">
+                  {selectedProjectIds.length > 0 && (
+                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '8px 12px', marginBottom: '16px', fontSize: '13px', color: '#1d4ed8' }}>
+                      {selectedProjectIds.length} project{selectedProjectIds.length !== 1 ? 's' : ''} selected as comparables
+                    </div>
+                  )}
+                  <form id="generate-budget-form" onSubmit={handleGenerate}>
+                    <div className="form-group">
+                      <label className="form-label">Project Name *</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={projectName}
+                        onChange={e => setProjectName(e.target.value)}
+                        placeholder="Enter project name"
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Market</label>
+                      <select
+                        className="form-input"
+                        value={market}
+                        onChange={e => setMarket(e.target.value)}
+                      >
+                        <option value="">Select a market</option>
+                        {options.markets.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                      <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>Pre-filled from your filter selection</p>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Square Footage *</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className="form-input"
+                        value={sqft ? Number(sqft.replace(/,/g, '')).toLocaleString() : ''}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/,/g, '');
+                          if (raw === '' || /^\d+$/.test(raw)) setSqft(raw);
+                        }}
+                        placeholder="Enter square footage"
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Location</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={location}
+                        onChange={e => setLocation(e.target.value)}
+                        placeholder="e.g., Eau Claire, WI"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Scope Notes</label>
+                      <textarea
+                        className="form-input"
+                        value={scope}
+                        onChange={e => setScope(e.target.value)}
+                        placeholder="Optional: describe any special requirements or scope details..."
+                        rows={3}
+                        style={{ resize: 'vertical' }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Design Narrative (optional)</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="file"
+                          accept=".pdf,.docx,.txt"
+                          onChange={e => setNarrativeFile(e.target.files?.[0] || null)}
+                          style={{ fontSize: '13px' }}
+                        />
+                        {narrativeFile && (
+                          <button
+                            type="button"
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px' }}
+                            onClick={() => setNarrativeFile(null)}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </form>
+                  {error && <div className="error-message" style={{ marginTop: '12px' }}>{error}</div>}
+                </div>
+                <div className="modal-footer">
+                  <button className="btn-secondary" onClick={() => setShowGenerateModal(false)}>Cancel</button>
+                  <button className="btn-primary" type="submit" form="generate-budget-form" disabled={!projectName || !sqft}>
+                    Generate
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        /* ====== EDITING MODE: Two-column layout ====== */
+        <>
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
@@ -878,27 +1558,37 @@ const BudgetGenerator: React.FC = () => {
         <div className="sales-header-actions">
           {currentBudget && (
             <div className="no-print" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {isEditing && (
+                <button
+                  className="sales-btn sales-btn-secondary"
+                  onClick={handleRegenerate}
+                  disabled={loading}
+                  title="Re-run the AI estimate using the current project details"
+                >
+                  {loading ? 'Regenerating…' : '↺ Regenerate'}
+                </button>
+              )}
               <button
-                className={`btn ${isEditMode ? 'btn-warning' : 'btn-secondary'}`}
+                className={`sales-btn ${isEditMode ? 'btn-warning' : 'sales-btn-secondary'}`}
                 onClick={handleEditModeToggle}
               >
                 {isEditMode ? 'Exit Edit Mode' : 'Edit Budget'}
               </button>
               <button
-                className="btn btn-secondary"
+                className="sales-btn sales-btn-secondary"
                 onClick={handleExportReport}
               >
                 Export Report
               </button>
               <button
-                className="btn btn-secondary"
+                className="sales-btn sales-btn-secondary"
                 onClick={() => handleSaveBudget('draft')}
                 disabled={saving}
               >
                 {saving ? 'Saving...' : (isEditing ? 'Update Draft' : 'Save Draft')}
               </button>
               <button
-                className="btn btn-primary"
+                className="sales-btn sales-btn-primary"
                 onClick={() => handleSaveBudget('final')}
                 disabled={saving}
               >
@@ -916,7 +1606,7 @@ const BudgetGenerator: React.FC = () => {
             {savedBudgetId && (
               existingMatrixId ? (
                 <button
-                  className="btn btn-secondary"
+                  className="sales-btn sales-btn-secondary"
                   style={{ fontSize: '13px', padding: '4px 12px' }}
                   onClick={() => navigate(`/estimating/cost-control/${existingMatrixId}`)}
                 >
@@ -924,7 +1614,7 @@ const BudgetGenerator: React.FC = () => {
                 </button>
               ) : (
                 <button
-                  className="btn btn-primary"
+                  className="sales-btn sales-btn-primary"
                   style={{ fontSize: '13px', padding: '4px 12px' }}
                   disabled={startingMatrix}
                   onClick={async () => {
@@ -950,7 +1640,7 @@ const BudgetGenerator: React.FC = () => {
               )
             )}
             <button
-              className="btn btn-secondary"
+              className="sales-btn sales-btn-secondary"
               style={{ fontSize: '13px', padding: '4px 12px' }}
               onClick={() => navigate('/estimating/budgets')}
             >
@@ -981,13 +1671,20 @@ const BudgetGenerator: React.FC = () => {
 
               <div className="form-group">
                 <label className="form-label">Market *</label>
+                {isEditing && !market && !loadingExisting && (
+                  <div style={{ fontSize: '12px', color: '#d97706', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '6px', padding: '6px 10px', marginBottom: '6px' }}>
+                    Market wasn't saved for this budget. Select it and click <strong>Update Draft</strong> to lock it in.
+                  </div>
+                )}
                 <select
+                  ref={marketSelectRef}
                   className="form-input"
                   value={market}
                   onChange={(e) => {
                     setMarket(e.target.value);
                     setProjectTypes([]);
                   }}
+                  style={isEditing && !market && !loadingExisting ? { borderColor: '#f59e0b', outline: 'none', boxShadow: '0 0 0 2px rgba(245,158,11,0.2)' } : {}}
                 >
                   <option value="">Select a market</option>
                   {options.markets.map(m => (
@@ -1076,43 +1773,6 @@ const BudgetGenerator: React.FC = () => {
                 </select>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">
-                  Live Project Status
-                  {projectStatuses.length < 3 && (
-                    <span style={{ fontWeight: 400, marginLeft: '8px', color: '#6b7280', fontSize: '13px' }}>
-                      ({projectStatuses.length} selected)
-                    </span>
-                  )}
-                </label>
-                <div style={{
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  padding: '6px 8px',
-                  backgroundColor: '#fff'
-                }}>
-                  {(['Open', 'Soft-Closed', 'Hard-Closed'] as const).map(status => (
-                    <label key={status} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '3px 0',
-                      cursor: 'pointer',
-                      fontSize: '14px'
-                    }}>
-                      <input
-                        type="checkbox"
-                        checked={projectStatuses.includes(status)}
-                        onChange={() => setProjectStatuses(prev =>
-                          prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
-                        )}
-                      />
-                      {status}
-                    </label>
-                  ))}
-                </div>
-                <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>Filters live projects included in comparison</p>
-              </div>
 
               <div className="form-group">
                 <label className="form-label">Location</label>
@@ -1208,7 +1868,7 @@ const BudgetGenerator: React.FC = () => {
               <div className="form-actions">
                 <button
                   type="submit"
-                  className="btn btn-primary"
+                  className="sales-btn sales-btn-primary"
                   disabled={loading || !projectName || !market || !sqft}
                 >
                   {loading ? 'Generating...' : 'Generate Budget'}
@@ -1216,7 +1876,7 @@ const BudgetGenerator: React.FC = () => {
                 {budget && (
                   <button
                     type="button"
-                    className="btn btn-secondary"
+                    className="sales-btn sales-btn-secondary"
                     onClick={handleReset}
                   >
                     Start Over
@@ -1341,7 +2001,7 @@ const BudgetGenerator: React.FC = () => {
         </div>
 
         {/* Right Column - Results */}
-        <div className="budget-results-column">
+        <div className="budget-results-column" ref={resultsColumnRef}>
           {loading && (
             <div className="card loading-card">
               <div className="titan-loading-container">
@@ -1428,10 +2088,10 @@ const BudgetGenerator: React.FC = () => {
                     </div>
                   </div>
                   <div className="chart-container">
-                    <h4>By Section</h4>
+                    <h4>By Cost Type</h4>
                     <div className="chart-wrapper bar-chart">
-                      {getSectionChartData() && (
-                        <Bar data={getSectionChartData()!} options={barChartOptions} />
+                      {getCostTypeChartData() && (
+                        <Bar data={getCostTypeChartData()!} options={barChartOptions} />
                       )}
                     </div>
                   </div>
@@ -1496,11 +2156,33 @@ const BudgetGenerator: React.FC = () => {
                 </div>
               )}
 
-              {/* Cost Breakdown Sections */}
+              {/* Cost Breakdown Sections — grouped by cost type */}
               <div className="card sections-card">
                 <h3 style={{ marginTop: 0 }}>Cost Breakdown</h3>
 
-                {currentBudget.sections.map((section, index) => {
+                {getCostTypeGroups().map((group) => (
+                  <div key={group.id} style={{ marginBottom: '4px' }}>
+                    {/* Cost type header */}
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      background: group.color + '18',
+                      borderLeft: `4px solid ${group.color}`,
+                      padding: '7px 12px',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      color: '#1e293b',
+                      borderRadius: '0 4px 4px 0',
+                      marginBottom: '2px',
+                    }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: group.color, display: 'inline-block' }} />
+                        {group.label}
+                      </span>
+                      <span>{formatCurrency(group.total)}</span>
+                    </div>
+
+                    {/* Sections within this cost type */}
+                    {group.sections.map((section, index) => {
                   const adjustment = editableValues.sectionAdjustments[section.name] || 0;
                   const isExcluded = editableValues.excludedSections[section.name];
                   return (
@@ -1660,26 +2342,22 @@ const BudgetGenerator: React.FC = () => {
                       </div>
                     )}
                   </div>
-                );})}
+                  );
+                })}
+                  </div>
+                ))}
 
                 {/* Totals Summary */}
                 <div className="totals-summary">
-                  <div className="totals-row">
-                    <span>Labor Subtotal</span>
-                    <span>{formatCurrency(currentBudget.totals.laborSubtotal)}</span>
-                  </div>
-                  <div className="totals-row">
-                    <span>Material Subtotal</span>
-                    <span>{formatCurrency(currentBudget.totals.materialSubtotal)}</span>
-                  </div>
-                  <div className="totals-row">
-                    <span>Equipment Subtotal</span>
-                    <span>{formatCurrency(currentBudget.totals.equipmentSubtotal)}</span>
-                  </div>
-                  <div className="totals-row">
-                    <span>Subcontract Subtotal</span>
-                    <span>{formatCurrency(currentBudget.totals.subcontractSubtotal)}</span>
-                  </div>
+                  {getCostTypeGroups().map(group => (
+                    <div key={group.id} className="totals-row" style={{ borderLeft: `3px solid ${group.color}`, paddingLeft: '8px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: group.color, display: 'inline-block', flexShrink: 0 }} />
+                        {group.label}
+                      </span>
+                      <span>{formatCurrency(group.total)}</span>
+                    </div>
+                  ))}
                   <div className="totals-row subtotal">
                     <span>Direct Cost Subtotal</span>
                     <span>{formatCurrency(currentBudget.totals.directCostSubtotal)}</span>
@@ -1837,52 +2515,130 @@ const BudgetGenerator: React.FC = () => {
             </>
           )}
 
-          {!loading && !budget && (
+          {false && (
             <>
-              {/* Similar Projects Preview - Shows when building/project type selected */}
               {showPreview ? (
                 <div className="card similar-projects-preview-card">
-                  <div className="preview-header">
-                    <h3 style={{ margin: 0 }}>
-                      Similar Projects Preview
-                      {previewLoading && <span className="loading-indicator"> Loading...</span>}
-                    </h3>
-                    {previewAverages && previewAverages.project_count > 0 && (
-                      <span className="projects-count">{previewAverages.project_count} projects found</span>
-                    )}
+                  <div className="browser-filter-bar">
+                    <div className="browser-filter-row">
+                      <div className="browser-filter-group">
+                        <span className="browser-filter-label">STATUS</span>
+                        <div className="browser-status-pills">
+                          {(['Open', 'Soft-Closed', 'Hard-Closed'] as const).map(s => (
+                            <button
+                              key={s}
+                              className={`browser-status-pill ${projectStatuses.includes(s) ? 'active' : ''}`}
+                              onClick={() => setProjectStatuses(prev =>
+                                prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+                              )}
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="browser-filter-group">
+                        <span className="browser-filter-label">SQUARE FOOTAGE</span>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <input
+                            type="number"
+                            className="browser-filter-input"
+                            placeholder="Min SF"
+                            value={browserSqftMin}
+                            onChange={e => setBrowserSqftMin(e.target.value)}
+                          />
+                          <span style={{ color: '#9ca3af', fontSize: '12px' }}>–</span>
+                          <input
+                            type="number"
+                            className="browser-filter-input"
+                            placeholder="Max SF"
+                            value={browserSqftMax}
+                            onChange={e => setBrowserSqftMax(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="browser-filter-group">
+                        <span className="browser-filter-label">YEAR</span>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <input
+                            type="number"
+                            className="browser-filter-input"
+                            placeholder="From"
+                            value={browserYearFrom}
+                            onChange={e => setBrowserYearFrom(e.target.value)}
+                            style={{ width: '72px' }}
+                          />
+                          <span style={{ color: '#9ca3af', fontSize: '12px' }}>–</span>
+                          <input
+                            type="number"
+                            className="browser-filter-input"
+                            placeholder="To"
+                            value={browserYearTo}
+                            onChange={e => setBrowserYearTo(e.target.value)}
+                            style={{ width: '72px' }}
+                          />
+                        </div>
+                      </div>
+                      {(browserSqftMin || browserSqftMax || browserYearFrom || browserYearTo) && (
+                        <button
+                          className="browser-clear-btn"
+                          onClick={() => { setBrowserSqftMin(''); setBrowserSqftMax(''); setBrowserYearFrom(''); setBrowserYearTo(''); }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
                   </div>
 
+                  {/* KPI summary row */}
                   {previewAverages && (
-                    <>
-                      <div className="preview-stats-bar">
-                        <div className="stat-item">
-                          <span className="stat-label">Avg Cost</span>
-                          <span className="stat-value">{formatCurrency(previewAverages.avg_total_cost)}</span>
-                        </div>
-                        <div className="stat-item">
-                          <span className="stat-label">Avg Cost/SF</span>
-                          <span className="stat-value">${(parseFloat(previewAverages.avg_cost_per_sqft) || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="stat-item">
-                          <span className="stat-label">Avg Size</span>
-                          <span className="stat-value">{formatNumber(previewAverages.avg_sqft)} SF</span>
-                        </div>
+                    <div className="browser-kpi-row">
+                      <div className="browser-kpi">
+                        <span className="browser-kpi-label">PROJECTS</span>
+                        <span className="browser-kpi-value" style={{ color: '#1a56db' }}>
+                          {previewLoading ? '…' : (previewAverages.project_count ?? previewProjects.length)}
+                        </span>
                       </div>
-                      <div style={{ textAlign: 'center', fontSize: '11px', color: '#666', marginTop: '4px', fontStyle: 'italic' }}>
-                        * All costs adjusted for inflation to {new Date().getFullYear()} dollars (4% annual rate)
+                      <div className="browser-kpi">
+                        <span className="browser-kpi-label">AVG COST/SF</span>
+                        <span className="browser-kpi-value" style={{ color: '#7e3af2' }}>
+                          ${previewLoading ? '…' : (parseFloat(previewAverages.avg_cost_per_sqft) || 0).toFixed(2)}
+                        </span>
                       </div>
-                    </>
+                      <div className="browser-kpi">
+                        <span className="browser-kpi-label">AVG TOTAL</span>
+                        <span className="browser-kpi-value" style={{ color: '#0e9f6e' }}>
+                          {previewLoading ? '…' : formatCurrency(previewAverages.avg_total_cost)}
+                        </span>
+                      </div>
+                      <div className="browser-kpi">
+                        <span className="browser-kpi-label">AVG SIZE</span>
+                        <span className="browser-kpi-value">
+                          {previewLoading ? '…' : `${formatNumber(previewAverages.avg_sqft)} SF`}
+                        </span>
+                      </div>
+                      <div style={{ marginLeft: 'auto', fontSize: '11px', color: '#9ca3af', fontStyle: 'italic', alignSelf: 'center' }}>
+                        * Costs in {new Date().getFullYear()} dollars
+                      </div>
+                    </div>
                   )}
 
+                  {/* Selection count */}
                   {selectedProjectIds.length > 0 && (
                     <div className="selected-projects-count">
                       {selectedProjectIds.length} project{selectedProjectIds.length !== 1 ? 's' : ''} selected for generation
+                      <button
+                        style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#6b7280', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
+                        onClick={() => setSelectedProjectIds([])}
+                      >
+                        Clear selection
+                      </button>
                     </div>
                   )}
 
                   {previewProjects.length > 0 ? (
-                    <div className="preview-projects-grid">
-                      {previewProjects.slice(0, 12).map((project, index) => {
+                    <div className="preview-projects-grid" style={{ opacity: previewLoading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                      {previewProjects.map((project, index) => {
                         const isSelected = project.id && selectedProjectIds.includes(project.id);
                         return (
                         <div
@@ -1900,7 +2656,6 @@ const BudgetGenerator: React.FC = () => {
                               onClick={(e) => e.stopPropagation()}
                             />
                             <span className="project-rank">#{index + 1}</span>
-                            <span className="match-badge">{project.similarity_score}% match</span>
                             {project.source === 'project' && project.id ? (
                               <a
                                 href={`/projects/${project.id}/cost-model`}
@@ -2050,25 +2805,24 @@ const BudgetGenerator: React.FC = () => {
                     </div>
                   ) : !previewLoading && (
                     <div className="no-projects-message">
-                      <p>No similar projects found for the selected criteria.</p>
-                      <p>The estimate will be based on general averages.</p>
+                      <p>No projects match the current filters.</p>
+                      <p>Try removing a filter or broadening the SF / year range.</p>
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="card empty-state-card">
                   <div className="empty-state-icon">🔧</div>
-                  <h3>Ready to Generate</h3>
-                  <p>Fill in the project details and click "Generate Budget" to create an AI-powered estimate based on historical project data.</p>
-                  <div className="empty-state-hint">
-                    <p>Select a <strong>Market</strong> to preview similar projects.</p>
-                  </div>
+                  <h3>Select a Market to Browse Projects</h3>
+                  <p>Pick a <strong>Market</strong> on the left to browse all comparable projects. Narrow by building type, project type, SF range, or year — then select the ones you want Titan to use as comparables.</p>
                 </div>
               )}
             </>
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
 
     {/* Project Detail Modal */}

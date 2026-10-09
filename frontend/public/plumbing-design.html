@@ -7842,6 +7842,56 @@ document.addEventListener('DOMContentLoaded',()=>{
   resize();
   updateResults();
 });
+
+// ── TITAN PM INTEGRATION ─────────────────────────────────────────────────────
+window.addEventListener('message', function(event) {
+  if (!event.data || !event.data.type) return;
+
+  if (event.data.type === 'TG_REQUEST_STATE') {
+    var state = {
+      projectInfo: JSON.parse(JSON.stringify(projectInfo)),
+      floors: JSON.parse(JSON.stringify(floors)),
+      items: JSON.parse(JSON.stringify(items)),
+      pipes: JSON.parse(JSON.stringify(pipes)),
+      fixtureSchedule: JSON.parse(JSON.stringify(fixtureSchedule)),
+      roughInTakeoff: JSON.parse(JSON.stringify(roughInTakeoff)),
+      scaleState: scaleState ? JSON.parse(JSON.stringify(scaleState)) : null,
+      transform: JSON.parse(JSON.stringify(transform)),
+    };
+    window.parent.postMessage({ type: 'TG_STATE', data: state }, '*');
+  }
+
+  if (event.data.type === 'TG_RESTORE_STATE') {
+    var s = event.data.data;
+    if (!s) return;
+    if (s.projectInfo) { projectInfo = JSON.parse(JSON.stringify(s.projectInfo)); editProject(); }
+    if (s.floors) { floors = JSON.parse(JSON.stringify(s.floors)); }
+    if (s.items) { items = JSON.parse(JSON.stringify(s.items)); }
+    if (s.pipes) { pipes = JSON.parse(JSON.stringify(s.pipes)); }
+    if (s.fixtureSchedule) { fixtureSchedule = JSON.parse(JSON.stringify(s.fixtureSchedule)); }
+    if (s.roughInTakeoff) { roughInTakeoff = JSON.parse(JSON.stringify(s.roughInTakeoff)); }
+    if (s.scaleState) { scaleState = JSON.parse(JSON.stringify(s.scaleState)); }
+    if (s.transform) { transform = JSON.parse(JSON.stringify(s.transform)); }
+    // Hide setup screen and re-render
+    document.getElementById('setupScreen').classList.add('hidden');
+    rebuildPaletteFromSchedule();
+    buildFloorBar();
+    updateTakeoffDiagram();
+    updateResults();
+    try { resize(); } catch(e) {}
+    try { render(); } catch(e) {}
+    // Update topbar badge
+    if (s.projectInfo && s.projectInfo.name) {
+      var badgeName = document.getElementById('badgeName');
+      var badgeSub = document.getElementById('badgeSub');
+      if (badgeName) badgeName.textContent = s.projectInfo.name;
+      if (badgeSub) {
+        var sub = [s.projectInfo.hub, s.projectInfo.estimator, s.projectInfo.floor].filter(Boolean).join(' · ');
+        badgeSub.textContent = sub || 'Commercial Plumbing Design';
+      }
+    }
+  }
+});
 </script>
 </body>
 </html>

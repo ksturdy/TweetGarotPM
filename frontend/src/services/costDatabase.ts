@@ -9,6 +9,9 @@ export interface CostDbFilters {
   date_to?: string;
   value_min?: number | null;
   value_max?: number | null;
+  sqft_min?: number | null;
+  sqft_max?: number | null;
+  project_ids?: number[];
   cost_type?: number;
   phase_prefix?: string;
   excluded_project_ids?: number[];
@@ -20,12 +23,14 @@ export interface CostDbFilterOptions {
   markets: string[];
   managers: { id: number; name: string }[];
   valueRange: { min: number | null; max: number | null };
+  sqftRange: { min: number | null; max: number | null };
   dateRange: {
     minStart: string | null;
     maxStart: string | null;
     minEnd: string | null;
     maxEnd: string | null;
   };
+  projects: { id: number; number: string; name: string }[];
 }
 
 export interface CostDbSummary {
@@ -102,6 +107,7 @@ export interface ProjectRow {
   phase_est_cost: number;
   phase_jtd_cost: number;
   total_sqft: number | null;
+  scopes: string[];
   cost_per_sqft: number | null;
 }
 
@@ -115,6 +121,9 @@ function toParams(filters: CostDbFilters): Record<string, string> {
   if (filters.date_to) p.date_to = filters.date_to;
   if (filters.value_min != null) p.value_min = String(filters.value_min);
   if (filters.value_max != null) p.value_max = String(filters.value_max);
+  if (filters.sqft_min != null) p.sqft_min = String(filters.sqft_min);
+  if (filters.sqft_max != null) p.sqft_max = String(filters.sqft_max);
+  if (filters.project_ids?.length) p.project_ids = filters.project_ids.join(',');
   if (filters.cost_type) p.cost_type = String(filters.cost_type);
   if (filters.phase_prefix) p.phase_prefix = filters.phase_prefix;
   if (filters.excluded_project_ids?.length) p.excluded_ids = filters.excluded_project_ids.join(',');
@@ -135,6 +144,10 @@ export const costDatabaseService = {
     }).then(r => r.data),
   getProjects: (filters: CostDbFilters) =>
     api.get<ProjectRow[]>('/cost-database/projects', { params: toParams(filters) }).then(r => r.data),
+  updateProjectSqft: (projectId: number, sqft: number | null) =>
+    api.patch(`/cost-database/projects/${projectId}/sqft`, { sqft }),
+  updateProjectScopes: (projectId: number, scopes: string[]) =>
+    api.patch(`/cost-database/projects/${projectId}/scopes`, { scopes }),
 };
 
 export const COST_TYPE_LABELS: Record<number, string> = {

@@ -1,8 +1,8 @@
 // @refresh reset
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   costDatabaseService,
   estimateDbService,
@@ -15,7 +15,24 @@ import {
   EstSectionRow,
   EstimateListRow,
 } from '../../services/costDatabase';
+import { budgetGeneratorService } from '../../services/budgetGenerator';
+import { budgetsApi } from '../../services/budgets';
+import type { Budget } from '../../services/budgets';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
+import './BudgetGenerator.css';
+
+const SCOPE_OPTIONS = ['Plumbing', 'Sheet Metal', 'Piping', 'BAS'];
+const SCOPE_COLORS: Record<string, { bg: string; color: string }> = {
+  'Plumbing':     { bg: '#3b82f6', color: '#fff' },
+  'Sheet Metal':  { bg: '#10b981', color: '#fff' },
+  'Piping':       { bg: '#f59e0b', color: '#fff' },
+  'BAS':          { bg: '#8b5cf6', color: '#fff' },
+};
+
+const FILTER_KEY = 'costDb_vista_filters';
+const EST_FILTER_KEY = 'costDb_est_filters';
+const DS_KEY = 'costDb_dataSource';
 
 const fmt = (value: number | null | undefined): string => {
   if (value == null) return '-';
@@ -51,20 +68,72 @@ type PhaseRowEnriched = PhaseRow & {
 const safeAvg = (sum: number, count: number) => (count > 0 ? sum / count : 0);
 
 const CostDatabase: React.FC = () => {
-  const [dataSource, setDataSource] = useState<DataSource>('vista');
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const isBudgetMode = searchParams.get('budgetMode') === 'true';
+  const { toast } = useTitanFeedback();
+  const queryClient = useQueryClient();
+
+  const handleSqftSave = async (projectId: number, sqft: number | null) => {
+    try {
+      await costDatabaseService.updateProjectSqft(projectId, sqft);
+      queryClient.setQueryData<ProjectRow[]>(['costDb', 'projects', filters], old =>
+        old ? old.map(p => p.id === projectId
+          ? { ...p, total_sqft: sqft, cost_per_sqft: sqft && sqft > 0 ? p.phase_jtd_cost / sqft : null }
+          : p)
+        : old
+      );
+    } catch {
+      toast.error('Failed to save square footage');
+    }
+  };
+
+  const handleScopesSave = async (projectId: number, scopes: string[]) => {
+    try {
+      await costDatabaseService.updateProjectScopes(projectId, scopes);
+      queryClient.setQueryData<ProjectRow[]>(['costDb', 'projects', filters], old =>
+        old ? old.map(p => p.id === projectId ? { ...p, scopes } : p) : old
+      );
+    } catch {
+      toast.error('Failed to save scopes');
+    }
+  };
+
+  // Budget generation modal state
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [budgetName, setBudgetName] = useState('');
+  const [budgetSqft, setBudgetSqft] = useState('');
+  const [budgetMarket, setBudgetMarket] = useState('');
+  const [budgetLocation, setBudgetLocation] = useState('');
+  const [budgetScope, setBudgetScope] = useState('');
+  const [budgetNarrativeFile, setBudgetNarrativeFile] = useState<File | null>(null);
+  const [budgetGenerating, setBudgetGenerating] = useState(false);
+
+  const [dataSource, setDataSource] = useState<DataSource>(() => {
+    try { const s = sessionStorage.getItem(DS_KEY); return (s === 'vista' || s === 'estimates') ? s : 'vista'; } catch { return 'vista'; }
+  });
 
   // Vista state
-  const [filters, setFilters] = useState<CostDbFilters>({});
+  const [filters, setFilters] = useState<CostDbFilters>(() => {
+    try { const s = sessionStorage.getItem(FILTER_KEY); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  });
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [tab, setTab] = useState<Tab>('cost-type');
   const [drillPhase, setDrillPhase] = useState<{ phase: string; cost_type: number } | null>(null);
   const [search, setSearch] = useState('');
 
   // Estimates state
-  const [estFilters, setEstFilters] = useState<EstDbFilters>({});
+  const [estFilters, setEstFilters] = useState<EstDbFilters>(() => {
+    try { const s = sessionStorage.getItem(EST_FILTER_KEY); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  });
   const [estExcluded, setEstExcluded] = useState<Set<number>>(new Set());
   const [estTab, setEstTab] = useState<'cost-type' | 'section' | 'list'>('cost-type');
   const [estSearch, setEstSearch] = useState('');
+
+  // Persist filters to sessionStorage
+  useEffect(() => { try { sessionStorage.setItem(FILTER_KEY, JSON.stringify(filters)); } catch {} }, [filters]);
+  useEffect(() => { try { sessionStorage.setItem(EST_FILTER_KEY, JSON.stringify(estFilters)); } catch {} }, [estFilters]);
+  useEffect(() => { try { sessionStorage.setItem(DS_KEY, dataSource); } catch {} }, [dataSource]);
 
   // Filters with exclusions applied — used for all aggregations.
   const aggFilters = useMemo<CostDbFilters>(
@@ -221,6 +290,79 @@ const CostDatabase: React.FC = () => {
 
   const clearFilters = () => { setFilters({}); setSearch(''); };
 
+  // Pre-populate budget market from filter when exactly one market is selected
+  useEffect(() => {
+    if (filters.market?.length === 1) setBudgetMarket(filters.market[0]);
+  }, [filters.market]);
+
+  const handleGenerateBudget = async () => {
+    if (!budgetName.trim() || !budgetSqft || !budgetMarket) {
+      toast.error('Please fill in project name, market, and square footage.');
+      return;
+    }
+    setBudgetGenerating(true);
+    try {
+      const baseParams = {
+        projectName: budgetName.trim(),
+        market: budgetMarket,
+        sqft: parseFloat(budgetSqft),
+        location: budgetLocation || undefined,
+        scope: budgetScope || undefined,
+        projectStatuses: filters.status?.length ? filters.status : ['Open', 'Soft-Closed', 'Hard-Closed'],
+      };
+      const result = budgetNarrativeFile
+        ? await budgetGeneratorService.generateWithNarrative({ ...baseParams, narrativeFile: budgetNarrativeFile })
+        : await budgetGeneratorService.generate(baseParams);
+      const dc = result.budget.totals.directCostSubtotal;
+      const overheadPct = dc > 0 ? Math.round((result.budget.totals.overhead / dc) * 100) : 10;
+      const profitPct = dc > 0 ? Math.round((result.budget.totals.profit / dc) * 100) : 10;
+      const contingencyPct = dc > 0 ? Math.round((result.budget.totals.contingency / dc) * 100) : 5;
+      const saveData: Partial<Budget> = {
+        project_name: result.budget.summary.projectName,
+        market: budgetMarket,
+        building_type: result.budget.summary.buildingType,
+        project_type: result.budget.summary.projectType,
+        square_footage: result.budget.summary.squareFootage,
+        scope_notes: budgetScope || undefined,
+        estimated_total: result.budget.summary.estimatedTotalCost,
+        cost_per_sqft: result.budget.summary.costPerSquareFoot,
+        confidence_level: result.budget.summary.confidenceLevel as 'high' | 'medium' | 'low',
+        methodology: result.budget.summary.methodology,
+        labor_subtotal: result.budget.totals.laborSubtotal,
+        material_subtotal: result.budget.totals.materialSubtotal,
+        equipment_subtotal: result.budget.totals.equipmentSubtotal,
+        subcontract_subtotal: result.budget.totals.subcontractSubtotal,
+        direct_cost_subtotal: result.budget.totals.directCostSubtotal,
+        overhead: result.budget.totals.overhead,
+        profit: result.budget.totals.profit,
+        contingency: result.budget.totals.contingency,
+        grand_total: result.budget.totals.grandTotal,
+        overhead_percent: overheadPct,
+        profit_percent: profitPct,
+        contingency_percent: contingencyPct,
+        sections: result.budget.sections,
+        baseline_sections: result.budget.sections,
+        assumptions: result.budget.assumptions,
+        risks: result.budget.risks,
+        comparable_projects: result.similarProjects.map(p => ({
+          name: p.name,
+          building_type: result.budget.summary.buildingType,
+          square_footage: p.sqft,
+          total_cost: p.totalCost,
+          cost_per_sqft: p.costPerSqft,
+          year: new Date().getFullYear(),
+          similarity_score: p.similarityScore,
+        })),
+        status: 'draft',
+      };
+      const res = await budgetsApi.create(saveData);
+      navigate(`/estimating/budget-generator/${res.data.id}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to generate budget. Please try again.');
+      setBudgetGenerating(false);
+    }
+  };
+
   const activeFilterCount = useMemo(() => {
     let n = 0;
     if (filters.status?.length) n++;
@@ -229,6 +371,8 @@ const CostDatabase: React.FC = () => {
     if (filters.manager_id?.length) n++;
     if (filters.date_from || filters.date_to) n++;
     if (filters.value_min != null || filters.value_max != null) n++;
+    if (filters.sqft_min != null || filters.sqft_max != null) n++;
+    if (filters.project_ids?.length) n++;
     return n;
   }, [filters]);
 
@@ -272,23 +416,41 @@ const CostDatabase: React.FC = () => {
   return (
     <div style={{ padding: '1rem 1.5rem', maxWidth: '1600px', margin: '0 auto' }}>
       <div style={{ marginBottom: '0.75rem' }}>
-        <Link to="/estimating" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-          &larr; Back to Estimating
-        </Link>
+        {isBudgetMode ? (
+          <Link to="/estimating/budgets" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+            &larr; Back to Budgets
+          </Link>
+        ) : (
+          <Link to="/estimating" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+            &larr; Back to Estimating
+          </Link>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.15rem' }}>
               📊 Cost Database
             </h1>
             <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-              {dataSource === 'vista'
-                ? 'Historical cost data aggregated from project phase codes'
-                : 'Aggregated cost data from estimates'}
+              {isBudgetMode
+                ? 'Filter to find comparable projects, then click Generate Budget'
+                : dataSource === 'vista'
+                  ? 'Historical cost data aggregated from project phase codes'
+                  : 'Aggregated cost data from estimates'}
             </div>
           </div>
-          <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '3px', gap: '2px' }}>
-            <SourceBtn active={dataSource === 'vista'} onClick={() => setDataSource('vista')}>Vista Projects</SourceBtn>
-            <SourceBtn active={dataSource === 'estimates'} onClick={() => setDataSource('estimates')}>Estimates</SourceBtn>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {isBudgetMode && (
+              <button
+                className="sales-btn sales-btn-primary"
+                onClick={() => setShowBudgetModal(true)}
+              >
+                ✦ Generate Budget
+              </button>
+            )}
+            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '3px', gap: '2px' }}>
+              <SourceBtn active={dataSource === 'vista'} onClick={() => setDataSource('vista')}>Vista Projects</SourceBtn>
+              <SourceBtn active={dataSource === 'estimates'} onClick={() => setDataSource('estimates')}>Estimates</SourceBtn>
+            </div>
           </div>
         </div>
       </div>
@@ -420,6 +582,46 @@ const CostDatabase: React.FC = () => {
               );
             })()}
           </div>
+
+          {/* Square footage range */}
+          <div style={{ flex: '0 0 260px' }}>
+            <Label>Square Footage</Label>
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              <NumberInput placeholder="Min SF" value={filters.sqft_min}
+                onChange={v => setFilter('sqft_min', v)} style={inputStyle} />
+              <NumberInput placeholder="Max SF" value={filters.sqft_max}
+                onChange={v => setFilter('sqft_max', v)} style={inputStyle} />
+            </div>
+            {opts?.sqftRange.min != null && opts?.sqftRange.max != null && opts.sqftRange.max > opts.sqftRange.min && (() => {
+              const minV = Math.floor(opts.sqftRange.min!);
+              const maxV = Math.ceil(opts.sqftRange.max!);
+              const lowV = filters.sqft_min != null ? filters.sqft_min : minV;
+              const highV = filters.sqft_max != null ? filters.sqft_max : maxV;
+              const step = Math.max(100, Math.round((maxV - minV) / 1000));
+              return (
+                <DualRangeSlider
+                  min={minV} max={maxV} step={step}
+                  low={lowV} high={highV}
+                  onChange={(lo, hi) => setFilters(prev => ({
+                    ...prev,
+                    sqft_min: lo === minV ? null : lo,
+                    sqft_max: hi === maxV ? null : hi,
+                  }))}
+                  formatValue={v => fmtNum(v)}
+                />
+              );
+            })()}
+          </div>
+
+          {/* Project search-to-select */}
+          <div style={{ flex: '1 1 220px' }}>
+            <Label>Projects</Label>
+            <ProjectSearchSelect
+              projects={opts?.projects || []}
+              selected={filters.project_ids || []}
+              onChange={next => setFilter('project_ids', next.length ? next : undefined)}
+            />
+          </div>
         </div>
       </div>
 
@@ -517,6 +719,8 @@ const CostDatabase: React.FC = () => {
               projects={projects || []}
               excluded={excluded}
               onToggle={toggleExcluded}
+              onSqftSave={handleSqftSave}
+              onScopesSave={handleScopesSave}
               loading={projLoading}
             />
           </div>
@@ -602,6 +806,8 @@ const CostDatabase: React.FC = () => {
               projects={projects || []}
               excluded={excluded}
               onToggle={toggleExcluded}
+              onSqftSave={handleSqftSave}
+              onScopesSave={handleScopesSave}
               loading={projLoading}
             />
           </div>
@@ -986,6 +1192,140 @@ const CostDatabase: React.FC = () => {
       )}
 
       </>)}
+
+      {/* Generate Budget Modal */}
+      {showBudgetModal && (
+        <div className="modal-overlay" onClick={() => { if (!budgetGenerating) setShowBudgetModal(false); }}>
+          <div className="modal-container" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Generate Budget</h2>
+              {!budgetGenerating && (
+                <button className="modal-close" onClick={() => setShowBudgetModal(false)}>×</button>
+              )}
+            </div>
+            {budgetGenerating ? (
+              <div className="loading-card" style={{ borderRadius: '0 0 8px 8px', minHeight: '320px' }}>
+                <div className="titan-loading-container">
+                  <div className="titan-logo-spinner">
+                    <div className="spinner-ring"></div>
+                    <div className="spinner-ring"></div>
+                    <div className="spinner-ring"></div>
+                    <span className="titan-icon">T</span>
+                  </div>
+                  <h3 style={{ margin: 0, color: '#ffffff', fontWeight: 700, fontSize: '1.5rem', letterSpacing: '0.02em' }}>Titan is Working...</h3>
+                  <div className="titan-messages">
+                    <p className="titan-message">Analyzing comparable projects...</p>
+                    <p className="titan-message">Calculating cost projections...</p>
+                    <p className="titan-message">Applying regional labor rates...</p>
+                    <p className="titan-message">Reviewing material costs...</p>
+                    <p className="titan-message">Finalizing your estimate...</p>
+                  </div>
+                  <div className="titan-progress-bar">
+                    <div className="titan-progress-fill"></div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="modal-body">
+                <div className="form-group">
+                  <label className="form-label">Project Name *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. St. Vincent NICU Renovation"
+                    value={budgetName}
+                    onChange={e => setBudgetName(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Market *</label>
+                  <select
+                    className="form-input"
+                    value={budgetMarket}
+                    onChange={e => setBudgetMarket(e.target.value)}
+                  >
+                    <option value="">Select market…</option>
+                    {(opts?.markets || []).map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Square Footage *</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    placeholder="e.g. 15000"
+                    value={budgetSqft}
+                    onChange={e => setBudgetSqft(e.target.value)}
+                    min="0"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Location</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Eau Claire, WI"
+                    value={budgetLocation}
+                    onChange={e => setBudgetLocation(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Scope Notes</label>
+                  <textarea
+                    className="form-input"
+                    placeholder="Optional: describe any special requirements or scope details..."
+                    value={budgetScope}
+                    onChange={e => setBudgetScope(e.target.value)}
+                    style={{ resize: 'vertical', minHeight: '80px' }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Design Narrative (optional)</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="file"
+                      accept=".pdf,.docx,.txt"
+                      onChange={e => setBudgetNarrativeFile(e.target.files?.[0] || null)}
+                      style={{ fontSize: '13px' }}
+                    />
+                    {budgetNarrativeFile && (
+                      <button
+                        type="button"
+                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px' }}
+                        onClick={() => setBudgetNarrativeFile(null)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>Upload a PDF, DOCX, or TXT file for Titan to reference when generating the budget</p>
+                </div>
+                {(filters.status?.length || filters.market?.length) && (
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', background: '#f8fafc', borderRadius: '6px', padding: '8px 12px' }}>
+                    Budget will use projects matching current filters as comparables
+                    {summary?.project_count ? ` (${summary.project_count} projects)` : ''}.
+                  </div>
+                )}
+              </div>
+            )}
+            {!budgetGenerating && (
+              <div className="modal-footer">
+                <button className="sales-btn sales-btn-secondary" onClick={() => setShowBudgetModal(false)}>Cancel</button>
+                <button
+                  className="sales-btn sales-btn-primary"
+                  onClick={handleGenerateBudget}
+                  disabled={!budgetName.trim() || !budgetSqft || !budgetMarket}
+                >
+                  Generate Budget
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1102,6 +1442,31 @@ const Empty: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>{children}</div>
 );
 
+// Plain number input — displays formatted integer but stores a plain number.
+const NumberInput: React.FC<{
+  value: number | null | undefined;
+  onChange: (next: number | null) => void;
+  placeholder?: string;
+  style?: React.CSSProperties;
+}> = ({ value, onChange, placeholder, style }) => {
+  const display = value == null || isNaN(Number(value))
+    ? ''
+    : Number(value).toLocaleString('en-US');
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      placeholder={placeholder}
+      value={display}
+      onChange={e => {
+        const digits = e.target.value.replace(/[^\d]/g, '');
+        onChange(digits === '' ? null : parseInt(digits, 10));
+      }}
+      style={style}
+    />
+  );
+};
+
 // Currency input — displays "$1,234,567" but stores a plain number.
 const CurrencyInput: React.FC<{
   value: number | null | undefined;
@@ -1127,63 +1492,210 @@ const CurrencyInput: React.FC<{
   );
 };
 
-// Source-projects table with per-row exclude checkboxes.
-// Rendered both below the cost-type table and inside the Source Projects tab.
+// Source-projects table with per-row exclude checkboxes, inline sqft editing, and scopes popup.
 const SourceProjectsTable: React.FC<{
   projects: ProjectRow[];
   excluded: Set<number>;
   onToggle: (id: number) => void;
+  onSqftSave?: (id: number, sqft: number | null) => void;
+  onScopesSave?: (id: number, scopes: string[]) => void;
   loading: boolean;
-}> = ({ projects, excluded, onToggle, loading }) => {
+}> = ({ projects, excluded, onToggle, onSqftSave, onScopesSave, loading }) => {
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingVal, setEditingVal] = useState('');
+  const [scopesPopupId, setScopesPopupId] = useState<number | null>(null);
+  const [scopesPopupPos, setScopesPopupPos] = useState<{ top: number; left: number } | null>(null);
+  const [pendingScopes, setPendingScopes] = useState<string[]>([]);
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  const startEdit = (p: ProjectRow) => {
+    if (!onSqftSave) return;
+    setEditingId(p.id);
+    setEditingVal(p.total_sqft != null ? String(p.total_sqft) : '');
+  };
+
+  const commitEdit = (id: number) => {
+    if (editingId !== id) return;
+    const digits = editingVal.replace(/[^\d]/g, '');
+    const sqft = digits === '' ? null : parseInt(digits, 10);
+    onSqftSave?.(id, sqft);
+    setEditingId(null);
+  };
+
+  useEffect(() => {
+    if (!scopesPopupId) return;
+    const handler = (e: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
+        onScopesSave?.(scopesPopupId, pendingScopes);
+        setScopesPopupId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [scopesPopupId, pendingScopes, onScopesSave]);
+
   if (loading) return <Loading />;
   if (!projects.length) return <Empty>No projects match your filters.</Empty>;
-  const includedTotal = projects.reduce((s, p) => (excluded.has(p.id) ? s : s + p.phase_jtd_cost), 0);
+
+  const includedTotal = projects.reduce((s, p) => {
+    if (excluded.has(p.id)) return s;
+    return s + (p.phase_jtd_cost > 0 ? p.phase_jtd_cost : (p.contract_value || 0));
+  }, 0);
+
   return (
-    <table style={tableStyle}>
-      <thead><tr style={theadRow}>
-        <Th align="left">Incl.</Th>
-        <Th align="left">Number</Th><Th align="left">Name</Th>
-        <Th align="left">Status</Th><Th align="left">Dept</Th><Th align="left">Market</Th>
-        <Th align="left">Start</Th><Th align="left">End</Th>
-        <Th>Contract</Th><Th>Phase Est</Th><Th>Phase JTD</Th>
-        <Th>Sq Ft</Th><Th>JTD $/SF</Th>
-        <Th>% of Total</Th>
-      </tr></thead>
-      <tbody>
-        {projects.map(p => {
-          const isExcluded = excluded.has(p.id);
-          const pct = includedTotal > 0 && !isExcluded ? p.phase_jtd_cost / includedTotal : 0;
-          return (
-            <tr key={p.id} style={{
-              borderBottom: '1px solid #f1f5f9',
-              opacity: isExcluded ? 0.45 : 1,
-              background: isExcluded ? '#fef2f2' : undefined,
-            }}>
-              <Td align="left" style={{ width: '40px' }}>
-                <input type="checkbox" checked={!isExcluded}
-                  onChange={() => onToggle(p.id)}
-                  title={isExcluded ? 'Include in reporting' : 'Exclude from reporting'} />
-              </Td>
-              <Td><Link to={`/projects/${p.id}`} style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}>{p.number}</Link></Td>
-              <Td>{p.name}</Td>
-              <Td>{p.status}</Td>
-              <Td>{p.department_number || '-'}</Td>
-              <Td>{p.market || '-'}</Td>
-              <Td>{p.start_date ? new Date(p.start_date).toLocaleDateString() : '-'}</Td>
-              <Td>{p.end_date ? new Date(p.end_date).toLocaleDateString() : '-'}</Td>
-              <Td align="right">{fmt(p.contract_value)}</Td>
-              <Td align="right">{fmt(p.phase_est_cost)}</Td>
-              <Td align="right">{fmt(p.phase_jtd_cost)}</Td>
-              <Td align="right">{p.total_sqft != null ? fmtNum(p.total_sqft) : '—'}</Td>
-              <Td align="right">{p.cost_per_sqft != null ? `$${p.cost_per_sqft.toFixed(2)}` : '—'}</Td>
-              <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>
-                {isExcluded ? '—' : `${(pct * 100).toFixed(1)}%`}
-              </Td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <>
+      <table style={tableStyle}>
+        <thead><tr style={theadRow}>
+          <Th align="left">Incl.</Th>
+          <Th align="left">Number</Th><Th align="left">Name</Th>
+          <Th align="left">Status</Th><Th align="left">Dept</Th><Th align="left">Market</Th>
+          <Th align="left">Start</Th><Th align="left">End</Th>
+          <Th>Contract</Th><Th>Phase Est</Th><Th>Phase JTD</Th>
+          <Th>Sq Ft {onSqftSave && <span style={{ fontWeight: 400, textTransform: 'none', fontSize: '0.6rem', color: '#94a3b8' }}>(click to edit)</span>}</Th>
+          <Th>JTD $/SF</Th>
+          {onScopesSave && <Th align="left">Scopes</Th>}
+          <Th>% of Total</Th>
+        </tr></thead>
+        <tbody>
+          {projects.map(p => {
+            const isExcluded = excluded.has(p.id);
+            const baseVal = p.phase_jtd_cost > 0 ? p.phase_jtd_cost : (p.contract_value || 0);
+            const pct = includedTotal > 0 && !isExcluded ? baseVal / includedTotal : 0;
+            return (
+              <tr key={p.id} style={{
+                borderBottom: '1px solid #f1f5f9',
+                opacity: isExcluded ? 0.45 : 1,
+                background: isExcluded ? '#fef2f2' : undefined,
+              }}>
+                <Td align="left" style={{ width: '40px' }}>
+                  <input type="checkbox" checked={!isExcluded}
+                    onChange={() => onToggle(p.id)}
+                    title={isExcluded ? 'Include in reporting' : 'Exclude from reporting'} />
+                </Td>
+                <Td><Link to={`/projects/${p.id}`} style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}>{p.number}</Link></Td>
+                <Td>{p.name}</Td>
+                <Td>{p.status}</Td>
+                <Td>{p.department_number || '-'}</Td>
+                <Td>{p.market || '-'}</Td>
+                <Td>{p.start_date ? new Date(p.start_date).toLocaleDateString() : '-'}</Td>
+                <Td>{p.end_date ? new Date(p.end_date).toLocaleDateString() : '-'}</Td>
+                <Td align="right">{fmt(p.contract_value)}</Td>
+                <Td align="right">{fmt(p.phase_est_cost)}</Td>
+                <Td align="right">{fmt(p.phase_jtd_cost)}</Td>
+                <td style={{ textAlign: 'right', padding: '0.4rem 0.5rem' }}>
+                  {editingId === p.id ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editingVal}
+                      onChange={e => setEditingVal(e.target.value.replace(/[^\d]/g, ''))}
+                      onBlur={() => commitEdit(p.id)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { e.preventDefault(); commitEdit(p.id); }
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
+                      style={{ width: '80px', padding: '2px 4px', fontSize: '0.78rem', border: '1px solid #3b82f6', borderRadius: '3px', textAlign: 'right' }}
+                    />
+                  ) : (
+                    <span
+                      onClick={() => startEdit(p)}
+                      title={onSqftSave ? 'Click to enter square footage' : undefined}
+                      style={{ cursor: onSqftSave ? 'text' : 'default', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                    >
+                      {p.total_sqft != null ? fmtNum(p.total_sqft) : '—'}
+                      {onSqftSave && <span style={{ color: '#cbd5e1', fontSize: '0.65rem', lineHeight: 1 }}>✎</span>}
+                    </span>
+                  )}
+                </td>
+                <Td align="right">{p.cost_per_sqft != null ? `$${p.cost_per_sqft.toFixed(2)}` : '—'}</Td>
+                {onScopesSave && (
+                  <td style={{ padding: '0.4rem 0.5rem', maxWidth: '200px' }}>
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (scopesPopupId === p.id) {
+                          onScopesSave(p.id, pendingScopes);
+                          setScopesPopupId(null);
+                        } else {
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          setScopesPopupId(p.id);
+                          setPendingScopes(p.scopes || []);
+                          setScopesPopupPos({ top: rect.bottom + 2, left: rect.left });
+                        }
+                      }}
+                      style={{
+                        background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                        display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: '3px',
+                      }}
+                    >
+                      {p.scopes?.length
+                        ? p.scopes.map(s => (
+                            <span key={s} style={{
+                              fontSize: '0.68rem', padding: '0.15rem 0.45rem', borderRadius: 4,
+                              background: SCOPE_COLORS[s]?.bg ?? '#64748b',
+                              color: SCOPE_COLORS[s]?.color ?? '#fff',
+                              fontWeight: 600,
+                            }}>{s}</span>
+                          ))
+                        : <span style={{ fontSize: '0.72rem', color: '#cbd5e1' }}>+ Add scopes</span>}
+                    </button>
+                  </td>
+                )}
+                <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>
+                  {isExcluded ? '—' : `${(pct * 100).toFixed(1)}%`}
+                </Td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {scopesPopupId != null && scopesPopupPos && createPortal(
+        <div
+          ref={popupRef}
+          style={{
+            position: 'fixed',
+            top: scopesPopupPos.top,
+            left: scopesPopupPos.left,
+            zIndex: 9999,
+            background: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '6px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            padding: '0.5rem',
+            minWidth: '190px',
+            maxHeight: '280px',
+            overflowY: 'auto',
+          }}
+        >
+          <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.4rem', padding: '0 0.2rem' }}>
+            Scopes of Work
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', padding: '0 0.1rem' }}>
+            {SCOPE_OPTIONS.map(opt => {
+              const active = pendingScopes.includes(opt);
+              return (
+                <button
+                  key={opt}
+                  onClick={() => setPendingScopes(prev =>
+                    prev.includes(opt) ? prev.filter(s => s !== opt) : [...prev, opt]
+                  )}
+                  style={{
+                    fontSize: '0.72rem', padding: '0.2rem 0.6rem', borderRadius: 4,
+                    border: active ? '2px solid transparent' : '1px solid #cbd5e1',
+                    background: active ? (SCOPE_COLORS[opt]?.bg ?? '#64748b') : '#fff',
+                    color: active ? (SCOPE_COLORS[opt]?.color ?? '#fff') : '#475569',
+                    fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 };
 
@@ -1242,6 +1754,125 @@ const DualRangeSlider: React.FC<{
         <span>{formatValue(clampedHigh)}</span>
       </div>
     </div>
+  );
+};
+
+// Search-to-select for projects — text filter + multi-checkbox, portaled dropdown.
+const ProjectSearchSelect: React.FC<{
+  projects: { id: number; number: string; name: string }[];
+  selected: number[];
+  onChange: (next: number[]) => void;
+}> = ({ projects, selected, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const updatePos = () => {
+    if (!btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + 2, left: r.left, width: Math.max(r.width, 300) });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    updatePos();
+    const onScroll = () => updatePos();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return projects;
+    const q = search.toLowerCase();
+    return projects.filter(p =>
+      p.number.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)
+    );
+  }, [projects, search]);
+
+  const toggle = (id: number) => {
+    onChange(selected.includes(id) ? selected.filter(i => i !== id) : [...selected, id]);
+  };
+
+  const label = selected.length === 0
+    ? 'All projects'
+    : selected.length === 1
+      ? (() => { const p = projects.find(x => x.id === selected[0]); return p ? `${p.number} — ${p.name}` : '1 project'; })()
+      : `${selected.length} projects`;
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: '0.25rem' }}>
+        <button ref={btnRef} onClick={() => setOpen(o => !o)} style={{
+          flex: 1, padding: '0.35rem 0.5rem', fontSize: '0.78rem',
+          border: `1px solid ${selected.length ? '#3b82f6' : '#e2e8f0'}`, borderRadius: '4px',
+          background: selected.length ? '#eff6ff' : '#fff',
+          textAlign: 'left', cursor: 'pointer',
+          color: selected.length === 0 ? '#94a3b8' : '#1e40af',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {label}
+        </button>
+        {selected.length > 0 && (
+          <button onClick={() => onChange([])} style={{
+            padding: '0.35rem 0.5rem', fontSize: '0.78rem', border: '1px solid #e2e8f0',
+            borderRadius: '4px', background: '#fff', cursor: 'pointer', color: '#64748b',
+            flexShrink: 0,
+          }} title="Clear selection">
+            ×
+          </button>
+        )}
+      </div>
+      {open && pos && createPortal(
+        <>
+          <div onClick={() => { setOpen(false); setSearch(''); }} style={{ position: 'fixed', inset: 0, zIndex: 9998 }} />
+          <div onClick={e => e.stopPropagation()} style={{
+            position: 'fixed', top: pos.top, left: pos.left, width: pos.width,
+            background: '#fff', border: '1px solid #e2e8f0', borderRadius: '4px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 9999,
+          }}>
+            <div style={{ padding: '0.35rem', borderBottom: '1px solid #f1f5f9' }}>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Search by number or name..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ ...inputStyle, height: '28px' }}
+              />
+            </div>
+            <div style={{ maxHeight: '220px', overflow: 'auto' }}>
+              {filtered.length === 0 ? (
+                <div style={{ padding: '0.5rem', fontSize: '0.75rem', color: '#94a3b8' }}>No matches</div>
+              ) : filtered.map(p => (
+                <label key={p.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '0.4rem',
+                  padding: '0.3rem 0.5rem', fontSize: '0.78rem', cursor: 'pointer',
+                  background: selected.includes(p.id) ? '#eff6ff' : 'transparent',
+                }}>
+                  <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggle(p.id)} />
+                  <span style={{ fontWeight: 600, fontFamily: 'monospace', flexShrink: 0 }}>{p.number}</span>
+                  <span style={{ color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                </label>
+              ))}
+            </div>
+            {selected.length > 0 && (
+              <div style={{ padding: '0.3rem 0.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{selected.length} selected</span>
+                <button onClick={() => onChange([])} style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '3px', cursor: 'pointer', color: '#64748b' }}>
+                  Clear
+                </button>
+              </div>
+            )}
+          </div>
+        </>,
+        document.body
+      )}
+    </>
   );
 };
 

@@ -138,7 +138,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
         { label: 'Takeoffs', path: '/estimating/takeoffs' },
         { label: 'Budgets', path: '/estimating/budgets' },
         { label: 'Cost Control', path: '/estimating/cost-control' },
-        { label: 'Cost Model', path: '/estimating/cost-model' },
         { label: 'Cost Database', path: '/estimating/cost-database' },
       ],
     },

@@ -521,6 +521,47 @@ router.post('/:id/followers', async (req, res) => {
     await FeedbackFollower.follow(req.params.id, userId, req.tenantId, req.user.id);
     const followers = await FeedbackFollower.getFollowers(req.params.id, req.tenantId);
     res.json({ followers });
+
+    // Notify the added user (fire-and-forget) — skip if they added themselves
+    if (userId !== req.user.id) {
+      (async () => {
+        try {
+          const userResult = await db.query(
+            `SELECT email, first_name FROM users WHERE id = $1 AND tenant_id = $2`,
+            [userId, req.tenantId]
+          );
+          const addedUser = userResult.rows[0];
+          if (!addedUser) return;
+
+          const appBaseUrl = process.env.APP_URL || process.env.FRONTEND_URL || '';
+          let emailSent = false;
+          if (addedUser.email) {
+            const result = await sendEmail({
+              to: addedUser.email,
+              subject: `[TITAN] You're now watching: ${feedback.title}`,
+              text: `Hi ${addedUser.first_name},\n\nYou've been added as a watcher on feedback: "${feedback.title}"\n\nYou'll receive notifications whenever its status changes.${appBaseUrl ? `\n\nView it here: ${appBaseUrl}/feedback` : ''}`,
+              html: `<p>Hi ${addedUser.first_name},</p><p>You've been added as a watcher on feedback: <strong>${feedback.title}</strong></p><p>You'll receive notifications whenever its status changes.</p>${appBaseUrl ? `<p><a href="${appBaseUrl}/feedback">View in TITAN</a></p>` : ''}`,
+            });
+            emailSent = result.success === true;
+          }
+
+          await Notification.create({
+            tenantId: req.tenantId,
+            userId,
+            entityType: 'feedback',
+            entityId: feedback.id,
+            eventType: 'watching',
+            title: 'Added as Watcher',
+            message: `You've been added as a watcher on: "${feedback.title}"`,
+            link: '/feedback',
+            createdBy: req.user.id,
+            emailSent,
+          });
+        } catch (err) {
+          console.error('Watcher notification error:', err);
+        }
+      })();
+    }
   } catch (err) {
     console.error('Error adding follower:', err);
     res.status(500).json({ message: 'Error adding follower' });

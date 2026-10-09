@@ -252,7 +252,7 @@ router.get('/stats', async (req, res, next) => {
 // Find similar projects (preview before generating)
 router.post('/similar', async (req, res, next) => {
   try {
-    const { market, buildingType, bidType, sqft } = req.body;
+    const { market, buildingType, bidType, sqft, sqftMin, sqftMax, yearFrom, yearTo } = req.body;
     const projectTypes = Array.isArray(req.body.projectType)
       ? req.body.projectType.filter(Boolean)
       : (req.body.projectType ? [req.body.projectType] : []);
@@ -276,9 +276,12 @@ router.post('/similar', async (req, res, next) => {
         projectType: projectTypeParam,
         bidType: bidType || null,
         sqft: sqft || null,
-        limit: 20,
         tenantId: req.tenantId,
-        projectStatuses: projectStatusParam
+        projectStatuses: projectStatusParam,
+        sqftMin: sqftMin ? parseFloat(sqftMin) : null,
+        sqftMax: sqftMax ? parseFloat(sqftMax) : null,
+        yearFrom: yearFrom ? parseInt(yearFrom) : null,
+        yearTo: yearTo ? parseInt(yearTo) : null,
       }),
       HistoricalProject.getCategoryAverages(market || null, projectTypeParam, req.tenantId)
     ]);
@@ -456,7 +459,8 @@ async function generateHandler(req, res, next) {
       projectDetails,
       averages,
       location,
-      narrativeText
+      narrativeText,
+      !!(selectedProjectIds && selectedProjectIds.length > 0)
     );
 
     // Call Claude to generate budget
@@ -564,10 +568,99 @@ async function generateHandler(req, res, next) {
   }
 }
 
+// Compute cost-type ratios and unit rates from comparable project detail
+function calcCostTypeBreakdown(projectDetails) {
+  const f = (v) => parseFloat(v) || 0;
+
+  const rows = projectDetails.map(p => {
+    const labor =
+      f(p.pm_cost) + f(p.s_field_cost) + f(p.r_field_cost) + f(p.e_field_cost) +
+      f(p.o_field_cost) + f(p.w_field_cost) + f(p.hw_field_cost) + f(p.chw_field_cost) +
+      f(p.d_field_cost) + f(p.g_field_cost) + f(p.gs_field_cost) + f(p.cw_field_cost) +
+      f(p.rad_field_cost) + f(p.ref_field_cost) + f(p.stm_cond_field_cost) + f(p.pf_misc_field_cost);
+
+    const material =
+      f(p.s_materials_with_escalation) + f(p.r_materials_with_escalation) +
+      f(p.e_material_with_escalation) + f(p.o_materials_with_escalation) +
+      f(p.w_materials_with_escalation) + f(p.hw_material_with_esc) + f(p.chw_material_with_esc) +
+      f(p.d_material_with_esc) + f(p.g_material_with_esc) + f(p.gs_material_with_esc) +
+      f(p.cw_material_with_esc) + f(p.rad_material_with_esc) + f(p.ref_material_with_esc) +
+      f(p.stm_cond_material_with_esc);
+
+    const equipment = f(p.sm_equip_cost) + f(p.pf_equip_cost);
+
+    const other =
+      f(p.controls) + f(p.insulation) + f(p.balancing) +
+      f(p.electrical) + f(p.general) + f(p.allowance);
+
+    const direct = labor + material + equipment + other;
+    if (direct === 0) return null;
+
+    // Unit rates for ductwork ($/lb) and piping ($/ft)
+    const ductLbs = f(p.s_lbs) + f(p.r_lbs) + f(p.e_lbs) + f(p.o_lbs) + f(p.w_lbs);
+    const ductLabor = f(p.s_field_cost) + f(p.r_field_cost) + f(p.e_field_cost) + f(p.o_field_cost) + f(p.w_field_cost);
+    const ductMaterial = f(p.s_materials_with_escalation) + f(p.r_materials_with_escalation) +
+      f(p.e_material_with_escalation) + f(p.o_materials_with_escalation) + f(p.w_materials_with_escalation);
+
+    const pipingFt = f(p.hw_footage) + f(p.chw_footage) + f(p.d_footage) + f(p.g_footage) + f(p.cw_footage);
+    const pipingLabor = f(p.hw_field_cost) + f(p.chw_field_cost) + f(p.d_field_cost) + f(p.g_field_cost) + f(p.cw_field_cost);
+    const pipingMaterial = f(p.hw_material_with_esc) + f(p.chw_material_with_esc) + f(p.d_material_with_esc) + f(p.g_material_with_esc) + f(p.cw_material_with_esc);
+
+    const equipUnits = f(p.ahu) + f(p.rtu) + f(p.mau) + f(p.eru) + f(p.chiller) + f(p.boilers);
+
+    return {
+      name: p.name,
+      sqft: f(p.total_sqft),
+      labor, material, equipment, other, direct,
+      laborPct: labor / direct,
+      materialPct: material / direct,
+      equipmentPct: equipment / direct,
+      otherPct: other / direct,
+      ductLaborPerLb: ductLbs > 0 ? ductLabor / ductLbs : null,
+      ductMaterialPerLb: ductLbs > 0 ? ductMaterial / ductLbs : null,
+      ductLbsPerSqft: f(p.total_sqft) > 0 ? ductLbs / f(p.total_sqft) : null,
+      pipingLaborPerFt: pipingFt > 0 ? pipingLabor / pipingFt : null,
+      pipingMaterialPerFt: pipingFt > 0 ? pipingMaterial / pipingFt : null,
+      pipingFtPerSqft: f(p.total_sqft) > 0 ? pipingFt / f(p.total_sqft) : null,
+      equipCostPerUnit: equipUnits > 0 ? equipment / equipUnits : null,
+      equipUnitsPerSqft: f(p.total_sqft) > 0 ? equipUnits / f(p.total_sqft) : null,
+    };
+  }).filter(Boolean);
+
+  if (rows.length === 0) return null;
+
+  const avg = (fn) => rows.reduce((s, r) => s + (fn(r) ?? 0), 0) / rows.length;
+  const avgNonNull = (fn) => {
+    const vals = rows.map(fn).filter(v => v != null);
+    return vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+  };
+
+  return {
+    perProject: rows,
+    avgLaborPct: avg(r => r.laborPct),
+    avgMaterialPct: avg(r => r.materialPct),
+    avgEquipmentPct: avg(r => r.equipmentPct),
+    avgOtherPct: avg(r => r.otherPct),
+    avgDuctLaborPerLb: avgNonNull(r => r.ductLaborPerLb),
+    avgDuctMaterialPerLb: avgNonNull(r => r.ductMaterialPerLb),
+    avgDuctLbsPerSqft: avgNonNull(r => r.ductLbsPerSqft),
+    avgPipingLaborPerFt: avgNonNull(r => r.pipingLaborPerFt),
+    avgPipingMaterialPerFt: avgNonNull(r => r.pipingMaterialPerFt),
+    avgPipingFtPerSqft: avgNonNull(r => r.pipingFtPerSqft),
+    avgEquipCostPerUnit: avgNonNull(r => r.equipCostPerUnit),
+    avgEquipUnitsPerSqft: avgNonNull(r => r.equipUnitsPerSqft),
+  };
+}
+
 // Helper function to build AI system prompt
-function buildBudgetSystemPrompt(projectName, market, buildingType, projectType, bidType, sqft, scope, projectDetails, averages, location, narrativeText = null) {
+function buildBudgetSystemPrompt(projectName, market, buildingType, projectType, bidType, sqft, scope, projectDetails, averages, location, narrativeText = null, userSelectedProjects = false) {
   const formatCurrency = (val) => val ? `$${Math.round(val).toLocaleString()}` : '$0';
   const formatNumber = (val) => val ? Math.round(val).toLocaleString() : '0';
+  const fmtPct = (v) => v != null ? `${(v * 100).toFixed(1)}%` : 'N/A';
+  const fmtRate = (v) => v != null ? `$${v.toFixed(2)}` : 'N/A';
+
+  // Pre-calculate cost type ratios and unit rates from comparables
+  const costTypes = calcCostTypeBreakdown(projectDetails);
 
   // Calculate inflation info for prompt
   const inflationRate = (ANNUAL_INFLATION_RATE * 100).toFixed(1);
@@ -617,7 +710,42 @@ Category Averages:
 - Hot Water Piping (Material): ${formatCurrency(averages.avg_hw_material)}
 - Chilled Water Piping (Material): ${formatCurrency(averages.avg_chw_material)}
 
-## TOP 3 COMPARABLE PROJECTS (All costs inflation-adjusted to ${new Date().getFullYear()} dollars):
+## COST TYPE CLASSIFICATION (use these costType numbers on every section):
+- 1 = Labor       → field labor for ductwork, piping, PM hours (sections that are primarily trade labor)
+- 2 = Material    → raw ductwork sheet metal, pipe/fittings (use only if creating a standalone material section)
+- 3 = Subcontracts → Controls, BAS, Insulation, Balancing, Electrical (work subcontracted to others)
+- 4 = Rentals     → Truck rental, temp heat, equipment rental
+- 5 = MEP Equipment → AHUs, RTUs, boilers, chillers, pumps, VFDs, and all major mechanical equipment
+- 6 = General Conditions → General conditions, allowances, mobilization
+
+Every section in the JSON MUST include a "costType" integer from the list above.
+Ductwork and piping sections are costType 1 (Labor) — their items include both laborCost and materialCost within the same section; the material component is part of the labor trade scope.
+
+## COST TYPE ANALYSIS FROM COMPARABLE PROJECTS:
+${costTypes ? `
+The following cost-type ratios are calculated directly from the comparable project data (inflation-adjusted). Use these as the PRIMARY constraint when allocating costs — do NOT let your section subtotals produce ratios that deviate more than ~5 percentage points from these averages without a documented reason.
+
+| Cost Type | ${costTypes.perProject.map(r => r.name).join(' | ')} | **Average** |
+|---|${costTypes.perProject.map(() => '---').join('|')}|---|
+| Labor | ${costTypes.perProject.map(r => fmtPct(r.laborPct)).join(' | ')} | **${fmtPct(costTypes.avgLaborPct)}** |
+| Material | ${costTypes.perProject.map(r => fmtPct(r.materialPct)).join(' | ')} | **${fmtPct(costTypes.avgMaterialPct)}** |
+| Equipment | ${costTypes.perProject.map(r => fmtPct(r.equipmentPct)).join(' | ')} | **${fmtPct(costTypes.avgEquipmentPct)}** |
+| Controls/Insul/Elec/Other | ${costTypes.perProject.map(r => fmtPct(r.otherPct)).join(' | ')} | **${fmtPct(costTypes.avgOtherPct)}** |
+
+### Section-Level Unit Rates (use these to size individual sections):
+${costTypes.avgDuctLbsPerSqft != null ? `- Ductwork density: ${costTypes.avgDuctLbsPerSqft.toFixed(2)} lbs/SF average across comparables` : ''}
+${costTypes.avgDuctLaborPerLb != null ? `- Ductwork labor rate: ${fmtRate(costTypes.avgDuctLaborPerLb)}/lb` : ''}
+${costTypes.avgDuctMaterialPerLb != null ? `- Ductwork material rate: ${fmtRate(costTypes.avgDuctMaterialPerLb)}/lb` : ''}
+${costTypes.avgPipingFtPerSqft != null ? `- Piping density: ${costTypes.avgPipingFtPerSqft.toFixed(2)} ft/SF average across comparables` : ''}
+${costTypes.avgPipingLaborPerFt != null ? `- Piping labor rate: ${fmtRate(costTypes.avgPipingLaborPerFt)}/ft` : ''}
+${costTypes.avgPipingMaterialPerFt != null ? `- Piping material rate: ${fmtRate(costTypes.avgPipingMaterialPerFt)}/ft` : ''}
+${costTypes.avgEquipUnitsPerSqft != null ? `- Major equipment density: ${(costTypes.avgEquipUnitsPerSqft * 1000).toFixed(2)} units per 1,000 SF` : ''}
+${costTypes.avgEquipCostPerUnit != null ? `- Equipment cost per major unit (AHU/RTU/boiler/chiller): ${fmtRate(costTypes.avgEquipCostPerUnit)}` : ''}
+
+Apply these unit rates to the new ${formatNumber(sqft)} SF project to size each section, then verify the resulting cost-type totals match the percentage targets above. Adjust rates modestly (±10–15%) for healthcare complexity or project-specific scope notes.
+` : 'Cost type breakdown not available from comparable project data — use historical averages as a guide.'}
+
+## COMPARABLE PROJECT DETAIL (All costs inflation-adjusted to ${new Date().getFullYear()} dollars):
 ${projectDetails.map((p, i) => {
   const bidYear = p.bid_date ? new Date(p.bid_date).getFullYear() : 'N/A';
   const yearsAgo = p.bid_date ? ((new Date() - new Date(p.bid_date)) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1) : 'N/A';
@@ -657,7 +785,12 @@ Equipment Counts:
 }).join('\n')}
 
 ## YOUR TASK:
-Generate a detailed HVAC budget estimate for the new ${formatNumber(sqft)} SF project. Scale costs proportionally based on the historical data and comparable projects.
+Generate a detailed HVAC budget estimate for the new ${formatNumber(sqft)} SF project.
+
+${userSelectedProjects
+  ? `WEIGHTING INSTRUCTION: The user manually selected these specific comparable projects. They are the PRIMARY basis for this estimate. Anchor your total cost/SF to the range established by these comparables ($${Math.min(...projectDetails.map(p => parseFloat(p.total_cost_per_sqft) || 0)).toFixed(2)}–$${Math.max(...projectDetails.map(p => parseFloat(p.total_cost_per_sqft) || 0)).toFixed(2)}/SF after inflation adjustment). Adjust within that range for size differences — larger projects typically achieve modest economies of scale (5–15% reduction per doubling of SF), but do NOT go below the comparable range without a specific justification. The historical averages above are provided as secondary context for category-level breakdowns only; do not let them pull your total cost/SF outside the comparable range.`
+  : `Scale costs proportionally based on both the historical data and comparable projects, using the comparable projects as the primary reference and the historical averages to calibrate individual cost categories.`
+}
 
 IMPORTANT: Return ONLY a valid JSON object with this exact structure (no additional text before or after):
 
@@ -684,6 +817,7 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure (no additio
   "sections": [
     {
       "name": "Project Management",
+      "costType": 1,
       "subtotal": number,
       "items": [
         {
@@ -698,6 +832,7 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure (no additio
     },
     {
       "name": "Sheet Metal - Supply Ductwork",
+      "costType": 1,
       "subtotal": number,
       "items": [
         {
@@ -712,21 +847,25 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure (no additio
     },
     {
       "name": "Sheet Metal - Return Ductwork",
+      "costType": 1,
       "subtotal": number,
       "items": []
     },
     {
       "name": "Sheet Metal - Exhaust Ductwork",
+      "costType": 1,
       "subtotal": number,
       "items": []
     },
     {
       "name": "Sheet Metal - Outside Air Ductwork",
+      "costType": 1,
       "subtotal": number,
       "items": []
     },
     {
       "name": "Sheet Metal Equipment",
+      "costType": 5,
       "subtotal": number,
       "items": [
         {
@@ -739,11 +878,13 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure (no additio
     },
     {
       "name": "Piping - Hot Water",
+      "costType": 1,
       "subtotal": number,
       "items": []
     },
     {
       "name": "Piping - Chilled Water",
+      "costType": 1,
       "subtotal": number,
       "items": []
     },
@@ -753,27 +894,38 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure (no additio
       "items": []
     },
     {
+      "name": "Piping Equipment",
+      "costType": 5,
+      "subtotal": number,
+      "items": []
+    },
+    {
       "name": "Controls",
+      "costType": 3,
       "subtotal": number,
       "items": []
     },
     {
       "name": "Insulation",
+      "costType": 3,
       "subtotal": number,
       "items": []
     },
     {
       "name": "Balancing",
+      "costType": 3,
       "subtotal": number,
       "items": []
     },
     {
       "name": "Electrical",
+      "costType": 3,
       "subtotal": number,
       "items": []
     },
     {
       "name": "General Conditions",
+      "costType": 6,
       "subtotal": number,
       "items": []
     }

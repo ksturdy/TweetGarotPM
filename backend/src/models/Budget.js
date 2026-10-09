@@ -5,6 +5,7 @@ class Budget {
     const {
       tenant_id,
       project_name,
+      market,
       building_type,
       project_type,
       bid_type,
@@ -38,7 +39,7 @@ class Budget {
 
     const result = await pool.query(
       `INSERT INTO budgets (
-        tenant_id, project_name, building_type, project_type, bid_type,
+        tenant_id, project_name, market, building_type, project_type, bid_type,
         square_footage, scope_notes, estimated_total, cost_per_sqft,
         confidence_level, methodology, labor_subtotal, material_subtotal,
         equipment_subtotal, subcontract_subtotal, direct_cost_subtotal,
@@ -46,10 +47,10 @@ class Budget {
         profit_percent, contingency_percent, sections, assumptions, risks,
         comparable_projects, status, created_by, narrative_attachment_id,
         baseline_sections
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
       RETURNING *`,
       [
-        tenant_id, project_name, building_type, project_type, bid_type,
+        tenant_id, project_name, market || null, building_type, project_type, bid_type,
         square_footage, scope_notes, estimated_total, cost_per_sqft,
         confidence_level, methodology, labor_subtotal || 0, material_subtotal || 0,
         equipment_subtotal || 0, subcontract_subtotal || 0, direct_cost_subtotal || 0,
@@ -117,7 +118,7 @@ class Budget {
 
   static async update(id, tenantId, updates) {
     const allowedFields = [
-      'project_name', 'building_type', 'project_type', 'bid_type',
+      'project_name', 'market', 'building_type', 'project_type', 'bid_type',
       'square_footage', 'scope_notes', 'estimated_total', 'cost_per_sqft',
       'confidence_level', 'methodology', 'labor_subtotal', 'material_subtotal',
       'equipment_subtotal', 'subcontract_subtotal', 'direct_cost_subtotal',

@@ -28,9 +28,12 @@ function parseFilters(query) {
   const markets = parseList(query.market);
   const managerIds = parseIntList(query.manager_id);
   const excludedProjectIds = parseIntList(query.excluded_ids);
+  const projectIds = parseIntList(query.project_ids);
 
   const valueMin = query.value_min != null && query.value_min !== '' ? parseFloat(query.value_min) : null;
   const valueMax = query.value_max != null && query.value_max !== '' ? parseFloat(query.value_max) : null;
+  const sqftMin = query.sqft_min != null && query.sqft_min !== '' ? parseInt(query.sqft_min, 10) : null;
+  const sqftMax = query.sqft_max != null && query.sqft_max !== '' ? parseInt(query.sqft_max, 10) : null;
 
   return {
     statuses,
@@ -38,10 +41,13 @@ function parseFilters(query) {
     markets,
     managerIds,
     excludedProjectIds,
+    projectIds,
     dateFrom: query.date_from || null,
     dateTo: query.date_to || null,
     valueMin: !isNaN(valueMin) ? valueMin : null,
     valueMax: !isNaN(valueMax) ? valueMax : null,
+    sqftMin: sqftMin !== null && !isNaN(sqftMin) ? sqftMin : null,
+    sqftMax: sqftMax !== null && !isNaN(sqftMax) ? sqftMax : null,
     costType: query.cost_type ? parseInt(query.cost_type, 10) : null,
     phasePrefix: query.phase_prefix || null,
   };
@@ -92,6 +98,24 @@ router.get('/projects', async (req, res, next) => {
     const filters = parseFilters(req.query);
     const rows = await CostDatabase.getProjects(req.tenantId, filters);
     res.json(rows);
+  } catch (err) { next(err); }
+});
+
+router.patch('/projects/:id/scopes', async (req, res, next) => {
+  try {
+    const projectId = parseInt(req.params.id, 10);
+    const scopes = Array.isArray(req.body.scopes) ? req.body.scopes : [];
+    await CostDatabase.updateProjectScopes(projectId, scopes, req.tenantId);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+router.patch('/projects/:id/sqft', async (req, res, next) => {
+  try {
+    const projectId = parseInt(req.params.id, 10);
+    const sqft = req.body.sqft != null ? parseFloat(req.body.sqft) : null;
+    await CostDatabase.updateProjectSqft(projectId, sqft, req.tenantId);
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

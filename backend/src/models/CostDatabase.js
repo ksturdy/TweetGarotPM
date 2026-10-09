@@ -81,6 +81,27 @@ function buildProjectFilter(tenantId, filters = {}) {
     i++;
   }
 
+  if (filters.projectIds && filters.projectIds.length) {
+    conds.push(`p.id = ANY($${i})`);
+    params.push(filters.projectIds);
+    i++;
+  }
+
+  if (filters.sqftMin != null || filters.sqftMax != null) {
+    const sqftConds = ['pcm.project_id = p.id'];
+    if (filters.sqftMin != null) {
+      sqftConds.push(`pcm.total_sqft >= $${i}`);
+      params.push(filters.sqftMin);
+      i++;
+    }
+    if (filters.sqftMax != null) {
+      sqftConds.push(`pcm.total_sqft <= $${i}`);
+      params.push(filters.sqftMax);
+      i++;
+    }
+    conds.push(`EXISTS (SELECT 1 FROM project_cost_models pcm WHERE ${sqftConds.join(' AND ')})`);
+  }
+
   return { whereSql: conds.join(' AND '), params, nextParamIndex: i };
 }
 
@@ -184,6 +205,21 @@ const CostDatabase = {
        WHERE p.tenant_id = $1`,
       [tenantId]
     );
+    const { rows: sqftRows } = await db.query(
+      `SELECT MIN(pcm.total_sqft) AS min_sqft, MAX(pcm.total_sqft) AS max_sqft
+       FROM project_cost_models pcm
+       JOIN projects p ON pcm.project_id = p.id
+       WHERE p.tenant_id = $1 AND pcm.total_sqft IS NOT NULL AND pcm.total_sqft > 0`,
+      [tenantId]
+    );
+    const { rows: projectRows } = await db.query(
+      `SELECT p.id, p.number, p.name
+       FROM projects p
+       WHERE p.tenant_id = $1
+       ORDER BY p.number
+       LIMIT 5000`,
+      [tenantId]
+    );
 
     return {
       statuses: statusRows.map(r => r.status),
@@ -194,12 +230,17 @@ const CostDatabase = {
         min: rangeRows[0]?.min_value != null ? parseFloat(rangeRows[0].min_value) : null,
         max: rangeRows[0]?.max_value != null ? parseFloat(rangeRows[0].max_value) : null,
       },
+      sqftRange: {
+        min: sqftRows[0]?.min_sqft != null ? parseInt(sqftRows[0].min_sqft, 10) : null,
+        max: sqftRows[0]?.max_sqft != null ? parseInt(sqftRows[0].max_sqft, 10) : null,
+      },
       dateRange: {
         minStart: rangeRows[0]?.min_start || null,
         maxStart: rangeRows[0]?.max_start || null,
         minEnd: rangeRows[0]?.min_end || null,
         maxEnd: rangeRows[0]?.max_end || null,
       },
+      projects: projectRows.map(r => ({ id: r.id, number: r.number, name: r.name })),
     };
   },
 
@@ -379,6 +420,7 @@ const CostDatabase = {
              COALESCE(pc_sum.jtd_cost, 0) AS phase_jtd_cost,
              COALESCE(pc_sum.est_cost, 0) AS phase_est_cost,
              pcm.total_sqft,
+             COALESCE(pcm.scopes, '{}') AS scopes,
              CASE WHEN pcm.total_sqft > 0
                THEN COALESCE(pc_sum.jtd_cost, 0) / pcm.total_sqft
                ELSE NULL
@@ -409,8 +451,27 @@ const CostDatabase = {
       phase_jtd_cost: parseFloat(r.phase_jtd_cost),
       phase_est_cost: parseFloat(r.phase_est_cost),
       total_sqft: r.total_sqft != null ? parseInt(r.total_sqft, 10) : null,
+      scopes: Array.isArray(r.scopes) ? r.scopes : [],
       cost_per_sqft: r.cost_per_sqft != null ? parseFloat(r.cost_per_sqft) : null,
     }));
+  },
+
+  async updateProjectScopes(projectId, scopes, tenantId) {
+    await db.query(
+      `INSERT INTO project_cost_models (project_id, tenant_id, scopes, created_at, updated_at)
+       VALUES ($1, $2, $3, NOW(), NOW())
+       ON CONFLICT (project_id) DO UPDATE SET scopes = $3, updated_at = NOW()`,
+      [projectId, tenantId, scopes]
+    );
+  },
+
+  async updateProjectSqft(projectId, sqft, tenantId) {
+    await db.query(
+      `INSERT INTO project_cost_models (project_id, tenant_id, total_sqft, created_at, updated_at)
+       VALUES ($1, $2, $3, NOW(), NOW())
+       ON CONFLICT (project_id) DO UPDATE SET total_sqft = $3, updated_at = NOW()`,
+      [projectId, tenantId, sqft]
+    );
   },
 };
 

@@ -4,6 +4,28 @@
   margin: 0 auto;
 }
 
+/* Full-width page filter bar (new budget browser) */
+.browser-page-filter-bar {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.browser-page-filter-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.browser-page-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 /* Page Header */
 .budget-generator .page-header {
   display: flex;
@@ -119,7 +141,8 @@
   margin-top: 1.5rem;
 }
 
-.form-actions .btn {
+.form-actions .btn,
+.form-actions .sales-btn {
   flex: 1;
 }
 
@@ -851,7 +874,8 @@
   box-shadow: 0 4px 12px rgba(0, 35, 86, 0.3);
 }
 
-.budget-generator .btn-primary:disabled {
+.budget-generator .btn-primary:disabled,
+.budget-generator .sales-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -1367,13 +1391,11 @@
   display: none;
 }
 
-/* Similar Projects Preview Card (Right Column) */
+/* Project Browser Panel (Right Column) */
 .similar-projects-preview-card {
   background: #ffffff;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 0;
   padding: 1rem !important;
 }
 
@@ -1435,10 +1457,142 @@
   color: #002356;
 }
 
+/* Browser filter bar (Cost Database style) */
+.browser-filter-bar {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.browser-filter-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.browser-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.browser-filter-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.browser-status-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.browser-status-pill {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.browser-status-pill.active {
+  background: #002356;
+  color: #fff;
+  border-color: #002356;
+}
+
+.browser-filter-input {
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  width: 90px;
+  color: #374151;
+  background: #fff;
+}
+
+.browser-filter-input:focus {
+  outline: none;
+  border-color: #1a56db;
+}
+
+.browser-clear-btn {
+  padding: 4px 10px;
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #6b7280;
+  cursor: pointer;
+  white-space: nowrap;
+  align-self: flex-end;
+}
+
+.browser-clear-btn:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+/* KPI summary row */
+.browser-kpi-row {
+  display: flex;
+  gap: 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+  overflow: hidden;
+  padding: 0 12px;
+}
+
+.browser-kpi {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 16px;
+  border-right: 1px solid #f1f5f9;
+  min-width: 0;
+}
+
+.browser-kpi:last-of-type {
+  border-right: none;
+}
+
+.browser-kpi-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #9ca3af;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.browser-kpi-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  white-space: nowrap;
+}
+
 .preview-projects-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0.5rem;
+  overflow-y: auto;
+  max-height: calc(100vh - 320px);
+  min-height: 200px;
 }
 
 .preview-project-card {
@@ -1641,7 +1795,8 @@
     justify-content: stretch;
   }
 
-  .header-actions .btn {
+  .header-actions .btn,
+  .header-actions .sales-btn {
     flex: 1;
     padding: 0.625rem 0.75rem;
     font-size: 0.8125rem;

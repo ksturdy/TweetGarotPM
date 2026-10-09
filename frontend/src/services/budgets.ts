@@ -2,6 +2,7 @@ import api from './api';
 
 export interface BudgetSection {
   name: string;
+  costType?: number;
   items: BudgetItem[];
   subtotal: number;
 }
@@ -33,6 +34,7 @@ export interface Budget {
   id: number;
   tenant_id: number;
   project_name: string;
+  market?: string;
   building_type: string;
   project_type: string;
   bid_type: string;
