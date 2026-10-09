@@ -12,6 +12,7 @@ const BudgetsList: React.FC = () => {
   const { toast, confirm } = useTitanFeedback();
   const [statusFilter, setStatusFilter] = useState('');
   const [buildingTypeFilter, setBuildingTypeFilter] = useState('');
+  const [marketFilter, setMarketFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [stats, setStats] = useState<BudgetStats | null>(null);
@@ -23,17 +24,20 @@ const BudgetsList: React.FC = () => {
   const [startingMatrix, setStartingMatrix] = useState<number | null>(null);
 
   // Resizable columns
-  const STORAGE_KEY = 'budgetsList_columnWidths';
+  const STORAGE_KEY = 'budgetsList_columnWidths_v2';
   const DEFAULT_WIDTHS: Record<string, number> = {
-    project: 0,
-    type: 150,
-    sqft: 110,
-    grandTotal: 130,
-    costSf: 90,
-    confidence: 110,
-    status: 100,
-    created: 110,
-    costControl: 130,
+    project: 220,
+    market: 110,
+    type: 130,
+    sqft: 100,
+    grandTotal: 120,
+    costSf: 80,
+    confidence: 105,
+    status: 90,
+    created: 100,
+    createdBy: 130,
+    costControl: 145,
+    del: 44,
   };
   const COLUMN_KEYS = Object.keys(DEFAULT_WIDTHS);
   const MIN_COL_WIDTH = 60;
@@ -132,7 +136,7 @@ const BudgetsList: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    const ok = await confirm({ message: 'Are you sure you want to delete this budget?', danger: true });
+    const ok = await confirm({ title: 'Delete Budget', message: 'This budget will be permanently deleted and cannot be recovered.', confirmText: 'Delete', danger: true });
     if (!ok) return;
     try {
       await budgetsApi.delete(id);
@@ -191,17 +195,45 @@ const BudgetsList: React.FC = () => {
     return Array.from(types).sort();
   }, [budgets]);
 
+  const markets = useMemo(() => {
+    const m = new Set(budgets.map(b => b.market).filter(Boolean) as string[]);
+    return Array.from(m).sort();
+  }, [budgets]);
+
+  const [sortKey, setSortKey] = useState<string>('created_at');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const toggleSort = (key: string) => {
+    setSortKey(prev => {
+      if (prev === key) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); return key; }
+      setSortDir('desc');
+      return key;
+    });
+  };
+
   const filteredBudgets = useMemo(() => {
-    return budgets.filter(budget => {
+    const list = budgets.filter(budget => {
       const matchesStatus = !statusFilter || budget.status === statusFilter;
       const matchesBuildingType = !buildingTypeFilter || budget.project_type === buildingTypeFilter;
+      const matchesMarket = !marketFilter || budget.market === marketFilter;
       const matchesSearch = !searchQuery ||
         budget.project_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         budget.building_type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         budget.project_type?.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesStatus && matchesBuildingType && matchesSearch;
+      return matchesStatus && matchesBuildingType && matchesMarket && matchesSearch;
     });
-  }, [budgets, statusFilter, buildingTypeFilter, searchQuery]);
+    list.sort((a, b) => {
+      let av: any = (a as any)[sortKey];
+      let bv: any = (b as any)[sortKey];
+      if (sortKey === 'project_name') { av = a.project_name; bv = b.project_name; }
+      if (typeof av === 'string' && typeof bv === 'string') {
+        return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
+      av = Number(av || 0); bv = Number(bv || 0);
+      return sortDir === 'asc' ? av - bv : bv - av;
+    });
+    return list;
+  }, [budgets, statusFilter, buildingTypeFilter, marketFilter, searchQuery, sortKey, sortDir]);
 
   const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null) return '$0';
@@ -239,34 +271,6 @@ const BudgetsList: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="sales-kpi-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
-        <div className="sales-kpi-card amber">
-          <div className="sales-kpi-label">Drafts</div>
-          <div className="sales-kpi-value">{stats?.draft_count || 0}</div>
-        </div>
-        <div className="sales-kpi-card green">
-          <div className="sales-kpi-label">Finalized</div>
-          <div className="sales-kpi-value">{stats?.final_count || 0}</div>
-        </div>
-        <div className="sales-kpi-card blue">
-          <div className="sales-kpi-label">Total Budgets</div>
-          <div className="sales-kpi-value">{stats?.total_budgets || budgets.length}</div>
-        </div>
-        <div className="sales-kpi-card purple">
-          <div className="sales-kpi-label">Total Value</div>
-          <div className="sales-kpi-value">{formatCurrency(stats?.total_value)}</div>
-        </div>
-        <div className="sales-kpi-card blue">
-          <div className="sales-kpi-label">Avg Value</div>
-          <div className="sales-kpi-value">{formatCurrency(stats?.avg_value)}</div>
-        </div>
-        <div className="sales-kpi-card purple">
-          <div className="sales-kpi-label">Avg $/SF</div>
-          <div className="sales-kpi-value">${Number(stats?.avg_cost_per_sqft || 0).toFixed(2)}</div>
-        </div>
-      </div>
-
       {/* Table Section */}
       <div className="sales-table-section">
         <div className="sales-table-header">
@@ -282,6 +286,17 @@ const BudgetsList: React.FC = () => {
               <option value="draft">Draft</option>
               <option value="final">Final</option>
               <option value="archived">Archived</option>
+            </select>
+            <select
+              value={marketFilter}
+              onChange={(e) => setMarketFilter(e.target.value)}
+              className="filter-select"
+              style={{ fontSize: '12px', padding: '4px 6px', width: 'auto' }}
+            >
+              <option value="">All Markets</option>
+              {markets.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
             </select>
             <select
               value={buildingTypeFilter}
@@ -316,21 +331,39 @@ const BudgetsList: React.FC = () => {
           </div>
         )}
 
+        <div className="sales-table-scroll-wrapper">
         <table className="sales-table" ref={tableRef}>
           <colgroup>
             {COLUMN_KEYS.map(key => <col key={key} style={getColStyle(key)} />)}
           </colgroup>
           <thead>
             <tr>
-              <th>Project<div className="col-resize-handle" onMouseDown={e => handleResizeStart('project', e)} /></th>
-              <th>Type<div className="col-resize-handle" onMouseDown={e => handleResizeStart('type', e)} /></th>
-              <th>Square Ft<div className="col-resize-handle" onMouseDown={e => handleResizeStart('sqft', e)} /></th>
-              <th>Grand Total<div className="col-resize-handle" onMouseDown={e => handleResizeStart('grandTotal', e)} /></th>
-              <th>$/SF<div className="col-resize-handle" onMouseDown={e => handleResizeStart('costSf', e)} /></th>
-              <th>Confidence<div className="col-resize-handle" onMouseDown={e => handleResizeStart('confidence', e)} /></th>
-              <th>Status<div className="col-resize-handle" onMouseDown={e => handleResizeStart('status', e)} /></th>
-              <th>Created<div className="col-resize-handle" onMouseDown={e => handleResizeStart('created', e)} /></th>
-              <th>Cost Control<div className="col-resize-handle" onMouseDown={e => handleResizeStart('costControl', e)} /></th>
+              {([
+                ['project',     'project_name',     'Project'],
+                ['market',      'market',           'Market'],
+                ['type',        'project_type',     'Type'],
+                ['sqft',        'square_footage',   'Square Ft'],
+                ['grandTotal',  'grand_total',      'Grand Total'],
+                ['costSf',      'cost_per_sqft',    '$/SF'],
+                ['confidence',  'confidence_level', 'Confidence'],
+                ['status',      'status',           'Status'],
+                ['created',     'created_at',       'Created'],
+                ['createdBy',   'created_by_name',  'Created By'],
+                ['costControl', '',                 'Cost Control'],
+                ['del',         '',                 ''],
+              ] as [string, string, string][]).map(([colKey, sk, label]) => (
+                <th
+                  key={colKey}
+                  onClick={sk ? () => toggleSort(sk) : undefined}
+                  style={{ cursor: sk ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap' }}
+                >
+                  {label}
+                  {sk && <span style={{ marginLeft: '4px', opacity: sortKey === sk ? 1 : 0.25, fontSize: '10px' }}>
+                    {sortKey === sk ? (sortDir === 'asc' ? '▲' : '▼') : '▲'}
+                  </span>}
+                  <div className="col-resize-handle" onMouseDown={e => { e.stopPropagation(); handleResizeStart(colKey, e); }} />
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -352,6 +385,7 @@ const BudgetsList: React.FC = () => {
                       </div>
                     </div>
                   </td>
+                  <td>{budget.market || '—'}</td>
                   <td>{actualProjectType}</td>
                   <td>{formatNumber(budget.square_footage)}</td>
                   <td>{formatCurrency(budget.grand_total)}</td>
@@ -369,11 +403,12 @@ const BudgetsList: React.FC = () => {
                     </span>
                   </td>
                   <td>{new Date(budget.created_at).toLocaleDateString()}</td>
+                  <td>{budget.created_by_name || '—'}</td>
                   <td onClick={e => e.stopPropagation()}>
                     {matrixMap[budget.id] != null ? (
                       <button
                         className="sales-btn sales-btn-secondary"
-                        style={{ fontSize: '11px', padding: '3px 10px' }}
+                        style={{ fontSize: '11px', padding: '3px 10px', whiteSpace: 'nowrap' }}
                         onClick={() => navigate(`/estimating/cost-control/${matrixMap[budget.id]}`)}
                       >
                         Open Matrix →
@@ -381,7 +416,7 @@ const BudgetsList: React.FC = () => {
                     ) : (
                       <button
                         className="sales-btn sales-btn-primary"
-                        style={{ fontSize: '11px', padding: '3px 10px' }}
+                        style={{ fontSize: '11px', padding: '3px 10px', whiteSpace: 'nowrap' }}
                         disabled={startingMatrix === budget.id}
                         onClick={async () => {
                           setStartingMatrix(budget.id);
@@ -406,12 +441,30 @@ const BudgetsList: React.FC = () => {
                       </button>
                     )}
                   </td>
+                  <td onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                    <button
+                      title="Delete budget"
+                      onClick={() => handleDelete(budget.id)}
+                      style={{
+                        background: 'none', border: '1px solid #fca5a5', borderRadius: '4px',
+                        padding: '4px 6px', cursor: 'pointer', color: '#ef4444', lineHeight: 1,
+                        display: 'inline-flex', alignItems: 'center',
+                      }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                      </svg>
+                    </button>
+                  </td>
                 </tr>
               );
             })}
             {filteredBudgets.length === 0 && (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={12} style={{ textAlign: 'center', padding: '40px' }}>
                   <svg style={{ margin: '0 auto 12px', display: 'block', color: '#9ca3af' }} width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     <path d="M12 12v4M12 16h.01" />
@@ -432,6 +485,7 @@ const BudgetsList: React.FC = () => {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Budget Preview Modal */}

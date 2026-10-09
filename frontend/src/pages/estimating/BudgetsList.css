@@ -7,7 +7,7 @@
   padding: 12px 20px;
   background: var(--bg-dark);
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow-x: auto;
   box-sizing: border-box;
 }
 
