@@ -24,6 +24,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LogoutIcon from '@mui/icons-material/Logout';
 import ConstructionIcon from '@mui/icons-material/Construction';
+import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import './Sidebar.css';
@@ -151,6 +152,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
         { label: 'Work Orders', path: '/account-management/work-orders' },
         { label: 'Teams', path: '/account-management/teams' },
       ],
+    },
+    {
+      label: 'Design',
+      path: '/design',
+      icon: <DesignServicesIcon />,
     },
     {
       label: 'Projects',

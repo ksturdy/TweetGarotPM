@@ -154,6 +154,7 @@ import Rolling12Report from './pages/reports/Rolling12Report';
 import HistoricalRevenueReport from './pages/reports/HistoricalRevenueReport';
 import PhaseReport from './pages/reports/PhaseReport';
 import TenantSettings from './pages/TenantSettings';
+import PlumbingDesign from './pages/design/PlumbingDesign';
 // Field module
 import FieldLayout from './components/field/FieldLayout';
 import FieldDashboard from './pages/field/FieldDashboard';
@@ -546,6 +547,7 @@ const App: React.FC = () => {
                 <Route path="/risk-management/contract-reviews" element={<ContractReviewList />} />
                 <Route path="/risk-management/contract-reviews/upload" element={<ContractReviewUpload />} />
                 <Route path="/risk-management/contract-reviews/:id" element={<ContractReviewDetail />} />
+                <Route path="/design" element={<PlumbingDesign />} />
                 <Route path="/projects" element={<ProjectList />} />
                 <Route path="/projects/projected-revenue" element={<ProjectedRevenue />} />
                 <Route path="/projects/labor-forecast" element={<LaborForecast />} />
