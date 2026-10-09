@@ -336,6 +336,25 @@ const ScheduledReports: React.FC = () => {
     setDialogOpen(true);
   };
 
+  const openDuplicate = (report: ScheduledReport) => {
+    setEditingId(null);
+    setRecipientSearch('');
+    setForm({
+      name: `Copy of ${report.name}`,
+      report_type: report.report_type,
+      frequency: report.frequency,
+      day_of_week: report.day_of_week ?? 1,
+      day_of_month: report.day_of_month ?? 1,
+      time_of_day: report.time_of_day?.substring(0, 5) || '08:00',
+      timezone: report.timezone || 'America/Chicago',
+      filters: report.filters || {},
+      is_enabled: report.is_enabled,
+      recipient_user_ids: report.recipients.map(r => r.user_id),
+      recipient_team_ids: (report.team_recipients || []).map(t => t.team_id),
+    });
+    setDialogOpen(true);
+  };
+
   const openEdit = (report: ScheduledReport) => {
     setEditingId(report.id);
     setRecipientSearch('');
@@ -477,7 +496,7 @@ const ScheduledReports: React.FC = () => {
         <table className="sales-table" style={{ width: '100%', paddingTop: '0.5rem' }}>
           <thead>
             <tr>
-              <th>Name</th>
+              <th style={{ width: '300px' }}>Name</th>
               <th>Report</th>
               <th>Frequency</th>
               <th>Time</th>
@@ -485,7 +504,7 @@ const ScheduledReports: React.FC = () => {
               <th>Last Run</th>
               <th style={{ textAlign: 'center', width: '50px' }}>To</th>
               <th style={{ textAlign: 'center', width: '60px' }}>On</th>
-              <th style={{ textAlign: 'center', width: '220px' }}>Actions</th>
+              <th style={{ textAlign: 'center', width: '290px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -597,6 +616,17 @@ const ScheduledReports: React.FC = () => {
                         }}
                       >
                         Edit
+                      </button>
+                      <button
+                        onClick={() => openDuplicate(report)}
+                        title="Duplicate"
+                        style={{
+                          padding: '5px 12px', fontSize: '0.75rem', fontWeight: 500, background: '#f0fdf4',
+                          border: '1px solid #bbf7d0', borderRadius: '6px', cursor: 'pointer', color: '#16a34a',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Copy
                       </button>
                       <button
                         onClick={() => { setSendingId(report.id); sendNowMutation.mutate(report.id); }}
