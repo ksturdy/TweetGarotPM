@@ -668,7 +668,7 @@ const BudgetGenerator: React.FC = () => {
       const budgetData: Partial<Budget> = {
         project_name: currentBudget.summary.projectName,
         market: market || undefined,
-        building_type: currentBudget.summary.buildingType,
+        building_type: buildingType.length > 0 ? buildingType.join(', ') : (currentBudget.summary.buildingType || undefined),
         project_type: currentBudget.summary.projectType,
         bid_type: bidType || undefined,
         location: location || undefined,

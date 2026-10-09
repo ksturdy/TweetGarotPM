@@ -399,7 +399,6 @@ const BudgetsList: React.FC = () => {
                       </div>
                       <div>
                         <div style={{ fontWeight: 600, fontSize: '14px' }}>{budget.project_name}</div>
-                        <div style={{ fontSize: '12px', color: '#6b7280' }}>{budget.project_type || budget.building_type || '—'}</div>
                       </div>
                     </div>
                   </td>
