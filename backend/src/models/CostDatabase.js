@@ -518,7 +518,7 @@ function buildEstimateFilter(tenantId, filters = {}) {
     i++;
   }
   if (filters.markets && filters.markets.length) {
-    conds.push(`e.customer_id IN (SELECT id FROM customers WHERE market = ANY($${i}))`);
+    conds.push(`e.building_type = ANY($${i})`);
     params.push(filters.markets);
     i++;
   }
@@ -541,11 +541,10 @@ const EstimateDb = {
       [tenantId]
     );
     const { rows: marketRows } = await db.query(
-      `SELECT DISTINCT c.market
+      `SELECT DISTINCT e.building_type AS market
        FROM estimates e
-       JOIN customers c ON e.customer_id = c.id
-       WHERE e.tenant_id = $1 AND c.market IS NOT NULL AND c.market != ''
-       ORDER BY c.market`,
+       WHERE e.tenant_id = $1 AND e.building_type IS NOT NULL AND e.building_type != ''
+       ORDER BY e.building_type`,
       [tenantId]
     );
     const { rows: rangeRows } = await db.query(
@@ -676,6 +675,7 @@ const EstimateDb = {
     const sql = `
       SELECT e.id, e.estimate_number, e.project_name, e.customer_name, e.status,
              e.bid_date, e.total_cost, e.subtotal, e.square_footage,
+             e.building_type AS market,
              e.labor_cost, e.material_cost,
              e.equipment_cost, e.subcontractor_cost, e.rental_cost,
              emp.first_name || ' ' || emp.last_name AS estimator_name
@@ -694,6 +694,7 @@ const EstimateDb = {
       total_cost: parseFloat(r.total_cost || 0),
       subtotal: parseFloat(r.subtotal || 0),
       square_footage: r.square_footage != null ? parseInt(r.square_footage, 10) : null,
+      market: r.market || null,
       labor_cost: parseFloat(r.labor_cost || 0),
       material_cost: parseFloat(r.material_cost || 0),
       equipment_cost: parseFloat(r.equipment_cost || 0),

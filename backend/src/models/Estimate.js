@@ -135,6 +135,7 @@ const Estimate = {
 
     const allowedFields = [
       'project_name', 'customer_id', 'customer_name', 'customer_contact_id', 'building_type',
+      'building_type_label', 'construction_type',
       'square_footage', 'location', 'bid_date', 'project_start_date',
       'project_duration', 'estimator_id', 'estimator_name', 'status',
       'overhead_percentage', 'profit_percentage', 'contingency_percentage',

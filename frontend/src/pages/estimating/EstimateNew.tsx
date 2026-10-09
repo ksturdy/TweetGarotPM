@@ -534,7 +534,7 @@ const EstimateNew: React.FC = () => {
     const missing: string[] = [];
     if (!formData.project_name?.trim()) missing.push('Project Name');
     if (!formData.estimator_id) missing.push('Estimator');
-    if (!formData.building_type) missing.push('Building Type');
+    if (!formData.building_type) missing.push('Market');
     if (!formData.location?.trim()) missing.push('Location');
     if (!formData.square_footage) missing.push('Sq Ft');
     if (!formData.bid_date) missing.push('Bid Date');
@@ -838,11 +838,34 @@ const EstimateNew: React.FC = () => {
 
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">Building Type *</label>
+              <label className="form-label">Market *</label>
               <select name="building_type" className="form-input" value={formData.building_type} onChange={handleChange} required>
                 {MARKETS.map(m => (
                   <option key={m.value} value={m.value}>{m.label}</option>
                 ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Building Type</label>
+              <input
+                type="text"
+                name="building_type_label"
+                className="form-input"
+                value={(formData as any).building_type_label || ''}
+                onChange={handleChange}
+                placeholder="e.g., Healthcare - Clinic"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Construction Type</label>
+              <select name="construction_type" className="form-input" value={(formData as any).construction_type || ''} onChange={handleChange}>
+                <option value="">Select type...</option>
+                <option value="New Construction">New Construction</option>
+                <option value="Addition">Addition</option>
+                <option value="Renovation">Renovation</option>
+                <option value="Buildout">Buildout</option>
               </select>
             </div>
 

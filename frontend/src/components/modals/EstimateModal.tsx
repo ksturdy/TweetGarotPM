@@ -129,7 +129,7 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
 
             <div className="form-row">
               <div className="form-group">
-                <label htmlFor="building_type">Building Type</label>
+                <label htmlFor="building_type">Market</label>
                 <select
                   id="building_type"
                   name="building_type"

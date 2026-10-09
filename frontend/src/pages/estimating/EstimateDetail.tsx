@@ -72,6 +72,8 @@ const EstimateDetail: React.FC = () => {
     customer_name: '',
     customer_contact_id: null,
     building_type: 'Commercial',
+    building_type_label: '',
+    construction_type: '',
     square_footage: undefined,
     location: '',
     bid_date: '',
@@ -173,6 +175,8 @@ const EstimateDetail: React.FC = () => {
         customer_name: estimate.customer_name || '',
         customer_contact_id: estimate.customer_contact_id ?? null,
         building_type: estimate.building_type || 'Commercial',
+        building_type_label: (estimate as any).building_type_label || '',
+        construction_type: (estimate as any).construction_type || '',
         square_footage: estimate.square_footage || undefined,
         location: estimate.location || '',
         bid_date: estimate.bid_date ? estimate.bid_date.split('T')[0] : '',
@@ -537,7 +541,7 @@ const EstimateDetail: React.FC = () => {
     const missing: string[] = [];
     if (!formData.project_name?.trim()) missing.push('Project Name');
     if (!formData.estimator_id) missing.push('Estimator');
-    if (!formData.building_type) missing.push('Building Type');
+    if (!formData.building_type) missing.push('Market');
     if (!formData.location?.trim()) missing.push('Location');
     if (!formData.square_footage) missing.push('Sq Ft');
     if (!formData.bid_date) missing.push('Bid Date');
@@ -790,7 +794,7 @@ const EstimateDetail: React.FC = () => {
             </div>
 
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Building Type *</label>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Market *</label>
               <select
                 name="building_type"
                 className="form-input"
@@ -802,6 +806,38 @@ const EstimateDetail: React.FC = () => {
                 {MARKETS.map(m => (
                   <option key={m.value} value={m.value}>{m.label}</option>
                 ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Row 1b: Building Type, Construction Type */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Building Type</label>
+              <input
+                type="text"
+                name="building_type_label"
+                className="form-input"
+                value={(formData as any).building_type_label || ''}
+                onChange={handleChange}
+                placeholder="e.g., Healthcare - Clinic, Educational"
+                style={{ padding: '0.5rem' }}
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Construction Type</label>
+              <select
+                name="construction_type"
+                className="form-input"
+                value={(formData as any).construction_type || ''}
+                onChange={handleChange}
+                style={{ padding: '0.5rem' }}
+              >
+                <option value="">Select type...</option>
+                <option value="New Construction">New Construction</option>
+                <option value="Addition">Addition</option>
+                <option value="Renovation">Renovation</option>
+                <option value="Buildout">Buildout</option>
               </select>
             </div>
           </div>

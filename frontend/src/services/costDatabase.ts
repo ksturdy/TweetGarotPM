@@ -219,6 +219,7 @@ export interface EstimateListRow {
   total_cost: number;
   subtotal: number;
   square_footage: number | null;
+  market: string | null;
   labor_cost: number;
   material_cost: number;
   equipment_cost: number;
