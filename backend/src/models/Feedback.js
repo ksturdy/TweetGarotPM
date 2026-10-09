@@ -330,11 +330,13 @@ class Feedback {
         COUNT(*) FILTER (WHERE status = 'completed') as completed_count,
         ROUND(
           AVG(EXTRACT(EPOCH FROM (completed_at - created_at)) / 86400)
-          FILTER (WHERE completed_at >= NOW() - INTERVAL '30 days')
+          FILTER (WHERE completed_at >= NOW() - INTERVAL '30 days'
+                    AND created_at >= NOW() - INTERVAL '90 days')
         ::numeric, 1) as avg_fix_days,
         ROUND(
           AVG(EXTRACT(EPOCH FROM (first_responded_at - created_at)) / 86400)
-          FILTER (WHERE first_responded_at >= NOW() - INTERVAL '30 days')
+          FILTER (WHERE first_responded_at >= NOW() - INTERVAL '30 days'
+                    AND created_at >= NOW() - INTERVAL '90 days')
         ::numeric, 1) as avg_response_days
       FROM feedback
       WHERE tenant_id = $1
