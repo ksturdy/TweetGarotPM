@@ -81,8 +81,8 @@ const BacklogByMarketWidget: React.FC<WidgetProps> = () => {
           {/* Custom legend */}
           <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '2px', justifyContent: 'center' }}>
             {markets.map((m, i) => (
-              <div key={m.market} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.5625rem', lineHeight: 1.2, minWidth: 0 }}>
-                <span style={{ width: 6, height: 6, borderRadius: 1, background: COLORS[i], flexShrink: 0 }} />
+              <div key={m.market} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.6875rem', lineHeight: 1.2, minWidth: 0 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: COLORS[i], flexShrink: 0 }} />
                 <span style={{ flex: 1, minWidth: 0, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.market}</span>
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtM(m.backlog)}</span>
               </div>
