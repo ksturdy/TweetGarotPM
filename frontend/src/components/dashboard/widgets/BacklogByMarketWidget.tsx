@@ -74,9 +74,9 @@ const BacklogByMarketWidget: React.FC<WidgetProps> = () => {
           No backlog data
         </div>
       ) : (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: '4px', padding: '4px 6px 4px 0' }}>
-          {/* Pie — fixed width so legend always gets a predictable amount of space */}
-          <div style={{ flex: '0 0 130px', minHeight: 0, position: 'relative' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: '8px', padding: '8px 8px 8px 0', alignItems: 'center' }}>
+          {/* Pie — square container so circle fills it flush; no tall narrow column */}
+          <div style={{ flex: '0 0 150px', height: '150px', position: 'relative' }}>
             <Pie data={chartData} options={options} />
           </div>
           {/* Custom legend */}
