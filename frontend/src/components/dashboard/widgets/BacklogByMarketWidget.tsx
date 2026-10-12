@@ -46,6 +46,7 @@ const BacklogByMarketWidget: React.FC<WidgetProps> = () => {
   const options: any = {
     responsive: true,
     maintainAspectRatio: false,
+    layout: { padding: 0 },
     plugins: {
       legend: { display: false },
       tooltip: {
