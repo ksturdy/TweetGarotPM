@@ -16,6 +16,7 @@ interface SearchableSelectProps {
   style?: React.CSSProperties;
   className?: string;
   onSearchTermChange?: (term: string) => void;
+  compact?: boolean;
 }
 
 const MAX_VISIBLE = 50;
@@ -28,7 +29,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
   disabled = false,
   style,
   className,
-  onSearchTermChange
+  onSearchTermChange,
+  compact = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -275,17 +277,17 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         className="searchable-select-trigger"
         onClick={handleToggle}
         style={{
-          padding: '0.4rem 0.75rem',
-          paddingRight: value ? '2rem' : '0.75rem',
+          padding: compact ? '0.375rem 0.5rem' : '0.4rem 0.75rem',
+          paddingRight: value ? (compact ? '1.5rem' : '2rem') : (compact ? '0.5rem' : '0.75rem'),
           borderRadius: '6px',
           border: '1px solid #e2e8f0',
           background: disabled ? '#f1f5f9' : 'white',
           cursor: disabled ? 'not-allowed' : 'pointer',
-          fontSize: '0.875rem',
+          fontSize: compact ? '0.8125rem' : '0.875rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          minHeight: '36px'
+          minHeight: compact ? undefined : '36px'
         }}
       >
         <span style={{ color: displayValue ? '#1e293b' : '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

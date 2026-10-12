@@ -887,17 +887,17 @@ const ProjectList: React.FC = () => {
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
-        gap: '1rem',
-        padding: '1rem',
+        gap: '0.5rem',
+        padding: '0.5rem 0.75rem',
         background: '#f8fafc',
         borderRadius: '8px',
         marginBottom: '1rem',
         alignItems: 'flex-end'
       }}>
-        <div style={{ flex: '1', minWidth: '200px' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Search</label>
+        <div style={{ flex: '1', minWidth: '180px' }}>
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#64748b', marginBottom: '0.125rem', textTransform: 'uppercase' }}>Search</label>
           <div className="sales-search-box" style={{ width: '100%' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8"/>
               <line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
@@ -910,13 +910,13 @@ const ProjectList: React.FC = () => {
             />
           </div>
         </div>
-        <div style={{ minWidth: '160px', position: 'relative' }} ref={statusDropdownRef}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Status</label>
+        <div style={{ minWidth: '150px', position: 'relative' }} ref={statusDropdownRef}>
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#64748b', marginBottom: '0.125rem', textTransform: 'uppercase' }}>Status</label>
           <button
             type="button"
             className="form-input"
             onClick={() => setStatusDropdownOpen(o => !o)}
-            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: '#fff' }}
+            style={{ padding: '0.375rem 0.5rem', fontSize: '0.8125rem', width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: '#fff' }}
           >
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {statusFilter.length === 0 ? 'All Statuses' : statusFilter.join(', ')}
@@ -925,7 +925,7 @@ const ProjectList: React.FC = () => {
           </button>
           {statusDropdownOpen && (
             <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.375rem', boxShadow: '0 4px 12px rgba(0,0,0,0.12)', minWidth: '100%', marginTop: '2px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '0.875rem', color: '#475569' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.625rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '0.8125rem', color: '#475569' }}>
                 <input
                   type="checkbox"
                   checked={statusFilter.length === 0}
@@ -934,7 +934,7 @@ const ProjectList: React.FC = () => {
                 All Statuses
               </label>
               {uniqueStatuses.map(status => (
-                <label key={status} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.875rem', color: '#1e293b' }}>
+                <label key={status} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.625rem', cursor: 'pointer', fontSize: '0.8125rem', color: '#1e293b' }}>
                   <input
                     type="checkbox"
                     checked={statusFilter.includes(status)}
@@ -950,13 +950,13 @@ const ProjectList: React.FC = () => {
             </div>
           )}
         </div>
-        <div style={{ minWidth: '150px' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Department</label>
+        <div style={{ minWidth: '130px' }}>
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#64748b', marginBottom: '0.125rem', textTransform: 'uppercase' }}>Department</label>
           <select
             className="form-input"
             value={departmentFilter}
             onChange={(e) => setDepartmentFilter(e.target.value)}
-            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}
+            style={{ padding: '0.375rem 0.5rem', fontSize: '0.8125rem', width: '100%' }}
           >
             <option value="all">All Departments</option>
             {uniqueDepartments.map(dept => (
@@ -964,27 +964,27 @@ const ProjectList: React.FC = () => {
             ))}
           </select>
         </div>
-        <div style={{ minWidth: '120px', alignSelf: 'flex-end' }}>
+        <div style={{ alignSelf: 'flex-end' }}>
           <button
             className={myProjectsOnly ? 'sales-btn sales-btn-primary' : 'sales-btn sales-btn-secondary'}
             onClick={() => { setMyProjectsOnly(!myProjectsOnly); if (!myProjectsOnly) setMyTeamOnly(false); }}
-            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', whiteSpace: 'nowrap' }}
+            style={{ whiteSpace: 'nowrap' }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
               <circle cx="12" cy="7" r="4"/>
             </svg>
             My Projects
           </button>
         </div>
-        <div style={{ minWidth: '120px', alignSelf: 'flex-end' }}>
+        <div style={{ alignSelf: 'flex-end' }}>
           <button
             className={myTeamOnly ? 'sales-btn sales-btn-primary' : 'sales-btn sales-btn-secondary'}
             onClick={() => { setMyTeamOnly(!myTeamOnly); if (!myTeamOnly) setMyProjectsOnly(false); }}
-            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', whiteSpace: 'nowrap' }}
+            style={{ whiteSpace: 'nowrap' }}
             title="Filter to my team members"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
               <circle cx="9" cy="7" r="4"/>
               <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
@@ -993,13 +993,13 @@ const ProjectList: React.FC = () => {
             My Team
           </button>
         </div>
-        <div style={{ minWidth: '160px' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Team</label>
+        <div style={{ minWidth: '140px' }}>
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#64748b', marginBottom: '0.125rem', textTransform: 'uppercase' }}>Team</label>
           <select
             className="form-input"
             value={teamFilter}
             onChange={(e) => setTeamFilter(e.target.value)}
-            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}
+            style={{ padding: '0.375rem 0.5rem', fontSize: '0.8125rem', width: '100%' }}
           >
             <option value="">All Teams</option>
             {allTeams.filter(t => t.is_active).map(team => (
@@ -1007,23 +1007,24 @@ const ProjectList: React.FC = () => {
             ))}
           </select>
         </div>
-        <div style={{ minWidth: '200px' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Project Manager</label>
+        <div style={{ minWidth: '170px' }}>
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#64748b', marginBottom: '0.125rem', textTransform: 'uppercase' }}>Project Manager</label>
           <SearchableSelect
             options={uniqueProjectManagers}
             value={projectManagerFilter}
             onChange={setProjectManagerFilter}
             placeholder="All PMs"
+            compact
             style={{ width: '100%' }}
           />
         </div>
-        <div style={{ minWidth: '180px' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Market</label>
+        <div style={{ minWidth: '150px' }}>
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#64748b', marginBottom: '0.125rem', textTransform: 'uppercase' }}>Market</label>
           <select
             className="form-input"
             value={marketFilter}
             onChange={(e) => setMarketFilter(e.target.value)}
-            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}
+            style={{ padding: '0.375rem 0.5rem', fontSize: '0.8125rem', width: '100%' }}
           >
             <option value="all">All Markets</option>
             {uniqueMarkets.map(market => (
@@ -1032,77 +1033,29 @@ const ProjectList: React.FC = () => {
           </select>
         </div>
         {/* Start Date Range */}
-        <div style={{ minWidth: '130px' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Start From</label>
+        <div style={{ minWidth: '115px' }}>
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#64748b', marginBottom: '0.125rem', textTransform: 'uppercase' }}>Start</label>
           <input
             type="month"
             className="form-input"
             value={startDateFrom}
             onChange={(e) => setStartDateFrom(e.target.value)}
-            style={{ padding: '0.5rem 0.4rem', fontSize: '0.875rem', width: '100%' }}
+            style={{ padding: '0.375rem 0.375rem', fontSize: '0.8125rem', width: '100%' }}
           />
         </div>
-        <div style={{ minWidth: '130px' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Start To</label>
+        <div style={{ minWidth: '115px' }}>
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#64748b', marginBottom: '0.125rem', textTransform: 'uppercase' }}>Finish</label>
           <input
             type="month"
             className="form-input"
             value={startDateTo}
             onChange={(e) => setStartDateTo(e.target.value)}
-            style={{ padding: '0.5rem 0.4rem', fontSize: '0.875rem', width: '100%' }}
+            style={{ padding: '0.375rem 0.375rem', fontSize: '0.8125rem', width: '100%' }}
           />
         </div>
-        {/* GM Override Control */}
-        <div className="projects-gm-override" style={{ minWidth: '200px', display: 'flex', alignItems: 'flex-end', gap: '0.25rem' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>
-              GM Override {gmOverrideCount > 0 && <span style={{ color: '#f59e0b' }}>({gmOverrideCount})</span>}
-            </label>
-            <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                max="100"
-                value={gmOverridePercent}
-                onChange={(e) => setGmOverridePercent(e.target.value)}
-                style={{ width: '60px', padding: '0.5rem 0.4rem', fontSize: '0.875rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}
-              />
-              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>%</span>
-              <button
-                onClick={() => {
-                  const pct = parseFloat(gmOverridePercent);
-                  if (!isNaN(pct) && pct >= 0 && pct <= 100) applyGmOverrideMutation.mutate(pct);
-                }}
-                disabled={applyGmOverrideMutation.isPending}
-                style={{
-                  padding: '0.5rem 0.5rem', fontSize: '0.75rem', fontWeight: 600,
-                  background: '#f59e0b', color: 'white', border: 'none', borderRadius: '4px',
-                  cursor: 'pointer', whiteSpace: 'nowrap'
-                }}
-              >
-                Apply
-              </button>
-              {gmOverrideCount > 0 && (
-                <button
-                  onClick={() => clearGmOverridesMutation.mutate()}
-                  disabled={clearGmOverridesMutation.isPending}
-                  style={{
-                    padding: '0.5rem 0.5rem', fontSize: '0.7rem', fontWeight: 600,
-                    background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '4px',
-                    cursor: 'pointer', whiteSpace: 'nowrap'
-                  }}
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
         {(statusFilter.length > 0 || departmentFilter !== 'all' || marketFilter !== 'all' || projectManagerFilter || myProjectsOnly || myTeamOnly || teamFilter || searchTerm || startDateFrom || startDateTo) && (
           <button
-            className="sales-filter-btn"
+            className="sales-btn sales-btn-secondary"
             onClick={() => {
               setStatusFilter([]);
               setDepartmentFilter('all');
@@ -1115,7 +1068,6 @@ const ProjectList: React.FC = () => {
               setStartDateFrom('');
               setStartDateTo('');
             }}
-            style={{ padding: '0.5rem 1rem', height: 'fit-content' }}
           >
             Clear All
           </button>
@@ -1199,6 +1151,49 @@ const ProjectList: React.FC = () => {
             <span style={{ fontSize: '0.875rem', fontWeight: 'normal', color: '#6b7280', marginLeft: '0.5rem' }}>
               ({filteredProjects.length.toLocaleString()} of {(projects || []).length.toLocaleString()})
             </span>
+          </div>
+          {/* GM Override */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+              GM Override {gmOverrideCount > 0 && <span style={{ color: '#f59e0b' }}>({gmOverrideCount})</span>}
+            </span>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              value={gmOverridePercent}
+              onChange={(e) => setGmOverridePercent(e.target.value)}
+              style={{ width: '52px', padding: '0.25rem 0.375rem', fontSize: '0.8125rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}
+            />
+            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>%</span>
+            <button
+              onClick={() => {
+                const pct = parseFloat(gmOverridePercent);
+                if (!isNaN(pct) && pct >= 0 && pct <= 100) applyGmOverrideMutation.mutate(pct);
+              }}
+              disabled={applyGmOverrideMutation.isPending}
+              style={{
+                padding: '4px 10px', fontSize: '0.8125rem', fontWeight: 600,
+                background: '#f59e0b', color: 'white', border: 'none', borderRadius: '4px',
+                cursor: 'pointer', whiteSpace: 'nowrap'
+              }}
+            >
+              Apply
+            </button>
+            {gmOverrideCount > 0 && (
+              <button
+                onClick={() => clearGmOverridesMutation.mutate()}
+                disabled={clearGmOverridesMutation.isPending}
+                style={{
+                  padding: '4px 10px', fontSize: '0.8125rem', fontWeight: 600,
+                  background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '4px',
+                  cursor: 'pointer', whiteSpace: 'nowrap'
+                }}
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
         <div className="projects-table-scroll" style={{ overflowX: 'auto' }}>
