@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -64,12 +64,24 @@ interface FlyoutMenuProps {
 }
 
 const FlyoutMenu: React.FC<FlyoutMenuProps> = ({ item, top, onMouseEnter, onMouseLeave, isChildPathActive, onNavigate }) => {
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const [adjustedTop, setAdjustedTop] = useState(top);
+
+  useLayoutEffect(() => {
+    if (flyoutRef.current) {
+      const rect = flyoutRef.current.getBoundingClientRect();
+      const overflow = rect.bottom - (window.innerHeight - 8);
+      setAdjustedTop(overflow > 0 ? top - overflow : top);
+    }
+  }, [top]);
+
   if (!item?.children) return null;
   const siblingPaths = item.children.map(c => c.path);
   return (
     <div
       className="sidebar-flyout"
-      style={{ top }}
+      ref={flyoutRef}
+      style={{ top: adjustedTop }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
