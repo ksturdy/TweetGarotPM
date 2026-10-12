@@ -74,14 +74,15 @@ const BacklogByMarketWidget: React.FC<WidgetProps> = () => {
           No backlog data
         </div>
       ) : (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: '4px', padding: '4px 6px 4px 0' }}>
-          <div style={{ flex: '0 0 130px', minHeight: 0, position: 'relative' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: '0.75rem', padding: '0.75rem 0.75rem 0.75rem 0' }}>
+          {/* Pie */}
+          <div style={{ flex: '0 0 40%', minHeight: 0, position: 'relative' }}>
             <Pie data={chartData} options={options} />
           </div>
           {/* Custom legend */}
-          <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '2px', justifyContent: 'center' }}>
+          <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '3px', justifyContent: 'center' }}>
             {markets.map((m, i) => (
-              <div key={m.market} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.6875rem', lineHeight: 1.2, minWidth: 0 }}>
+              <div key={m.market} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.6875rem', minWidth: 0 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 2, background: COLORS[i], flexShrink: 0 }} />
                 <span style={{ flex: 1, minWidth: 0, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.market}</span>
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtM(m.backlog)}</span>
