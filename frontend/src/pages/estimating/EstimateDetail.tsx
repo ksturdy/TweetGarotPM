@@ -175,8 +175,8 @@ const EstimateDetail: React.FC = () => {
         customer_name: estimate.customer_name || '',
         customer_contact_id: estimate.customer_contact_id ?? null,
         building_type: estimate.building_type || 'Commercial',
-        building_type_label: (estimate as any).building_type_label || '',
-        construction_type: (estimate as any).construction_type || '',
+        building_type_label: estimate.building_type_label || '',
+        construction_type: estimate.construction_type || '',
         square_footage: estimate.square_footage || undefined,
         location: estimate.location || '',
         bid_date: estimate.bid_date ? estimate.bid_date.split('T')[0] : '',
@@ -818,7 +818,7 @@ const EstimateDetail: React.FC = () => {
                 type="text"
                 name="building_type_label"
                 className="form-input"
-                value={(formData as any).building_type_label || ''}
+                value={formData.building_type_label || ''}
                 onChange={handleChange}
                 placeholder="e.g., Healthcare - Clinic, Educational"
                 style={{ padding: '0.5rem' }}
@@ -829,7 +829,7 @@ const EstimateDetail: React.FC = () => {
               <select
                 name="construction_type"
                 className="form-input"
-                value={(formData as any).construction_type || ''}
+                value={formData.construction_type || ''}
                 onChange={handleChange}
                 style={{ padding: '0.5rem' }}
               >

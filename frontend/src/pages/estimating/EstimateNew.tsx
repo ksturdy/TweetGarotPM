@@ -852,7 +852,7 @@ const EstimateNew: React.FC = () => {
                 type="text"
                 name="building_type_label"
                 className="form-input"
-                value={(formData as any).building_type_label || ''}
+                value={formData.building_type_label || ''}
                 onChange={handleChange}
                 placeholder="e.g., Healthcare - Clinic"
               />
@@ -860,7 +860,7 @@ const EstimateNew: React.FC = () => {
 
             <div className="form-group">
               <label className="form-label">Construction Type</label>
-              <select name="construction_type" className="form-input" value={(formData as any).construction_type || ''} onChange={handleChange}>
+              <select name="construction_type" className="form-input" value={formData.construction_type || ''} onChange={handleChange}>
                 <option value="">Select type...</option>
                 <option value="New Construction">New Construction</option>
                 <option value="Addition">Addition</option>

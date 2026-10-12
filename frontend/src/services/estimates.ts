@@ -54,6 +54,8 @@ export interface Estimate {
   customer_name?: string;
   customer_contact_id?: number | null;
   building_type?: string;
+  building_type_label?: string;
+  construction_type?: string;
   square_footage?: number;
   location?: string;
   bid_date?: string;
