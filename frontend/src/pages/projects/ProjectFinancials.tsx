@@ -1228,23 +1228,23 @@ const ProjectFinancials: React.FC = () => {
           </div>
 
           {/* ===== BOTTOM METRICS BAR ===== */}
-          <div className="card" style={{ padding: '0.6rem 0.85rem', marginBottom: '0.75rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
-              <MetricChip label="Estimating Margin %" value={fmtPct(c.original_estimated_margin_pct)} />
-              <MetricChip label="Override Margin %" value={fmtPct(project?.override_original_estimated_margin_pct)} />
-              <MetricChip label="Prev Margin %" value={Number(c.prev_gross_profit_percent) >= 0.85 ? '—' : fmtPct(c.prev_gross_profit_percent)} />
-              <MetricChip label="Current Margin %" value={fmtPct(c.gross_profit_percent)}
+          <div style={{ marginBottom: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <MetricChip label="Estimating Margin %" value={fmtPct(c.original_estimated_margin_pct)} accent="#1a56db" />
+              <MetricChip label="Override Margin %" value={fmtPct(project?.override_original_estimated_margin_pct)} accent="#8b5cf6" />
+              <MetricChip label="Prev Margin %" value={Number(c.prev_gross_profit_percent) >= 0.85 ? '—' : fmtPct(c.prev_gross_profit_percent)} accent="#f59e0b" />
+              <MetricChip label="Current Margin %" value={fmtPct(c.gross_profit_percent)} accent="#10b981"
                 valueColor={getGrossProfitColor(c.gross_profit_percent, c.original_estimated_margin_pct)} />
-              <MetricChip label="Projected Revenue" value={fmt(c.projected_revenue)} />
-              <MetricChip label="Estimating Margin" value={fmt(c.original_estimated_margin)} />
-              <MetricChip label="Override Margin" value={fmt(project?.override_original_estimated_margin)} />
-              <MetricChip label="Prev Margin" value={Number(c.prev_gross_profit_percent) >= 0.85 ? '—' : fmt(c.prev_gross_profit_dollars)} />
-              <MetricChip label="Current Margin" value={fmt(c.gross_profit_dollars)}
+              <MetricChip label="Projected Revenue" value={fmt(c.projected_revenue)} accent="#06b6d4" />
+              <MetricChip label="Estimating Margin" value={fmt(c.original_estimated_margin)} accent="#1a56db" />
+              <MetricChip label="Override Margin" value={fmt(project?.override_original_estimated_margin)} accent="#8b5cf6" />
+              <MetricChip label="Prev Margin" value={Number(c.prev_gross_profit_percent) >= 0.85 ? '—' : fmt(c.prev_gross_profit_dollars)} accent="#f59e0b" />
+              <MetricChip label="Current Margin" value={fmt(c.gross_profit_dollars)} accent="#10b981"
                 valueColor={getGrossProfitColor(c.gross_profit_dollars, c.original_estimated_margin)} />
-              <MetricChip label="Prev Projected Revenue" value={fmt(c.prev_projected_revenue)} />
+              <MetricChip label="Prev Projected Revenue" value={fmt(c.prev_projected_revenue)} accent="#06b6d4" />
             </div>
             {/* Margin override controls */}
-            <div style={{ marginTop: '0.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.35rem' }}>
+            <div style={{ padding: '0.35rem 0.6rem', background: '#f8fafc', borderRadius: 6, border: '1px solid #f1f5f9' }}>
               {project?.override_original_estimated_margin != null && (
                 <div style={{ fontSize: '0.72rem', color: '#2563eb', marginBottom: '0.25rem' }}>
                   Override: {fmt(project.override_original_estimated_margin)} ({fmtPct(project.override_original_estimated_margin_pct)})
@@ -1424,10 +1424,17 @@ const ProjectFinancials: React.FC = () => {
   );
 };
 
-const MetricChip: React.FC<{ label: string; value: string; valueColor?: string }> = ({ label, value, valueColor }) => (
-  <div style={{ textAlign: 'center' }}>
-    <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.15rem' }}>{label}</div>
-    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: valueColor || '#1e293b', fontFamily: 'monospace' }}>{value}</div>
+const MetricChip: React.FC<{ label: string; value: string; valueColor?: string; accent?: string }> = ({ label, value, valueColor, accent = '#1a56db' }) => (
+  <div style={{
+    background: '#fff',
+    border: '1px solid #e2e8f0',
+    borderLeft: `3px solid ${accent}`,
+    borderRadius: 8,
+    padding: '0.55rem 0.85rem',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+  }}>
+    <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.2rem' }}>{label}</div>
+    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: valueColor || '#1e293b' }}>{value}</div>
   </div>
 );
 

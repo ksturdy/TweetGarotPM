@@ -806,7 +806,7 @@ const CostTypeSchedule: React.FC<Props> = ({
 
   // ── Align Phases ──────────────────────────────────────────────────────────
   const [alignPhases, setAlignPhases] = useState(() =>
-    localStorage.getItem(`alignPhases-${projectId}`) !== 'false'
+    localStorage.getItem(`alignPhases-${projectId}`) === 'true'
   );
   const [alignedStart,   setAlignedStart]   = useState('');
   const [alignedEnd,     setAlignedEnd]     = useState('');
