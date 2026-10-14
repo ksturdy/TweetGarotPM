@@ -98,9 +98,9 @@ pool.query(
   'INSERT INTO feedback_comments (feedback_id, user_id, comment) VALUES (\$1, \$2, \$3)',
   [FEEDBACK_ID, ADMIN_USER_ID, 'Your comment text here']
 ).then(() =>
-  // Step B: then update status
+  // Step B: then update status (always set completed_at when completing so KPI avg_fix_days works)
   pool.query(
-    'UPDATE feedback SET status = \$1, updated_at = NOW() WHERE id = \$2',
+    'UPDATE feedback SET status = \$1, updated_at = NOW(), completed_at = CASE WHEN \$1 = \'completed\' THEN NOW() ELSE completed_at END WHERE id = \$2',
     ['completed', FEEDBACK_ID]
   )
 ).then(() => { console.log('done'); pool.end(); })
