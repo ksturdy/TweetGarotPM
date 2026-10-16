@@ -19,6 +19,7 @@ import { budgetGeneratorService } from '../../services/budgetGenerator';
 import { budgetsApi } from '../../services/budgets';
 import type { Budget } from '../../services/budgets';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import ScopeJobMappingPanel from '../../components/estimates/ScopeJobMappingPanel';
 import '../../styles/SalesPipeline.css';
 import './BudgetGenerator.css';
 
@@ -136,6 +137,7 @@ const CostDatabase: React.FC = () => {
   const [tab, setTab] = useState<Tab>('cost-type');
   const [drillPhase, setDrillPhase] = useState<{ phase: string; cost_type: number } | null>(null);
   const [search, setSearch] = useState('');
+  const [scopeMapTarget, setScopeMapTarget] = useState<{id:number;name:string}|null>(null);
 
   // Estimates state
   const [estFilters, setEstFilters] = useState<EstDbFilters>(() => {
@@ -759,6 +761,7 @@ const CostDatabase: React.FC = () => {
               onToggleAll={(ids, selectAll) => setExcluded(selectAll ? new Set() : new Set(ids))}
               onSqftSave={handleSqftSave}
               onScopesSave={handleScopesSave}
+              onScopeMap={(id, name) => setScopeMapTarget({ id, name })}
               loading={projLoading}
             />
           </div>
@@ -847,10 +850,38 @@ const CostDatabase: React.FC = () => {
               onToggleAll={(ids, selectAll) => setExcluded(selectAll ? new Set() : new Set(ids))}
               onSqftSave={handleSqftSave}
               onScopesSave={handleScopesSave}
+              onScopeMap={(id, name) => setScopeMapTarget({ id, name })}
               loading={projLoading}
             />
           </div>
         </>
+      )}
+
+      {/* Scope Job Mapping Modal */}
+      {scopeMapTarget && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+          onClick={() => setScopeMapTarget(null)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: '10px', width: '100%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ padding: '12px 16px', background: '#002356', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '10px 10px 0 0' }}>
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: 700, color: '#fff' }}>{scopeMapTarget.name}</div>
+                <div style={{ fontSize: '11px', color: '#93c5fd', marginTop: '2px' }}>Vista Scope Job Mapping</div>
+              </div>
+              <button onClick={() => setScopeMapTarget(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ padding: '16px' }}>
+              <ScopeJobMappingPanel
+                projectId={scopeMapTarget.id}
+                source="project"
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Drill-in modal: phase → projects */}
@@ -1640,8 +1671,9 @@ const SourceProjectsTable: React.FC<{
   onToggleAll: (allIds: number[], selectAll: boolean) => void;
   onSqftSave?: (id: number, sqft: number | null) => void;
   onScopesSave?: (id: number, scopes: string[]) => void;
+  onScopeMap?: (id: number, name: string) => void;
   loading: boolean;
-}> = ({ projects, excluded, onToggle, onToggleAll, onSqftSave, onScopesSave, loading }) => {
+}> = ({ projects, excluded, onToggle, onToggleAll, onSqftSave, onScopesSave, onScopeMap, loading }) => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingVal, setEditingVal] = useState('');
   const [scopesPopupId, setScopesPopupId] = useState<number | null>(null);
@@ -1703,6 +1735,7 @@ const SourceProjectsTable: React.FC<{
           <Th>Sq Ft {onSqftSave && <span style={{ fontWeight: 400, textTransform: 'none', fontSize: '0.6rem', color: '#94a3b8' }}>(click to edit)</span>}</Th>
           <Th>JTD $/SF</Th>
           {onScopesSave && <Th align="left">Scopes</Th>}
+          {onScopeMap && <Th align="left">Vista</Th>}
           <Th>% of Total</Th>
         </tr></thead>
         <tbody>
@@ -1789,6 +1822,21 @@ const SourceProjectsTable: React.FC<{
                         : <span style={{ fontSize: '0.72rem', color: '#cbd5e1' }}>+ Add scopes</span>}
                     </button>
                   </td>
+                )}
+                {onScopeMap && (
+                  <Td align="left">
+                    <button
+                      onClick={() => onScopeMap(p.id, p.name)}
+                      style={{
+                        fontSize: '0.68rem', padding: '2px 7px',
+                        border: '1px solid #002356', borderRadius: '3px',
+                        background: '#f8fafc', color: '#002356', cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Map
+                    </button>
+                  </Td>
                 )}
                 <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>
                   {isExcluded ? '—' : `${(pct * 100).toFixed(1)}%`}

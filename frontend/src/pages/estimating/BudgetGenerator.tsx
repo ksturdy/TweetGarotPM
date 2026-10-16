@@ -13,6 +13,8 @@ import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import { budgetsApi, Budget } from '../../services/budgets';
 import { createMatrixFromBudget, getMatrixForBudget } from '../../services/costControl';
 import BudgetReportModal from '../../components/estimates/BudgetReportModal';
+import ScopeJobMappingPanel from '../../components/estimates/ScopeJobMappingPanel';
+import { scopeJobMappingsApi } from '../../services/scopeJobMappings';
 import './BudgetGenerator.css';
 import '../../styles/SalesPipeline.css';
 
@@ -127,6 +129,7 @@ const BudgetGenerator: React.FC = () => {
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [scopeMapTarget, setScopeMapTarget] = useState<{id:number;source:'historical'|'project';name:string}|null>(null);
 
   // Ref for print
   const reportRef = useRef<HTMLDivElement>(null);
@@ -1013,16 +1016,48 @@ const BudgetGenerator: React.FC = () => {
       .reduce((sum, s) => sum + s.subtotal, 0) / sqft;
   };
 
+  const handleMappingChange = async (target: {id:number; source:string}) => {
+    try {
+      const res = target.source === 'project'
+        ? await scopeJobMappingsApi.getForProject(target.id)
+        : await scopeJobMappingsApi.getForHistorical(target.id);
+      const mappings: any[] = (res.data as any).mappings || [];
+      setComparableProjects(prev => prev.map(p => {
+        if (p.id !== target.id || p.source !== target.source) return p;
+        const sqft = p.sqft || 1;
+        const byScope: Record<string, any> = {};
+        mappings.forEach(m => { byScope[m.scope] = m; });
+        const hvacMap = byScope['HVAC'];
+        const plumbMap = byScope['Plumbing'];
+        const basMap = byScope['BAS'];
+        return {
+          ...p,
+          sheetMetalCostPerSqft: hvacMap ? (parseFloat(hvacMap.cached_est_cost) || 0) / sqft : p.sheetMetalCostPerSqft,
+          pipingCostPerSqft: hvacMap ? 0 : p.pipingCostPerSqft,
+          plumbingCostPerSqft: plumbMap ? (parseFloat(plumbMap.cached_est_cost) || 0) / sqft : p.plumbingCostPerSqft,
+          basCostPerSqft: basMap ? (parseFloat(basMap.cached_est_cost) || 0) / sqft : p.basCostPerSqft,
+          hvacFromVista: !!hvacMap,
+          plumbingFromVista: !!plumbMap,
+          basFromVista: !!basMap,
+        };
+      }));
+    } catch { /* non-fatal */ }
+  };
+
   const renderScopeNumberLine = (scopeKey: string): React.ReactNode => {
     if (!currentBudget) return null;
     const config = SCOPE_CHART_CONFIG[scopeKey];
     const budgetSF = getBudgetScopeCostPerSF(scopeKey);
 
-    interface Pt { name: string; value: number; isBudget: boolean; isFallback: boolean; }
+    interface Pt { name: string; value: number; isBudget: boolean; isFallback: boolean; isVista: boolean; }
+    const VISTA_FLAG_KEY: Record<string, keyof typeof comparableProjects[0]> = {
+      HVAC: 'hvacFromVista', Plumbing: 'plumbingFromVista', BAS: 'basFromVista',
+    };
+    const vistaFlagKey = VISTA_FLAG_KEY[scopeKey];
     const pts: Pt[] = [];
     if (budgetSF > 0.01) {
       const n = currentBudget.summary.projectName || 'This Budget';
-      pts.push({ name: n.length > 20 ? n.slice(0, 18) + '…' : n, value: budgetSF, isBudget: true, isFallback: false });
+      pts.push({ name: n.length > 20 ? n.slice(0, 18) + '…' : n, value: budgetSF, isBudget: true, isFallback: false, isVista: false });
     }
     // Which source scopes map to this chart category
     const CHART_SCOPES: Record<string, string[]> = {
@@ -1037,7 +1072,7 @@ const BudgetGenerator: React.FC = () => {
       if (scopeVal > 0.01) {
         // Has real per-scope breakdown data — use it
         const n = p.name.length > 20 ? p.name.slice(0, 18) + '…' : p.name;
-        pts.push({ name: n, value: scopeVal, isBudget: false, isFallback: false });
+        pts.push({ name: n, value: scopeVal, isBudget: false, isFallback: false, isVista: !!(vistaFlagKey && p[vistaFlagKey]) });
       } else {
         // No scope breakdown. Only fall back to total $/SF if the project's scope
         // list is a subset of this chart's trades (total ≈ this scope's cost).
@@ -1047,7 +1082,7 @@ const BudgetGenerator: React.FC = () => {
           projectScopes.every(s => chartTrades.includes(s));
         if (singleScopeMatch && (p.costPerSqft || 0) > 0.01) {
           const n = p.name.length > 20 ? p.name.slice(0, 18) + '…' : p.name;
-          pts.push({ name: n, value: p.costPerSqft!, isBudget: false, isFallback: true });
+          pts.push({ name: n, value: p.costPerSqft!, isBudget: false, isFallback: true, isVista: false });
         }
         // Otherwise omit — total $/SF spans multiple trades and would be misleading
       }
@@ -1198,6 +1233,10 @@ const BudgetGenerator: React.FC = () => {
                   fill={pt.isBudget ? config.color : (pt.isFallback ? '#9ca3af' : '#6b7280')}>
                   ${pt.value.toFixed(2)}
                 </text>
+                {pt.isVista && !pt.isBudget && (
+                  <text x={pt.x} y={TICK_BOT + 25} textAnchor="middle"
+                    fontSize={7} fontWeight="700" fill="#6366f1">V</text>
+                )}
               </g>
             );
           })}
@@ -2453,6 +2492,22 @@ const BudgetGenerator: React.FC = () => {
                             <span className="match-score">{project.similarityScore}%</span>
                           </div>
                         </div>
+                        <div style={{ marginTop: '8px', textAlign: 'right' }}>
+                          <button
+                            onClick={() => setScopeMapTarget({
+                              id: project.id,
+                              source: (project.source || 'historical') as 'historical' | 'project',
+                              name: project.name,
+                            })}
+                            style={{
+                              fontSize: '11px', padding: '3px 10px',
+                              border: '1px solid #002356', borderRadius: '4px',
+                              background: '#f8fafc', color: '#002356', cursor: 'pointer',
+                            }}
+                          >
+                            Map Scope Jobs
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -3277,8 +3332,41 @@ const BudgetGenerator: React.FC = () => {
                     <strong>Notes:</strong> {detailProject.notes}
                   </div>
                 )}
+                <ScopeJobMappingPanel
+                  projectId={detailProject.id}
+                  source={detailProject.source === 'project' ? 'project' : 'historical'}
+                  onMappingChange={() => handleMappingChange({ id: detailProject.id, source: detailProject.source || 'historical' })}
+                />
               </>
             ) : null}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Scope Job Mapping Modal */}
+    {scopeMapTarget && (
+      <div
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+        onClick={() => setScopeMapTarget(null)}
+      >
+        <div
+          style={{ background: '#fff', borderRadius: '10px', width: '100%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div style={{ padding: '12px 16px', background: '#002356', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '10px 10px 0 0' }}>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#fff' }}>{scopeMapTarget.name}</div>
+              <div style={{ fontSize: '11px', color: '#93c5fd', marginTop: '2px' }}>Vista Scope Job Mapping</div>
+            </div>
+            <button onClick={() => setScopeMapTarget(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+          </div>
+          <div style={{ padding: '16px' }}>
+            <ScopeJobMappingPanel
+              projectId={scopeMapTarget.id}
+              source={scopeMapTarget.source}
+              onMappingChange={() => handleMappingChange({ id: scopeMapTarget.id, source: scopeMapTarget.source })}
+            />
           </div>
         </div>
       </div>

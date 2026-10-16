@@ -30,6 +30,9 @@ export interface SimilarProject {
   plumbingCostPerSqft?: number;
   basCostPerSqft?: number;
   scopes?: string[];
+  hvacFromVista?: boolean;
+  plumbingFromVista?: boolean;
+  basFromVista?: boolean;
 }
 
 export interface BudgetSectionItem {

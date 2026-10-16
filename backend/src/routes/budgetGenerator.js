@@ -11,6 +11,7 @@ const fs = require('fs');
 const pool = require('../config/database');
 const config = require('../config');
 const HistoricalProject = require('../models/HistoricalProject');
+const ScopeJobMapping = require('../models/ScopeJobMapping');
 
 const router = express.Router();
 
@@ -447,6 +448,18 @@ async function generateHandler(req, res, next) {
     // Apply inflation adjustment to project costs
     const projectDetails = projectDetailsRaw.map(p => adjustProjectCostsForInflation(p));
 
+    // Load Vista scope-job mappings for all comparable projects (one query)
+    const comparableRefs = topProjects.map(p => ({ id: p.id, source: p.source || 'historical' }));
+    const scopeMappings = await ScopeJobMapping.getForComparables(req.tenantId, comparableRefs);
+    const mappingIndex = {};
+    for (const m of scopeMappings) {
+      const key = m.historical_project_id
+        ? `historical:${m.historical_project_id}`
+        : `project:${m.live_project_id}`;
+      if (!mappingIndex[key]) mappingIndex[key] = [];
+      mappingIndex[key].push(m);
+    }
+
     // Get category averages across both historical and live projects
     const averagesRaw = await HistoricalProject.getCategoryAverages(
       market || null,
@@ -570,7 +583,9 @@ async function generateHandler(req, res, next) {
           inflationAdjusted: true,
           similarityScore: originalProject?.similarity_score || 0,
           source: originalProject?.source || 'historical',
-          ...computeScopeBreakdowns(p),
+          ...computeScopeBreakdownsWithMapping(p, mappingIndex[
+            (originalProject?.source === 'project') ? `project:${p.id}` : `historical:${p.id}`
+          ]),
         };
       }),
       averages: {
@@ -698,6 +713,54 @@ function computeScopeBreakdowns(p) {
     plumbingCostPerSqft: (f(p.pf_equip_cost) + f(p.pf_misc_field_cost)) / sqft,
     basCostPerSqft: f(p.controls) / sqft,
     scopes: Array.isArray(p.scopes) ? p.scopes : [],
+  };
+}
+
+// Compute scope $/SF preferring Vista job mapping data over raw cost fields.
+// mappings: array of { scope, vista_job, cached_est_cost } for this project.
+// When a Vista mapping exists for a scope, cached_est_cost / sqft is used.
+// HVAC (Sheet Metal + Piping combined) goes into sheetMetalCostPerSqft; pipingCostPerSqft is zeroed.
+function computeScopeBreakdownsWithMapping(p, mappings) {
+  const f = (v) => parseFloat(v) || 0;
+  const sqft = parseFloat(p.total_sqft) || 1;
+  const byScope = {};
+  (mappings || []).forEach(m => { byScope[m.scope] = m; });
+
+  const hvacMap = byScope['HVAC'];
+  const hvacCost = hvacMap
+    ? f(hvacMap.cached_est_cost) / sqft
+    : (
+        f(p.s_field_cost) + f(p.s_materials_with_escalation) +
+        f(p.r_field_cost) + f(p.r_materials_with_escalation) +
+        f(p.e_field_cost) + f(p.e_material_with_escalation) +
+        f(p.o_field_cost) + f(p.o_materials_with_escalation) +
+        f(p.sm_equip_cost) +
+        f(p.hw_field_cost) + f(p.hw_material_with_esc) +
+        f(p.chw_field_cost) + f(p.chw_material_with_esc) +
+        f(p.d_field_cost) + f(p.d_material_with_esc) +
+        f(p.g_field_cost) + f(p.g_material_with_esc) +
+        f(p.cw_field_cost) + f(p.cw_material_with_esc)
+      ) / sqft;
+
+  const plumbMap = byScope['Plumbing'];
+  const plumbingCost = plumbMap
+    ? f(plumbMap.cached_est_cost) / sqft
+    : (f(p.pf_equip_cost) + f(p.pf_misc_field_cost)) / sqft;
+
+  const basMap = byScope['BAS'];
+  const basCost = basMap
+    ? f(basMap.cached_est_cost) / sqft
+    : f(p.controls) / sqft;
+
+  return {
+    sheetMetalCostPerSqft: hvacCost,
+    pipingCostPerSqft: 0,
+    plumbingCostPerSqft: plumbingCost,
+    basCostPerSqft: basCost,
+    scopes: Array.isArray(p.scopes) ? p.scopes : [],
+    hvacFromVista: !!hvacMap,
+    plumbingFromVista: !!plumbMap,
+    basFromVista: !!basMap,
   };
 }
 

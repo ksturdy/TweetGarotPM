@@ -147,6 +147,7 @@ const marketingMediaRoutes = require('./routes/marketingMedia');
 const preJobChecklistRoutes = require('./routes/preJobChecklist');
 const itemCommentRoutes = require('./routes/itemComments');
 const plumbingDesignRoutes = require('./routes/plumbingDesigns');
+const scopeJobMappingRoutes = require('./routes/scopeJobMappings');
 
 const app = express();
 const server = http.createServer(app);
@@ -329,6 +330,7 @@ app.use('/api/reports/historical-revenue', historicalRevenueReportRoutes);
 app.use('/api/reports/phase-report', phaseReportRoutes);
 app.use('/api/projects', projectCostModelRoutes);
 app.use('/api/cost-database', costDatabaseRoutes);
+app.use('/api/scope-job-mappings', scopeJobMappingRoutes);
 app.use('/api/org-charts', orgChartRoutes);
 app.use('/api/trade-shows', tradeShowRoutes);
 app.use('/api/project-photos', projectPhotoRoutes);

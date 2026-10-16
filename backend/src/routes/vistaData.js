@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const VistaData = require('../models/VistaData');
 const PhaseSchedule = require('../models/PhaseSchedule');
+const { pool } = require('../config/database');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const fs = require('fs');
@@ -1077,6 +1078,41 @@ router.get('/contracts/by-project/:projectId', async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+// GET /api/vista/phase-codes/job-total?job=40687-10 — total est_cost for a specific job number
+router.get('/phase-codes/job-total', async (req, res, next) => {
+  try {
+    const { job } = req.query;
+    if (!job) return res.status(400).json({ error: 'job query parameter is required' });
+    const result = await pool.query(
+      `SELECT SUM(est_cost) AS total_est_cost FROM vp_phase_codes WHERE tenant_id = $1 AND job = $2`,
+      [req.tenantId, job]
+    );
+    const total = parseFloat(result.rows[0]?.total_est_cost) || 0;
+    res.json({ job, total_est_cost: total });
+  } catch (error) { next(error); }
+});
+
+// GET /api/vista/phase-codes/search-jobs?contract_prefix=40687 — subjobs matching a contract prefix
+router.get('/phase-codes/search-jobs', async (req, res, next) => {
+  try {
+    const { contract_prefix } = req.query;
+    if (!contract_prefix) return res.status(400).json({ error: 'contract_prefix is required' });
+    const result = await pool.query(
+      `SELECT job, job_description, SUM(est_cost) AS total_est_cost
+       FROM vp_phase_codes
+       WHERE tenant_id = $1 AND contract LIKE $2
+       GROUP BY job, job_description
+       ORDER BY job`,
+      [req.tenantId, `${contract_prefix}%`]
+    );
+    res.json(result.rows.map(r => ({
+      job: r.job,
+      job_description: r.job_description,
+      total_est_cost: parseFloat(r.total_est_cost) || 0,
+    })));
+  } catch (error) { next(error); }
 });
 
 // GET /api/vista/phase-codes/project/:projectId/jobs - Get distinct jobs for a project
