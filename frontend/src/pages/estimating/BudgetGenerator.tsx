@@ -1020,16 +1020,32 @@ const BudgetGenerator: React.FC = () => {
       const n = currentBudget.summary.projectName || 'This Budget';
       pts.push({ name: n.length > 20 ? n.slice(0, 18) + '…' : n, value: budgetSF, isBudget: true, isFallback: false });
     }
+    // Which source scopes map to this chart category
+    const CHART_SCOPES: Record<string, string[]> = {
+      HVAC: ['Sheet Metal', 'Piping'],
+      Plumbing: ['Plumbing'],
+      BAS: ['BAS'],
+    };
+    const chartTrades = CHART_SCOPES[scopeKey] ?? [];
+
     comparableProjects.forEach(p => {
       const scopeVal = config.getComparableSF(p);
-      const hasAnyBreakdown = (p.sheetMetalCostPerSqft || 0) + (p.pipingCostPerSqft || 0) +
-        (p.plumbingCostPerSqft || 0) + (p.basCostPerSqft || 0) > 0;
-      // Fall back to total costPerSqft when no scope-level breakdown is stored
-      const val = scopeVal > 0.01 ? scopeVal : (!hasAnyBreakdown ? (p.costPerSqft || 0) : 0);
-      const isFallback = scopeVal <= 0.01 && val > 0.01;
-      if (val > 0.01) {
+      if (scopeVal > 0.01) {
+        // Has real per-scope breakdown data — use it
         const n = p.name.length > 20 ? p.name.slice(0, 18) + '…' : p.name;
-        pts.push({ name: n, value: val, isBudget: false, isFallback });
+        pts.push({ name: n, value: scopeVal, isBudget: false, isFallback: false });
+      } else {
+        // No scope breakdown. Only fall back to total $/SF if the project's scope
+        // list is a subset of this chart's trades (total ≈ this scope's cost).
+        const projectScopes: string[] = Array.isArray(p.scopes) ? p.scopes : [];
+        const singleScopeMatch =
+          projectScopes.length > 0 &&
+          projectScopes.every(s => chartTrades.includes(s));
+        if (singleScopeMatch && (p.costPerSqft || 0) > 0.01) {
+          const n = p.name.length > 20 ? p.name.slice(0, 18) + '…' : p.name;
+          pts.push({ name: n, value: p.costPerSqft!, isBudget: false, isFallback: true });
+        }
+        // Otherwise omit — total $/SF spans multiple trades and would be misleading
       }
     });
     if (pts.length === 0) return null;
