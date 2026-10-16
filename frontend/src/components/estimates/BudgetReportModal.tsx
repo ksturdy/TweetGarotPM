@@ -12,6 +12,7 @@ interface BudgetReportModalProps {
   };
   bidType?: string;
   scope?: string;
+  scopesOfWork?: string[];
   isOpen: boolean;
   onClose: () => void;
 }
@@ -22,6 +23,7 @@ const BudgetReportModal: React.FC<BudgetReportModalProps> = ({
   editableValues,
   bidType,
   scope,
+  scopesOfWork,
   isOpen,
   onClose,
 }) => {
@@ -122,6 +124,7 @@ const BudgetReportModal: React.FC<BudgetReportModalProps> = ({
             editableValues={editableValues}
             bidType={bidType}
             scope={scope}
+            scopesOfWork={scopesOfWork}
           />
         </div>
       </div>

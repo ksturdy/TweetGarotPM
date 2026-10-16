@@ -1,6 +1,7 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { GeneratedBudget, SimilarProject } from '../../services/budgetGenerator';
+import ScopeNumberLineChart from './ScopeNumberLineChart';
 
 interface BudgetReportPreviewProps {
   budget: GeneratedBudget;
@@ -12,6 +13,7 @@ interface BudgetReportPreviewProps {
   };
   bidType?: string;
   scope?: string;
+  scopesOfWork?: string[];
 }
 
 const BudgetReportPreview: React.FC<BudgetReportPreviewProps> = ({
@@ -20,6 +22,7 @@ const BudgetReportPreview: React.FC<BudgetReportPreviewProps> = ({
   editableValues,
   bidType,
   scope,
+  scopesOfWork,
 }) => {
   const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null) return '$0';
@@ -361,6 +364,29 @@ const BudgetReportPreview: React.FC<BudgetReportPreviewProps> = ({
         </table>
       </div>
 
+      {/* Scope $/SF Analysis */}
+      {comparableProjects.length > 0 && (
+        <div style={{ marginBottom: '25px', pageBreakInside: 'avoid' }}>
+          <div style={{
+            fontSize: '12pt',
+            fontWeight: 'bold',
+            backgroundColor: '#002356',
+            color: '#fff',
+            padding: '8px 12px',
+            marginBottom: '12px',
+            textTransform: 'uppercase',
+            letterSpacing: '1px',
+          }}>
+            $/SF by Scope vs Comparable Projects
+          </div>
+          <div>
+            <ScopeNumberLineChart budget={budget} comparableProjects={comparableProjects} scopeKey="HVAC" scopesOfWork={scopesOfWork} />
+            <ScopeNumberLineChart budget={budget} comparableProjects={comparableProjects} scopeKey="Plumbing" scopesOfWork={scopesOfWork} />
+            <ScopeNumberLineChart budget={budget} comparableProjects={comparableProjects} scopeKey="BAS" scopesOfWork={scopesOfWork} />
+          </div>
+        </div>
+      )}
+
       {/* Section Breakdown */}
       <div style={{ marginBottom: '25px' }}>
         <div style={{
@@ -444,81 +470,114 @@ const BudgetReportPreview: React.FC<BudgetReportPreviewProps> = ({
       </div>
 
       {/* Comparable Projects */}
-      {comparableProjects.length > 0 && (
-        <div style={{ marginBottom: '25px', pageBreakInside: 'avoid' }}>
-          <div style={{
-            fontSize: '12pt',
-            fontWeight: 'bold',
-            backgroundColor: '#002356',
-            color: '#fff',
-            padding: '8px 12px',
-            marginBottom: '12px',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-          }}>
-            Comparable Historical Projects
-          </div>
+      {comparableProjects.length > 0 && (() => {
+        const shown = comparableProjects.slice(0, 5);
+        const hasAnyInflated = shown.some(p => p.inflationAdjusted);
+        const hasHVAC = shown.some(p => (p.sheetMetalCostPerSqft || 0) + (p.pipingCostPerSqft || 0) > 0);
+        const hasPlumbing = shown.some(p => (p.plumbingCostPerSqft || 0) > 0);
+        const hasBAS = shown.some(p => (p.basCostPerSqft || 0) > 0);
+        const thStyle: React.CSSProperties = { padding: '8px 10px', textAlign: 'right' as const, borderBottom: '2px solid #002356', fontWeight: '600', fontSize: '9pt' };
+        const tdStyle: React.CSSProperties = { padding: '7px 10px', textAlign: 'right' as const, borderBottom: '1px solid #e5e7eb', fontSize: '9pt' };
+        return (
+          <div style={{ marginBottom: '25px', pageBreakInside: 'avoid' }}>
+            <div style={{
+              fontSize: '12pt',
+              fontWeight: 'bold',
+              backgroundColor: '#002356',
+              color: '#fff',
+              padding: '8px 12px',
+              marginBottom: '12px',
+              textTransform: 'uppercase',
+              letterSpacing: '1px',
+            }}>
+              Comparable Historical Projects
+            </div>
 
-          <table style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            fontSize: '10pt',
-          }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f3f4f6' }}>
-                <th style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #002356', fontWeight: '600' }}>
-                  Project Name
-                </th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', borderBottom: '2px solid #002356', fontWeight: '600' }}>
-                  Square Footage
-                </th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', borderBottom: '2px solid #002356', fontWeight: '600' }}>
-                  Total Cost
-                </th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', borderBottom: '2px solid #002356', fontWeight: '600' }}>
-                  Cost/SF
-                </th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', borderBottom: '2px solid #002356', fontWeight: '600' }}>
-                  Match Score
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {comparableProjects.slice(0, 5).map((project, index) => (
-                <tr key={project.id || index}>
-                  <td style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb' }}>
-                    {project.name}
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>
-                    {formatNumber(project.sqft)} SF
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>
-                    {formatCurrency(project.totalCost)}
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>
-                    ${(project.costPerSqft || 0).toFixed(2)}
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '2px 8px',
-                      backgroundColor: project.similarityScore >= 80 ? '#dcfce7' :
-                                       project.similarityScore >= 60 ? '#fef3c7' : '#fee2e2',
-                      color: project.similarityScore >= 80 ? '#166534' :
-                             project.similarityScore >= 60 ? '#92400e' : '#991b1b',
-                      borderRadius: '12px',
-                      fontWeight: '600',
-                      fontSize: '9pt',
-                    }}>
-                      {project.similarityScore}%
-                    </span>
-                  </td>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9pt' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f3f4f6' }}>
+                  <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '2px solid #002356', fontWeight: '600', fontSize: '9pt' }}>
+                    Project Name
+                  </th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>Source</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>Bid Year</th>
+                  <th style={{ ...thStyle }}>Size (SF)</th>
+                  {hasAnyInflated && <th style={{ ...thStyle }}>Orig. $/SF</th>}
+                  <th style={{ ...thStyle }}>Today's $/SF</th>
+                  {hasHVAC && <th style={{ ...thStyle }}>HVAC $/SF</th>}
+                  {hasPlumbing && <th style={{ ...thStyle }}>Plumbing $/SF</th>}
+                  {hasBAS && <th style={{ ...thStyle }}>BAS $/SF</th>}
+                  <th style={{ ...thStyle, textAlign: 'center' }}>Match</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {shown.map((project, index) => {
+                  const hvacSF = (project.sheetMetalCostPerSqft || 0) + (project.pipingCostPerSqft || 0);
+                  return (
+                    <tr key={project.id || index} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#fafafa' }}>
+                      <td style={{ padding: '7px 10px', borderBottom: '1px solid #e5e7eb', fontSize: '9pt', fontWeight: '500' }}>
+                        {project.name}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        {project.source === 'historical' ? (
+                          <span style={{ display: 'inline-block', padding: '1px 6px', backgroundColor: '#dbeafe', color: '#1e40af', borderRadius: '10px', fontSize: '8pt', fontWeight: '600' }}>Historical</span>
+                        ) : (
+                          <span style={{ display: 'inline-block', padding: '1px 6px', backgroundColor: '#dcfce7', color: '#166534', borderRadius: '10px', fontSize: '8pt', fontWeight: '600' }}>Live</span>
+                        )}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        {project.bidYear ?? '—'}
+                      </td>
+                      <td style={{ ...tdStyle }}>{formatNumber(project.sqft)} SF</td>
+                      {hasAnyInflated && (
+                        <td style={{ ...tdStyle }}>
+                          {project.originalCostPerSqft ? `$${project.originalCostPerSqft.toFixed(2)}` : '—'}
+                        </td>
+                      )}
+                      <td style={{ ...tdStyle, fontWeight: '600' }}>
+                        ${(project.costPerSqft || 0).toFixed(2)}
+                        {project.inflationAdjusted && (
+                          <span style={{ fontSize: '7pt', color: '#6b7280', marginLeft: '3px' }}>adj</span>
+                        )}
+                      </td>
+                      {hasHVAC && (
+                        <td style={{ ...tdStyle, color: hvacSF > 0 ? '#059669' : '#9ca3af' }}>
+                          {hvacSF > 0 ? `$${hvacSF.toFixed(2)}` : '—'}
+                        </td>
+                      )}
+                      {hasPlumbing && (
+                        <td style={{ ...tdStyle, color: (project.plumbingCostPerSqft || 0) > 0 ? '#2563eb' : '#9ca3af' }}>
+                          {(project.plumbingCostPerSqft || 0) > 0 ? `$${project.plumbingCostPerSqft!.toFixed(2)}` : '—'}
+                        </td>
+                      )}
+                      {hasBAS && (
+                        <td style={{ ...tdStyle, color: (project.basCostPerSqft || 0) > 0 ? '#7c3aed' : '#9ca3af' }}>
+                          {(project.basCostPerSqft || 0) > 0 ? `$${project.basCostPerSqft!.toFixed(2)}` : '—'}
+                        </td>
+                      )}
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '2px 8px',
+                          backgroundColor: project.similarityScore >= 80 ? '#dcfce7' :
+                                           project.similarityScore >= 60 ? '#fef3c7' : '#fee2e2',
+                          color: project.similarityScore >= 80 ? '#166534' :
+                                 project.similarityScore >= 60 ? '#92400e' : '#991b1b',
+                          borderRadius: '12px',
+                          fontWeight: '600',
+                          fontSize: '8pt',
+                        }}>
+                          {project.similarityScore}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
 
       {/* Assumptions & Risks */}
       <div style={{ marginBottom: '25px', pageBreakInside: 'avoid' }}>

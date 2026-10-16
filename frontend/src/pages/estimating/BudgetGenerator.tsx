@@ -13,6 +13,7 @@ import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import { budgetsApi, Budget } from '../../services/budgets';
 import { createMatrixFromBudget, getMatrixForBudget } from '../../services/costControl';
 import BudgetReportModal from '../../components/estimates/BudgetReportModal';
+import ScopeNumberLineChart from '../../components/estimates/ScopeNumberLineChart';
 import ScopeJobMappingPanel from '../../components/estimates/ScopeJobMappingPanel';
 import { scopeJobMappingsApi } from '../../services/scopeJobMappings';
 import './BudgetGenerator.css';
@@ -1093,202 +1094,15 @@ const BudgetGenerator: React.FC = () => {
     } catch { /* non-fatal */ }
   };
 
-  const renderScopeNumberLine = (scopeKey: string): React.ReactNode => {
-    if (!currentBudget) return null;
-    const config = SCOPE_CHART_CONFIG[scopeKey];
-    const budgetSF = getBudgetScopeCostPerSF(scopeKey);
-
-    interface Pt { name: string; value: number; isBudget: boolean; isFallback: boolean; isVista: boolean; }
-    const VISTA_FLAG_KEY: Record<string, keyof typeof comparableProjects[0]> = {
-      HVAC: 'hvacFromVista', Plumbing: 'plumbingFromVista', BAS: 'basFromVista',
-    };
-    const vistaFlagKey = VISTA_FLAG_KEY[scopeKey];
-    const pts: Pt[] = [];
-    if (budgetSF > 0.01) {
-      pts.push({ name: currentBudget.summary.projectName || 'This Budget', value: budgetSF, isBudget: true, isFallback: false, isVista: false });
-    }
-    // Which source scopes map to this chart category
-    const CHART_SCOPES: Record<string, string[]> = {
-      HVAC: ['Sheet Metal', 'Piping'],
-      Plumbing: ['Plumbing'],
-      BAS: ['BAS'],
-    };
-    const chartTrades = CHART_SCOPES[scopeKey] ?? [];
-
-    comparableProjects.forEach(p => {
-      const scopeVal = config.getComparableSF(p);
-      if (scopeVal > 0.01) {
-        // Has real per-scope breakdown data — use it
-        pts.push({ name: p.name, value: scopeVal, isBudget: false, isFallback: false, isVista: !!(vistaFlagKey && p[vistaFlagKey]) });
-      } else {
-        // No scope breakdown. Only fall back to total $/SF if the project's scope
-        // list is a subset of this chart's trades (total ≈ this scope's cost).
-        const projectScopes: string[] = Array.isArray(p.scopes) ? p.scopes : [];
-        const singleScopeMatch =
-          projectScopes.length > 0 &&
-          projectScopes.every(s => chartTrades.includes(s));
-        if (singleScopeMatch && (p.costPerSqft || 0) > 0.01) {
-          pts.push({ name: p.name, value: p.costPerSqft!, isBudget: false, isFallback: true, isVista: false });
-        }
-        // Otherwise omit — total $/SF spans multiple trades and would be misleading
-      }
-    });
-    if (pts.length === 0) return null;
-
-    const vals = pts.map(p => p.value);
-    const rawMin = Math.min(...vals);
-    const rawMax = Math.max(...vals);
-    // For a single point, anchor the axis from 0 to 2× the value; multiple points get padding
-    const isSingle = pts.length === 1;
-    const minVal = isSingle ? 0 : Math.max(0, rawMin - (rawMax - rawMin) * 0.22);
-    const maxVal = isSingle
-      ? Math.ceil(rawMax * 1.8 / 10) * 10
-      : rawMax + (rawMax - rawMin) * 0.22;
-    const range = Math.max(maxVal - minVal, 0.01);
-
-    // SVG layout constants
-    const W = 800; const H = 80;
-    const PADX = 50; const CW = W - 2 * PADX;
-    const AXIS_Y = 52;
-    const TICK_TOP = 46; const TICK_BOT = 58;
-
-    const toX = (v: number) => PADX + ((v - minVal) / range) * CW;
-
-    const sorted = [...pts].map(p => ({ ...p, x: toX(p.value) })).sort((a, b) => a.x - b.x);
-
-    // Three-row label collision avoidance
-    const MIN_GAP = 100;
-    const rowTail = [-Infinity, -Infinity, -Infinity];
-    const rowOf = sorted.map(p => {
-      if (rowTail[0] + MIN_GAP <= p.x) { rowTail[0] = p.x; return 0; }
-      if (rowTail[1] + MIN_GAP <= p.x) { rowTail[1] = p.x; return 1; }
-      rowTail[2] = p.x; return 2;
-    });
-    const LABEL_Y = [38, 25, 12]; // text baseline y per row
-
-    // Nice tick interval for the axis
-    const step = (() => {
-      const raw = range / 5;
-      const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-      return Math.ceil(raw / mag) * mag;
-    })();
-    const ticks: number[] = [];
-    for (let t = Math.ceil(minVal / step) * step; t <= maxVal; t += step) {
-      if (t > minVal + 0.1 && t < maxVal - 0.1) ticks.push(t);
-    }
-
-    return (
-      <div style={{
-        background: '#fff',
-        border: `1px solid ${config.color}22`,
-        borderLeft: `3px solid ${config.color}`,
-        borderRadius: '8px',
-        padding: '0.375rem 1.25rem 0.25rem',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-      }}>
-        {/* Scope header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.15rem' }}>
-          <span style={{
-            display: 'inline-block', width: 8, height: 8,
-            borderRadius: '50%', background: config.color, flexShrink: 0,
-          }} />
-          <span style={{
-            fontSize: '0.69rem', fontWeight: 700, color: config.color,
-            textTransform: 'uppercase', letterSpacing: '0.09em',
-          }}>
-            {config.label}
-          </span>
-          {pts.some(p => p.isFallback) && (
-            <span style={{ fontSize: '0.65rem', color: '#9ca3af', marginLeft: 'auto' }}>
-              ◦ total $/SF (no scope breakdown)
-            </span>
-          )}
-        </div>
-
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ overflow: 'visible', display: 'block' }}>
-          {/* Track: light gray baseline */}
-          <line x1={PADX} y1={AXIS_Y} x2={W - PADX} y2={AXIS_Y}
-            stroke="#e2e8f0" strokeWidth={2} />
-          {/* Colored axis line on top */}
-          <line x1={PADX} y1={AXIS_Y} x2={W - PADX} y2={AXIS_Y}
-            stroke={config.color} strokeWidth={2} opacity={0.35} />
-
-          {/* Axis end caps */}
-          <line x1={PADX} y1={AXIS_Y - 4} x2={PADX} y2={AXIS_Y + 4}
-            stroke="#cbd5e1" strokeWidth={1.5} />
-          <line x1={W - PADX} y1={AXIS_Y - 4} x2={W - PADX} y2={AXIS_Y + 4}
-            stroke="#cbd5e1" strokeWidth={1.5} />
-
-          {/* Inner tick marks */}
-          {ticks.map(t => (
-            <g key={t}>
-              <line x1={toX(t)} y1={AXIS_Y - 3} x2={toX(t)} y2={AXIS_Y + 3}
-                stroke="#cbd5e1" strokeWidth={1} />
-              <text x={toX(t)} y={AXIS_Y + 13} textAnchor="middle"
-                fontSize={7} fill="#94a3b8">
-                ${t.toFixed(0)}
-              </text>
-            </g>
-          ))}
-
-          {/* Range end labels */}
-          <text x={PADX} y={AXIS_Y + 13} textAnchor="middle"
-            fontSize={7} fill="#94a3b8">${minVal.toFixed(0)}</text>
-          <text x={W - PADX} y={AXIS_Y + 13} textAnchor="middle"
-            fontSize={7} fill="#94a3b8">${maxVal.toFixed(0)}</text>
-
-          {sorted.map((pt, i) => {
-            const lY = LABEL_Y[rowOf[i]];
-            return (
-              <g key={i}>
-                {/* Leader line from label to tick */}
-                <line x1={pt.x} y1={lY + 4} x2={pt.x} y2={TICK_TOP - 1}
-                  stroke={pt.isBudget ? config.color : '#d1d5db'}
-                  strokeWidth={pt.isBudget ? 1.5 : 1}
-                  strokeDasharray={pt.isBudget ? undefined : '3,3'} />
-                {/* Axis tick */}
-                <line x1={pt.x} y1={TICK_TOP} x2={pt.x} y2={TICK_BOT}
-                  stroke={pt.isBudget ? config.color : (pt.isFallback ? '#cbd5e1' : '#94a3b8')}
-                  strokeWidth={pt.isBudget ? 2.5 : 1.5} />
-                {/* Marker dot */}
-                {pt.isBudget ? (
-                  <>
-                    <circle cx={pt.x} cy={AXIS_Y} r={9} fill={config.color} opacity={0.1} />
-                    <circle cx={pt.x} cy={AXIS_Y} r={5} fill={config.color} />
-                    <circle cx={pt.x} cy={AXIS_Y} r={3.5} fill="none" stroke="white" strokeWidth={1.2} opacity={0.5} />
-                  </>
-                ) : (
-                  <circle cx={pt.x} cy={AXIS_Y} r={4}
-                    fill="white"
-                    stroke={pt.isFallback ? '#cbd5e1' : '#94a3b8'}
-                    strokeWidth={pt.isFallback ? 1.5 : 2}
-                    strokeDasharray={pt.isFallback ? '2,2' : undefined} />
-                )}
-                {/* Project name */}
-                <text x={pt.x} y={lY} textAnchor="middle"
-                  fontSize={pt.isBudget ? 10 : 9}
-                  fontWeight={pt.isBudget ? '700' : '500'}
-                  fill={pt.isBudget ? config.color : (pt.isFallback ? '#9ca3af' : '#374151')}>
-                  {pt.isBudget ? `▸ ${pt.name}` : pt.name}
-                </text>
-                {/* $/SF value */}
-                <text x={pt.x} y={TICK_BOT + 13} textAnchor="middle"
-                  fontSize={pt.isBudget ? 9.5 : 8.5}
-                  fontWeight={pt.isBudget ? '700' : '400'}
-                  fill={pt.isBudget ? config.color : (pt.isFallback ? '#9ca3af' : '#6b7280')}>
-                  ${pt.value.toFixed(2)}
-                </text>
-                {pt.isVista && !pt.isBudget && (
-                  <text x={pt.x} y={TICK_BOT + 21} textAnchor="middle"
-                    fontSize={6.5} fontWeight="700" fill="#6366f1">V</text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-    );
-  };
+  const renderScopeNumberLine = (scopeKey: string): React.ReactNode => (
+    <ScopeNumberLineChart
+      key={scopeKey}
+      budget={currentBudget!}
+      comparableProjects={comparableProjects}
+      scopeKey={scopeKey}
+      scopesOfWork={scopesOfWork}
+    />
+  );
 
   const chartOptions = {
     responsive: true,
@@ -3448,6 +3262,7 @@ const BudgetGenerator: React.FC = () => {
         editableValues={editableValues}
         bidType={bidType}
         scope={scope}
+        scopesOfWork={scopesOfWork}
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}
       />
