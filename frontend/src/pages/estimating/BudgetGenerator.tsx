@@ -157,7 +157,19 @@ const BudgetGenerator: React.FC = () => {
       // Populate form fields
       setProjectName(existingBudget.project_name || '');
       setMarket(existingBudget.market || '');
-      setScopesOfWork(Array.isArray(existingBudget.scopes_of_work) ? existingBudget.scopes_of_work : []);
+      if (Array.isArray(existingBudget.scopes_of_work) && existingBudget.scopes_of_work.length) {
+        setScopesOfWork(existingBudget.scopes_of_work);
+      } else {
+        // Derive from sections so scope chips start in the correct state
+        const sn = (existingBudget.sections || []).map((s: any) => s.name.toLowerCase());
+        const derived: string[] = [];
+        if (sn.some((n: string) => n.includes('sheet metal') || n.includes('piping') || n.includes('hot water') || n.includes('chilled water'))) {
+          derived.push('Sheet Metal', 'Piping');
+        }
+        if (sn.some((n: string) => n.includes('plumb'))) derived.push('Plumbing');
+        if (sn.some((n: string) => n === 'controls' || n.startsWith('bas') || n.includes('control'))) derived.push('BAS');
+        setScopesOfWork(derived);
+      }
       setBuildingType(existingBudget.building_type ? existingBudget.building_type.split(', ').filter((t: string) => CONSTRUCTION_TYPE_OPTIONS.includes(t)) : []);
       setProjectTypes(existingBudget.project_type ? [existingBudget.project_type] : []);
       setBidType(existingBudget.bid_type || '');
@@ -1008,19 +1020,35 @@ const BudgetGenerator: React.FC = () => {
     BAS: ['BAS'],
   };
 
-  const getActiveScopeCharts = (): string[] => {
+  // All scope keys that have at least one matching section in the budget
+  const getScopeChartsWithSections = (): string[] => {
     if (!currentBudget) return [];
     const sectionNames = currentBudget.sections.map(s => s.name.toLowerCase());
-    return Object.keys(SCOPE_CHART_CONFIG).filter(scope => {
-      // Must have at least one matching section
-      if (!sectionNames.some(SCOPE_CHART_CONFIG[scope].sectionMatch)) return false;
-      // Must be in the user's selected scopes (when set)
-      if (scopesOfWork.length > 0) {
-        const tradeNames = SCOPE_TO_WORK[scope] ?? [];
-        if (!tradeNames.some(t => scopesOfWork.includes(t))) return false;
-      }
-      return true;
+    return Object.keys(SCOPE_CHART_CONFIG).filter(scope =>
+      sectionNames.some(SCOPE_CHART_CONFIG[scope].sectionMatch)
+    );
+  };
+
+  // Subset that the user has enabled via scopesOfWork chips
+  const getActiveScopeCharts = (): string[] => {
+    const all = getScopeChartsWithSections();
+    if (scopesOfWork.length === 0) return all;
+    return all.filter(scope => {
+      const tradeNames = SCOPE_TO_WORK[scope] ?? [];
+      return tradeNames.some(t => scopesOfWork.includes(t));
     });
+  };
+
+  const handleScopeChartToggle = async (chartKey: string) => {
+    const tradeNames = SCOPE_TO_WORK[chartKey] ?? [];
+    const isActive = tradeNames.some(t => scopesOfWork.includes(t));
+    const newScopes = isActive
+      ? scopesOfWork.filter(s => !tradeNames.includes(s))
+      : [...scopesOfWork.filter(s => !tradeNames.includes(s)), ...tradeNames];
+    setScopesOfWork(newScopes);
+    if (id) {
+      try { await budgetsApi.update(parseInt(id, 10), { scopes_of_work: newScopes }); } catch { /* non-fatal */ }
+    }
   };
 
   const getBudgetScopeCostPerSF = (scopeKey: string): number => {
@@ -2446,9 +2474,32 @@ const BudgetGenerator: React.FC = () => {
                     </div>
                   </div>
                   {/* Scope $/SF number-line charts */}
-                  {getActiveScopeCharts().length > 0 && (
+                  {getScopeChartsWithSections().length > 0 && (
                     <div style={{ flex: 1, minWidth: 280 }}>
-                      <h4 style={{ marginBottom: '0.75rem' }}>$/SF by Scope vs Comparable Projects</h4>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.625rem', flexWrap: 'wrap' }}>
+                        <h4 style={{ margin: 0 }}>$/SF by Scope vs Comparable Projects</h4>
+                        {getScopeChartsWithSections().map(chartKey => {
+                          const cfg = SCOPE_CHART_CONFIG[chartKey];
+                          const isActive = (SCOPE_TO_WORK[chartKey] ?? []).some(t => scopesOfWork.includes(t)) || scopesOfWork.length === 0;
+                          return (
+                            <button
+                              key={chartKey}
+                              onClick={() => handleScopeChartToggle(chartKey)}
+                              title={isActive ? `Hide ${cfg.label}` : `Show ${cfg.label}`}
+                              style={{
+                                fontSize: '0.65rem', padding: '2px 8px',
+                                border: `1px solid ${cfg.color}`,
+                                borderRadius: '10px',
+                                background: isActive ? cfg.color : '#fff',
+                                color: isActive ? '#fff' : cfg.color,
+                                cursor: 'pointer', fontWeight: 600,
+                              }}
+                            >
+                              {isActive ? `✓ ${cfg.label}` : cfg.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                         {getActiveScopeCharts().map(scope => renderScopeNumberLine(scope))}
                       </div>
