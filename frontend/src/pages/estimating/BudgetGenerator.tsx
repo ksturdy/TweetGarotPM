@@ -1,16 +1,12 @@
 // @refresh reset
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Doughnut, Bar } from 'react-chartjs-2';
+import { Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   ArcElement,
   Tooltip,
   Legend,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title
 } from 'chart.js';
 import { budgetGeneratorService, BudgetOptions, GeneratedBudget, SimilarProject, COST_TYPES } from '../../services/budgetGenerator';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
@@ -21,7 +17,7 @@ import './BudgetGenerator.css';
 import '../../styles/SalesPipeline.css';
 
 // Register Chart.js components
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 interface ItemOverride {
   laborCost?: number;
@@ -967,27 +963,32 @@ const BudgetGenerator: React.FC = () => {
     return COST_TYPES.map(ct => ({ ...ct, ...map[ct.id] })).filter(g => g.total > 0);
   };
 
-  // Scope chart helpers — one horizontal bar chart per trade scope
-  const SCOPE_CHART_CONFIG: Record<string, { color: string; field: keyof SimilarProject; sectionMatch: (n: string) => boolean }> = {
-    'Sheet Metal': {
+  // Scope chart configuration — Sheet Metal + Piping combined as HVAC
+  const SCOPE_CHART_CONFIG: Record<string, {
+    color: string;
+    label: string;
+    getComparableSF: (p: SimilarProject) => number;
+    sectionMatch: (n: string) => boolean;
+  }> = {
+    'HVAC': {
       color: '#10b981',
-      field: 'sheetMetalCostPerSqft',
-      sectionMatch: n => n.includes('sheet metal'),
-    },
-    'Piping': {
-      color: '#f59e0b',
-      field: 'pipingCostPerSqft',
-      sectionMatch: n => (n.includes('piping') || n.includes('hot water') || n.includes('chilled water')) && !n.includes('plumb'),
+      label: 'HVAC (Sheet Metal + Piping)',
+      getComparableSF: (p) => (p.sheetMetalCostPerSqft || 0) + (p.pipingCostPerSqft || 0),
+      sectionMatch: (n) =>
+        n.includes('sheet metal') ||
+        ((n.includes('piping') || n.includes('hot water') || n.includes('chilled water')) && !n.includes('plumb')),
     },
     'Plumbing': {
       color: '#3b82f6',
-      field: 'plumbingCostPerSqft',
-      sectionMatch: n => n.includes('plumb'),
+      label: 'Plumbing',
+      getComparableSF: (p) => p.plumbingCostPerSqft || 0,
+      sectionMatch: (n) => n.includes('plumb'),
     },
     'BAS': {
       color: '#8b5cf6',
-      field: 'basCostPerSqft',
-      sectionMatch: n => n === 'controls' || n === 'bas' || n.startsWith('bas '),
+      label: 'BAS / Controls',
+      getComparableSF: (p) => p.basCostPerSqft || 0,
+      sectionMatch: (n) => n === 'controls' || n === 'bas' || n.startsWith('bas ') || n.includes('control'),
     },
   };
 
@@ -999,62 +1000,145 @@ const BudgetGenerator: React.FC = () => {
     );
   };
 
-  const getBudgetScopeCostPerSF = (scope: string): number => {
+  const getBudgetScopeCostPerSF = (scopeKey: string): number => {
     if (!currentBudget) return 0;
     const sqft = currentBudget.summary.squareFootage || 1;
-    const { sectionMatch } = SCOPE_CHART_CONFIG[scope];
+    const { sectionMatch } = SCOPE_CHART_CONFIG[scopeKey];
     return currentBudget.sections
       .filter(s => sectionMatch(s.name.toLowerCase()))
       .reduce((sum, s) => sum + s.subtotal, 0) / sqft;
   };
 
-  const getScopeChartData = (scope: string) => {
+  const renderScopeNumberLine = (scopeKey: string): React.ReactNode => {
     if (!currentBudget) return null;
-    const { color, field } = SCOPE_CHART_CONFIG[scope];
-    const sqft = currentBudget.summary.squareFootage || 1;
-    const budgetVal = getBudgetScopeCostPerSF(scope);
-    const label = (name: string, sf: number) => {
-      const short = name.length > 26 ? name.slice(0, 24) + '…' : name;
-      return `${short} (${Math.round(sf / 1000)}k SF)`;
-    };
-    const labels = [
-      `► This Budget (${Math.round(sqft / 1000)}k SF)`,
-      ...comparableProjects.map(p => label(p.name, p.sqft)),
-    ];
-    const data = [budgetVal, ...comparableProjects.map(p => (p[field] as number) || 0)];
-    return {
-      labels,
-      datasets: [{
-        label: `${scope} $/SF`,
-        data,
-        backgroundColor: [color, ...comparableProjects.map(() => color + '99')],
-        borderColor: [color, ...comparableProjects.map(() => 'transparent')],
-        borderWidth: [2, ...comparableProjects.map(() => 0)],
-        borderRadius: 4,
-      }],
-    };
-  };
+    const config = SCOPE_CHART_CONFIG[scopeKey];
+    const budgetSF = getBudgetScopeCostPerSF(scopeKey);
 
-  const scopeBarChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    indexAxis: 'y' as const,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: (ctx: any) => ` $${(ctx.raw as number).toFixed(2)}/SF`,
-        },
-      },
-    },
-    scales: {
-      x: {
-        beginAtZero: true,
-        ticks: { callback: (v: any) => `$${v}`, font: { size: 10 } },
-        title: { display: true, text: '$/SF', font: { size: 10 } },
-      },
-      y: { ticks: { font: { size: 10 } } },
-    },
+    const pts: { name: string; value: number; isBudget: boolean }[] = [];
+    if (budgetSF > 0.01) {
+      const n = currentBudget.summary.projectName || 'This Budget';
+      pts.push({ name: n.length > 22 ? n.slice(0, 20) + '…' : n, value: budgetSF, isBudget: true });
+    }
+    comparableProjects.forEach(p => {
+      const val = config.getComparableSF(p);
+      if (val > 0.01) {
+        const n = p.name.length > 22 ? p.name.slice(0, 20) + '…' : p.name;
+        pts.push({ name: n, value: val, isBudget: false });
+      }
+    });
+    if (pts.length === 0) return null;
+
+    const vals = pts.map(p => p.value);
+    const rawMin = Math.min(...vals);
+    const rawMax = Math.max(...vals);
+    const pad = (rawMax - rawMin) * 0.18 || rawMax * 0.18 || 5;
+    const minVal = Math.max(0, rawMin - pad);
+    const maxVal = rawMax + pad;
+    const range = maxVal - minVal;
+
+    const W = 800; const H = 150;
+    const PADX = 45; const CW = W - 2 * PADX;
+    const AXIS_Y = 98;
+    const TICK_TOP = 90; const TICK_BOT = 106;
+
+    const toX = (v: number) => range < 0.01 ? PADX + CW / 2 : PADX + ((v - minVal) / range) * CW;
+
+    const sorted = [...pts].map(p => ({ ...p, x: toX(p.value) })).sort((a, b) => a.x - b.x);
+
+    // Assign label rows to prevent collision
+    const MIN_GAP = 95;
+    const rowTail = [-Infinity, -Infinity];
+    const rowOf = sorted.map(p => {
+      if (rowTail[0] + MIN_GAP <= p.x) { rowTail[0] = p.x; return 0; }
+      rowTail[1] = p.x; return 1;
+    });
+    const LABEL_Y = [74, 48]; // text baseline y per row
+
+    const gradId = `axgrad-${scopeKey}`;
+
+    return (
+      <div style={{
+        background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+        border: `1px solid ${config.color}20`,
+        borderLeft: `3px solid ${config.color}`,
+        borderRadius: '8px',
+        padding: '0.875rem 1.25rem 0.5rem',
+      }}>
+        <div style={{
+          fontSize: '0.7rem', fontWeight: 700, color: config.color,
+          textTransform: 'uppercase', letterSpacing: '0.08em',
+          marginBottom: '0.2rem',
+          display: 'flex', alignItems: 'center', gap: '0.4rem',
+        }}>
+          <span style={{
+            display: 'inline-block', width: 7, height: 7,
+            borderRadius: '50%', background: config.color, flexShrink: 0,
+          }} />
+          {config.label}
+        </div>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ overflow: 'visible', display: 'block' }}>
+          <defs>
+            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor={config.color} stopOpacity="0.04" />
+              <stop offset="40%" stopColor={config.color} stopOpacity="0.45" />
+              <stop offset="60%" stopColor={config.color} stopOpacity="0.45" />
+              <stop offset="100%" stopColor={config.color} stopOpacity="0.04" />
+            </linearGradient>
+          </defs>
+          {/* Axis line */}
+          <line x1={PADX} y1={AXIS_Y} x2={W - PADX} y2={AXIS_Y}
+            stroke={`url(#${gradId})`} strokeWidth={2.5} />
+          {/* Range labels */}
+          <text x={PADX} y={AXIS_Y + 22} textAnchor="start" fontSize={8} fill="#94a3b8">
+            ${minVal.toFixed(0)}/SF
+          </text>
+          <text x={W - PADX} y={AXIS_Y + 22} textAnchor="end" fontSize={8} fill="#94a3b8">
+            ${maxVal.toFixed(0)}/SF
+          </text>
+          {sorted.map((pt, i) => {
+            const lY = LABEL_Y[rowOf[i]];
+            return (
+              <g key={i}>
+                {/* Leader line */}
+                <line x1={pt.x} y1={lY + 5} x2={pt.x} y2={TICK_TOP}
+                  stroke={pt.isBudget ? config.color : '#d1d5db'}
+                  strokeWidth={pt.isBudget ? 1.5 : 1}
+                  strokeDasharray={pt.isBudget ? undefined : '3,3'} />
+                {/* Axis tick */}
+                <line x1={pt.x} y1={TICK_TOP} x2={pt.x} y2={TICK_BOT}
+                  stroke={pt.isBudget ? config.color : '#94a3b8'}
+                  strokeWidth={pt.isBudget ? 2.5 : 1.5} />
+                {/* Marker */}
+                {pt.isBudget ? (
+                  <>
+                    <circle cx={pt.x} cy={AXIS_Y} r={13} fill={config.color} opacity={0.1} />
+                    <circle cx={pt.x} cy={AXIS_Y} r={7} fill={config.color} />
+                    <circle cx={pt.x} cy={AXIS_Y} r={7} fill="none" stroke="white" strokeWidth={1.5} opacity={0.55} />
+                  </>
+                ) : (
+                  <circle cx={pt.x} cy={AXIS_Y} r={4.5}
+                    fill="white" stroke="#94a3b8" strokeWidth={1.5} />
+                )}
+                {/* Name label */}
+                <text x={pt.x} y={lY} textAnchor="middle"
+                  fontSize={pt.isBudget ? 11 : 9.5}
+                  fontWeight={pt.isBudget ? '700' : '500'}
+                  fill={pt.isBudget ? config.color : '#374151'}>
+                  {pt.isBudget ? `▸ ${pt.name}` : pt.name}
+                </text>
+                {/* $/SF value below axis */}
+                <text x={pt.x} y={TICK_BOT + 17} textAnchor="middle"
+                  fontSize={pt.isBudget ? 10.5 : 9}
+                  fontWeight={pt.isBudget ? '700' : '400'}
+                  fill={pt.isBudget ? config.color : '#6b7280'}>
+                  ${pt.value.toFixed(2)}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    );
   };
 
   const chartOptions = {
@@ -1075,27 +1159,6 @@ const BudgetGenerator: React.FC = () => {
             const value = context.raw;
             return ` ${formatCurrency(value)}`;
           }
-        }
-      }
-    }
-  };
-
-  const barChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    indexAxis: 'y' as const,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: (context: any) => formatCurrency(context.raw)
-        }
-      }
-    },
-    scales: {
-      x: {
-        ticks: {
-          callback: (value: any) => formatCurrency(value)
         }
       }
     }
@@ -2245,46 +2308,32 @@ const BudgetGenerator: React.FC = () => {
               {/* Charts Section */}
               <div className="card charts-card">
                 <h3 style={{ marginTop: 0 }}>Cost Analysis</h3>
-                {/* Top row: donut */}
-                <div style={{ maxWidth: 360 }}>
-                  <h4>Cost Breakdown</h4>
-                  <div className="chart-wrapper">
-                    {getCostBreakdownChartData() && (
-                      <Doughnut data={getCostBreakdownChartData()!} options={chartOptions} />
-                    )}
-                  </div>
-                </div>
-                {/* Scope $/SF comparison charts */}
-                {getActiveScopeCharts().length > 0 && (
-                  <div style={{ marginTop: '1.5rem' }}>
-                    <h4 style={{ marginBottom: '1rem' }}>$/SF by Scope vs Comparable Projects</h4>
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: `repeat(${Math.min(getActiveScopeCharts().length, 3)}, 1fr)`,
-                      gap: '1.25rem',
-                    }}>
-                      {getActiveScopeCharts().map(scope => (
-                        <div key={scope}>
-                          <div style={{
-                            fontSize: '0.78rem',
-                            fontWeight: 700,
-                            color: SCOPE_CHART_CONFIG[scope].color,
-                            marginBottom: '0.4rem',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.05em',
-                          }}>
-                            {scope}
-                          </div>
-                          <div style={{ height: `${(1 + comparableProjects.length) * 44 + 40}px`, position: 'relative' }}>
-                            {getScopeChartData(scope) && (
-                              <Bar data={getScopeChartData(scope)!} options={scopeBarChartOptions} />
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                {/* Donut + Scope charts side by side when scope charts exist */}
+                <div style={{
+                  display: 'flex',
+                  gap: '1.75rem',
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                }}>
+                  {/* Donut */}
+                  <div style={{ minWidth: 220, maxWidth: 300, flex: '0 0 260px' }}>
+                    <h4>Cost Breakdown</h4>
+                    <div className="chart-wrapper">
+                      {getCostBreakdownChartData() && (
+                        <Doughnut data={getCostBreakdownChartData()!} options={chartOptions} />
+                      )}
                     </div>
                   </div>
-                )}
+                  {/* Scope $/SF number-line charts */}
+                  {getActiveScopeCharts().length > 0 && (
+                    <div style={{ flex: 1, minWidth: 280 }}>
+                      <h4 style={{ marginBottom: '0.75rem' }}>$/SF by Scope vs Comparable Projects</h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {getActiveScopeCharts().map(scope => renderScopeNumberLine(scope))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Comparable Projects */}
