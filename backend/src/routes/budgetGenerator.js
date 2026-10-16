@@ -496,6 +496,18 @@ async function generateHandler(req, res, next) {
       });
     }
 
+    // Recompute cost-type totals from sections so they are always correct regardless of AI arithmetic
+    if (budgetJson.sections && budgetJson.totals) {
+      budgetJson.totals.equipmentSubtotal = budgetJson.sections
+        .filter(s => s.costType === 5)
+        .reduce((sum, s) => sum + (parseFloat(s.subtotal) || 0), 0);
+      budgetJson.totals.subcontractSubtotal = budgetJson.sections
+        .filter(s => s.costType === 3)
+        .reduce((sum, s) => sum + (parseFloat(s.subtotal) || 0), 0);
+      budgetJson.totals.materialSubtotal = budgetJson.sections.reduce((sum, s) =>
+        sum + (s.items || []).reduce((isum, i) => isum + (parseFloat(i.materialCost) || 0), 0), 0);
+    }
+
     // Persist narrative file to storage and record in attachments table
     let narrativeAttachmentId = null;
     if (req.file) {
@@ -905,11 +917,6 @@ IMPORTANT: Return ONLY a valid JSON object with this exact structure (no additio
     {
       "name": "Piping - Chilled Water",
       "costType": 1,
-      "subtotal": number,
-      "items": []
-    },
-    {
-      "name": "Piping Equipment",
       "subtotal": number,
       "items": []
     },

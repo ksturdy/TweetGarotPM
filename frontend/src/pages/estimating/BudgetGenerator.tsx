@@ -939,6 +939,16 @@ const BudgetGenerator: React.FC = () => {
       map[typeId].total += section.subtotal;
     });
 
+    // Surface material costs embedded in Labor section items as a synthetic Material entry.
+    // Labor section subtotals include both labor and material; extract the material component
+    // so it appears separately in the breakdown without changing how sections are listed.
+    const embeddedMaterial = currentBudget.sections
+      .filter(s => (s.costType ?? 1) === 1)
+      .reduce((sum, s) => sum + s.items.reduce((isum, i) => isum + (i.materialCost || 0), 0), 0);
+    if (embeddedMaterial > 0) {
+      map[2].total += embeddedMaterial;
+    }
+
     return COST_TYPES.map(ct => ({ ...ct, ...map[ct.id] })).filter(g => g.total > 0);
   };
 

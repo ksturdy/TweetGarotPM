@@ -315,13 +315,17 @@ const CostDatabase: React.FC = () => {
     }
     setBudgetGenerating(true);
     try {
+      const selectedProjectIds = projects
+        ?.filter(p => !excluded.has(p.id))
+        .map(p => p.id);
       const baseParams = {
         projectName: budgetName.trim(),
         market: budgetMarket,
-        sqft: parseFloat(budgetSqft),
+        sqft: parseFloat(budgetSqft.replace(/,/g, '')),
         location: budgetLocation || undefined,
         scope: budgetScope || undefined,
         projectStatuses: filters.status?.length ? filters.status : ['Open', 'Soft-Closed', 'Hard-Closed'],
+        selectedProjectIds: selectedProjectIds?.length ? selectedProjectIds : undefined,
       };
       const result = budgetNarrativeFile
         ? await budgetGeneratorService.generateWithNarrative({ ...baseParams, narrativeFile: budgetNarrativeFile })
@@ -452,14 +456,12 @@ const CostDatabase: React.FC = () => {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {isBudgetMode && (
-              <button
-                className="sales-btn sales-btn-primary"
-                onClick={() => setShowBudgetModal(true)}
-              >
-                ✦ Generate Budget
-              </button>
-            )}
+            <button
+              className="sales-btn sales-btn-primary"
+              onClick={() => setShowBudgetModal(true)}
+            >
+              ✦ Generate Budget
+            </button>
             <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '3px', gap: '2px' }}>
               <SourceBtn active={dataSource === 'vista'} onClick={() => setDataSource('vista')}>Vista Projects</SourceBtn>
               <SourceBtn active={dataSource === 'estimates'} onClick={() => setDataSource('estimates')}>Estimates</SourceBtn>
@@ -732,6 +734,7 @@ const CostDatabase: React.FC = () => {
               projects={projects || []}
               excluded={excluded}
               onToggle={toggleExcluded}
+              onToggleAll={(ids, selectAll) => setExcluded(selectAll ? new Set() : new Set(ids))}
               onSqftSave={handleSqftSave}
               onScopesSave={handleScopesSave}
               loading={projLoading}
@@ -819,6 +822,7 @@ const CostDatabase: React.FC = () => {
               projects={projects || []}
               excluded={excluded}
               onToggle={toggleExcluded}
+              onToggleAll={(ids, selectAll) => setExcluded(selectAll ? new Set() : new Set(ids))}
               onSqftSave={handleSqftSave}
               onScopesSave={handleScopesSave}
               loading={projLoading}
@@ -1305,12 +1309,17 @@ const CostDatabase: React.FC = () => {
                 <div className="form-group">
                   <label className="form-label">Square Footage *</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     className="form-input"
-                    placeholder="e.g. 15000"
+                    placeholder="e.g. 185,000"
                     value={budgetSqft}
-                    onChange={e => setBudgetSqft(e.target.value)}
-                    min="0"
+                    onChange={e => {
+                      const raw = e.target.value.replace(/,/g, '');
+                      if (raw === '' || /^\d+$/.test(raw)) {
+                        setBudgetSqft(raw === '' ? '' : Number(raw).toLocaleString());
+                      }
+                    }}
                   />
                 </div>
                 <div className="form-group">
@@ -1548,10 +1557,11 @@ const SourceProjectsTable: React.FC<{
   projects: ProjectRow[];
   excluded: Set<number>;
   onToggle: (id: number) => void;
+  onToggleAll: (allIds: number[], selectAll: boolean) => void;
   onSqftSave?: (id: number, sqft: number | null) => void;
   onScopesSave?: (id: number, scopes: string[]) => void;
   loading: boolean;
-}> = ({ projects, excluded, onToggle, onSqftSave, onScopesSave, loading }) => {
+}> = ({ projects, excluded, onToggle, onToggleAll, onSqftSave, onScopesSave, loading }) => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingVal, setEditingVal] = useState('');
   const [scopesPopupId, setScopesPopupId] = useState<number | null>(null);
@@ -1597,7 +1607,15 @@ const SourceProjectsTable: React.FC<{
     <>
       <table style={tableStyle}>
         <thead><tr style={theadRow}>
-          <Th align="left">Incl.</Th>
+          <Th align="left">
+            <input
+              type="checkbox"
+              checked={excluded.size === 0}
+              ref={el => { if (el) el.indeterminate = excluded.size > 0 && excluded.size < projects.length; }}
+              onChange={e => onToggleAll(projects.map(p => p.id), e.target.checked)}
+              title={excluded.size === 0 ? 'Unselect all' : 'Select all'}
+            />
+          </Th>
           <Th align="left">Number</Th><Th align="left">Name</Th>
           <Th align="left">Status</Th><Th align="left">Dept</Th><Th align="left">Market</Th>
           <Th align="left">Start</Th><Th align="left">End</Th>
