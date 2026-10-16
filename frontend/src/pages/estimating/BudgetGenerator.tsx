@@ -972,7 +972,7 @@ const BudgetGenerator: React.FC = () => {
   }> = {
     'HVAC': {
       color: '#10b981',
-      label: 'HVAC (Sheet Metal + Piping)',
+      label: 'HVAC',
       getComparableSF: (p) => (p.sheetMetalCostPerSqft || 0) + (p.pipingCostPerSqft || 0),
       sectionMatch: (n) =>
         n.includes('sheet metal') ||
@@ -986,7 +986,7 @@ const BudgetGenerator: React.FC = () => {
     },
     'BAS': {
       color: '#8b5cf6',
-      label: 'BAS / Controls',
+      label: 'BAS',
       getComparableSF: (p) => p.basCostPerSqft || 0,
       sectionMatch: (n) => n === 'controls' || n === 'bas' || n.startsWith('bas ') || n.includes('control'),
     },
@@ -1014,16 +1014,22 @@ const BudgetGenerator: React.FC = () => {
     const config = SCOPE_CHART_CONFIG[scopeKey];
     const budgetSF = getBudgetScopeCostPerSF(scopeKey);
 
-    const pts: { name: string; value: number; isBudget: boolean }[] = [];
+    interface Pt { name: string; value: number; isBudget: boolean; isFallback: boolean; }
+    const pts: Pt[] = [];
     if (budgetSF > 0.01) {
       const n = currentBudget.summary.projectName || 'This Budget';
-      pts.push({ name: n.length > 22 ? n.slice(0, 20) + '…' : n, value: budgetSF, isBudget: true });
+      pts.push({ name: n.length > 20 ? n.slice(0, 18) + '…' : n, value: budgetSF, isBudget: true, isFallback: false });
     }
     comparableProjects.forEach(p => {
-      const val = config.getComparableSF(p);
+      const scopeVal = config.getComparableSF(p);
+      const hasAnyBreakdown = (p.sheetMetalCostPerSqft || 0) + (p.pipingCostPerSqft || 0) +
+        (p.plumbingCostPerSqft || 0) + (p.basCostPerSqft || 0) > 0;
+      // Fall back to total costPerSqft when no scope-level breakdown is stored
+      const val = scopeVal > 0.01 ? scopeVal : (!hasAnyBreakdown ? (p.costPerSqft || 0) : 0);
+      const isFallback = scopeVal <= 0.01 && val > 0.01;
       if (val > 0.01) {
-        const n = p.name.length > 22 ? p.name.slice(0, 20) + '…' : p.name;
-        pts.push({ name: n, value: val, isBudget: false });
+        const n = p.name.length > 20 ? p.name.slice(0, 18) + '…' : p.name;
+        pts.push({ name: n, value: val, isBudget: false, isFallback });
       }
     });
     if (pts.length === 0) return null;
@@ -1031,106 +1037,145 @@ const BudgetGenerator: React.FC = () => {
     const vals = pts.map(p => p.value);
     const rawMin = Math.min(...vals);
     const rawMax = Math.max(...vals);
-    const pad = (rawMax - rawMin) * 0.18 || rawMax * 0.18 || 5;
-    const minVal = Math.max(0, rawMin - pad);
-    const maxVal = rawMax + pad;
-    const range = maxVal - minVal;
+    // For a single point, anchor the axis from 0 to 2× the value; multiple points get padding
+    const isSingle = pts.length === 1;
+    const minVal = isSingle ? 0 : Math.max(0, rawMin - (rawMax - rawMin) * 0.22);
+    const maxVal = isSingle
+      ? Math.ceil(rawMax * 1.8 / 10) * 10
+      : rawMax + (rawMax - rawMin) * 0.22;
+    const range = Math.max(maxVal - minVal, 0.01);
 
-    const W = 800; const H = 150;
-    const PADX = 45; const CW = W - 2 * PADX;
-    const AXIS_Y = 98;
-    const TICK_TOP = 90; const TICK_BOT = 106;
+    // SVG layout constants
+    const W = 800; const H = 130;
+    const PADX = 50; const CW = W - 2 * PADX;
+    const AXIS_Y = 88;
+    const TICK_TOP = 79; const TICK_BOT = 97;
 
-    const toX = (v: number) => range < 0.01 ? PADX + CW / 2 : PADX + ((v - minVal) / range) * CW;
+    const toX = (v: number) => PADX + ((v - minVal) / range) * CW;
 
     const sorted = [...pts].map(p => ({ ...p, x: toX(p.value) })).sort((a, b) => a.x - b.x);
 
-    // Assign label rows to prevent collision
-    const MIN_GAP = 95;
+    // Two-row label collision avoidance
+    const MIN_GAP = 90;
     const rowTail = [-Infinity, -Infinity];
     const rowOf = sorted.map(p => {
       if (rowTail[0] + MIN_GAP <= p.x) { rowTail[0] = p.x; return 0; }
       rowTail[1] = p.x; return 1;
     });
-    const LABEL_Y = [74, 48]; // text baseline y per row
+    const LABEL_Y = [63, 40]; // text baseline y per row
 
-    const gradId = `axgrad-${scopeKey}`;
+    // Nice tick interval for the axis
+    const step = (() => {
+      const raw = range / 5;
+      const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+      return Math.ceil(raw / mag) * mag;
+    })();
+    const ticks: number[] = [];
+    for (let t = Math.ceil(minVal / step) * step; t <= maxVal; t += step) {
+      if (t > minVal + 0.1 && t < maxVal - 0.1) ticks.push(t);
+    }
 
     return (
       <div style={{
-        background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-        border: `1px solid ${config.color}20`,
+        background: '#fff',
+        border: `1px solid ${config.color}22`,
         borderLeft: `3px solid ${config.color}`,
         borderRadius: '8px',
-        padding: '0.875rem 1.25rem 0.5rem',
+        padding: '0.75rem 1.25rem 0.625rem',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       }}>
-        <div style={{
-          fontSize: '0.7rem', fontWeight: 700, color: config.color,
-          textTransform: 'uppercase', letterSpacing: '0.08em',
-          marginBottom: '0.2rem',
-          display: 'flex', alignItems: 'center', gap: '0.4rem',
-        }}>
+        {/* Scope header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.15rem' }}>
           <span style={{
-            display: 'inline-block', width: 7, height: 7,
+            display: 'inline-block', width: 8, height: 8,
             borderRadius: '50%', background: config.color, flexShrink: 0,
           }} />
-          {config.label}
+          <span style={{
+            fontSize: '0.69rem', fontWeight: 700, color: config.color,
+            textTransform: 'uppercase', letterSpacing: '0.09em',
+          }}>
+            {config.label}
+          </span>
+          {pts.some(p => p.isFallback) && (
+            <span style={{ fontSize: '0.65rem', color: '#9ca3af', marginLeft: 'auto' }}>
+              ◦ total $/SF (no scope breakdown)
+            </span>
+          )}
         </div>
+
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ overflow: 'visible', display: 'block' }}>
-          <defs>
-            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={config.color} stopOpacity="0.04" />
-              <stop offset="40%" stopColor={config.color} stopOpacity="0.45" />
-              <stop offset="60%" stopColor={config.color} stopOpacity="0.45" />
-              <stop offset="100%" stopColor={config.color} stopOpacity="0.04" />
-            </linearGradient>
-          </defs>
-          {/* Axis line */}
+          {/* Track: light gray baseline */}
           <line x1={PADX} y1={AXIS_Y} x2={W - PADX} y2={AXIS_Y}
-            stroke={`url(#${gradId})`} strokeWidth={2.5} />
-          {/* Range labels */}
-          <text x={PADX} y={AXIS_Y + 22} textAnchor="start" fontSize={8} fill="#94a3b8">
-            ${minVal.toFixed(0)}/SF
-          </text>
-          <text x={W - PADX} y={AXIS_Y + 22} textAnchor="end" fontSize={8} fill="#94a3b8">
-            ${maxVal.toFixed(0)}/SF
-          </text>
+            stroke="#e2e8f0" strokeWidth={2} />
+          {/* Colored axis line on top */}
+          <line x1={PADX} y1={AXIS_Y} x2={W - PADX} y2={AXIS_Y}
+            stroke={config.color} strokeWidth={2} opacity={0.35} />
+
+          {/* Axis end caps */}
+          <line x1={PADX} y1={AXIS_Y - 5} x2={PADX} y2={AXIS_Y + 5}
+            stroke="#cbd5e1" strokeWidth={1.5} />
+          <line x1={W - PADX} y1={AXIS_Y - 5} x2={W - PADX} y2={AXIS_Y + 5}
+            stroke="#cbd5e1" strokeWidth={1.5} />
+
+          {/* Inner tick marks */}
+          {ticks.map(t => (
+            <g key={t}>
+              <line x1={toX(t)} y1={AXIS_Y - 4} x2={toX(t)} y2={AXIS_Y + 4}
+                stroke="#cbd5e1" strokeWidth={1} />
+              <text x={toX(t)} y={AXIS_Y + 16} textAnchor="middle"
+                fontSize={7.5} fill="#94a3b8">
+                ${t.toFixed(0)}
+              </text>
+            </g>
+          ))}
+
+          {/* Range end labels */}
+          <text x={PADX} y={AXIS_Y + 16} textAnchor="middle"
+            fontSize={7.5} fill="#94a3b8">${minVal.toFixed(0)}</text>
+          <text x={W - PADX} y={AXIS_Y + 16} textAnchor="middle"
+            fontSize={7.5} fill="#94a3b8">${maxVal.toFixed(0)}</text>
+          <text x={W / 2} y={AXIS_Y + 26} textAnchor="middle"
+            fontSize={7} fill="#c0c8d4">$/SF</text>
+
           {sorted.map((pt, i) => {
             const lY = LABEL_Y[rowOf[i]];
             return (
               <g key={i}>
-                {/* Leader line */}
-                <line x1={pt.x} y1={lY + 5} x2={pt.x} y2={TICK_TOP}
+                {/* Leader line from label to tick */}
+                <line x1={pt.x} y1={lY + 5} x2={pt.x} y2={TICK_TOP - 2}
                   stroke={pt.isBudget ? config.color : '#d1d5db'}
                   strokeWidth={pt.isBudget ? 1.5 : 1}
                   strokeDasharray={pt.isBudget ? undefined : '3,3'} />
                 {/* Axis tick */}
                 <line x1={pt.x} y1={TICK_TOP} x2={pt.x} y2={TICK_BOT}
-                  stroke={pt.isBudget ? config.color : '#94a3b8'}
+                  stroke={pt.isBudget ? config.color : (pt.isFallback ? '#cbd5e1' : '#94a3b8')}
                   strokeWidth={pt.isBudget ? 2.5 : 1.5} />
-                {/* Marker */}
+                {/* Marker dot */}
                 {pt.isBudget ? (
                   <>
-                    <circle cx={pt.x} cy={AXIS_Y} r={13} fill={config.color} opacity={0.1} />
+                    <circle cx={pt.x} cy={AXIS_Y} r={14} fill={config.color} opacity={0.08} />
                     <circle cx={pt.x} cy={AXIS_Y} r={7} fill={config.color} />
-                    <circle cx={pt.x} cy={AXIS_Y} r={7} fill="none" stroke="white" strokeWidth={1.5} opacity={0.55} />
+                    <circle cx={pt.x} cy={AXIS_Y} r={5} fill="none" stroke="white" strokeWidth={1.5} opacity={0.5} />
                   </>
                 ) : (
-                  <circle cx={pt.x} cy={AXIS_Y} r={4.5}
-                    fill="white" stroke="#94a3b8" strokeWidth={1.5} />
+                  <circle cx={pt.x} cy={AXIS_Y} r={5}
+                    fill="white"
+                    stroke={pt.isFallback ? '#cbd5e1' : '#94a3b8'}
+                    strokeWidth={pt.isFallback ? 1.5 : 2}
+                    strokeDasharray={pt.isFallback ? '2,2' : undefined} />
                 )}
-                {/* Name label */}
+                {/* Project name */}
                 <text x={pt.x} y={lY} textAnchor="middle"
                   fontSize={pt.isBudget ? 11 : 9.5}
                   fontWeight={pt.isBudget ? '700' : '500'}
-                  fill={pt.isBudget ? config.color : '#374151'}>
+                  fill={pt.isBudget ? config.color : (pt.isFallback ? '#9ca3af' : '#374151')}>
                   {pt.isBudget ? `▸ ${pt.name}` : pt.name}
                 </text>
-                {/* $/SF value below axis */}
-                <text x={pt.x} y={TICK_BOT + 17} textAnchor="middle"
+                {/* $/SF value */}
+                <text x={pt.x} y={TICK_BOT + 16} textAnchor="middle"
                   fontSize={pt.isBudget ? 10.5 : 9}
                   fontWeight={pt.isBudget ? '700' : '400'}
-                  fill={pt.isBudget ? config.color : '#6b7280'}>
+                  fill={pt.isBudget ? config.color : (pt.isFallback ? '#9ca3af' : '#6b7280')}>
                   ${pt.value.toFixed(2)}
                 </text>
               </g>
