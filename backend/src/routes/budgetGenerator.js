@@ -239,6 +239,36 @@ router.get('/options', async (req, res, next) => {
   }
 });
 
+// Compute a proper 0-100% match score from all criteria that were specified.
+// Since findSimilar hard-filters by each criterion, all returned rows already satisfy them —
+// so a row earns the full weight for each criterion that WAS specified. Square footage is the
+// only continuous differentiator within the filtered set.
+function computeMatchScore(p, { market, buildingType, projectTypeParam, bidType, sqft }) {
+  let score = 0;
+  let maxScore = 0;
+
+  if (buildingType) { maxScore += 40; if (p.building_type === buildingType) score += 40; }
+  if (market)        { maxScore += 20; if (p.market === market) score += 20; }
+  if (projectTypeParam && projectTypeParam.length > 0) {
+    maxScore += 15;
+    if (projectTypeParam.includes(p.project_type)) score += 15;
+  }
+  if (bidType) { maxScore += 10; if (p.bid_type === bidType) score += 10; }
+  if (sqft) {
+    maxScore += 15;
+    const pSqft = parseFloat(p.total_sqft || p.square_footage) || 0;
+    if (pSqft > 0) {
+      const diff = Math.abs(pSqft - sqft) / sqft;
+      if (diff <= 0.10)      score += 15;
+      else if (diff <= 0.25) score += 12;
+      else if (diff <= 0.50) score += 8;
+      else if (diff <= 1.00) score += 4;
+    }
+  }
+
+  return maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
+}
+
 // Get statistics
 router.get('/stats', async (req, res, next) => {
   try {
@@ -292,6 +322,7 @@ router.post('/similar', async (req, res, next) => {
     ]);
 
     // Add match criteria details and inflation adjustment to each project
+    const matchCriteriaSimilar = { market: market || null, buildingType, projectTypeParam, bidType: bidType || null, sqft: sqft || null };
     const projectsWithMatchDetails = similarProjects.map(p => {
       const sqftDiff = sqft && p.total_sqft
         ? Math.abs(parseFloat(p.total_sqft) - sqft) / sqft
@@ -310,6 +341,8 @@ router.post('/similar', async (req, res, next) => {
 
       return {
         ...p,
+        // Override raw SQL sort-score with proper 0-100% match score
+        similarity_score: computeMatchScore(p, matchCriteriaSimilar),
         // Original values
         original_total_cost: originalCost,
         original_cost_per_sqft: originalCostPerSqft,
@@ -424,6 +457,13 @@ async function generateHandler(req, res, next) {
       tenantId: req.tenantId,
       projectStatuses: projectStatusParam
     });
+
+    // Pre-compute proper 0-100% match scores for all similar projects
+    const matchCriteria = { market: market || null, buildingType: buildingType || null, projectTypeParam, bidType: bidType || null, sqft };
+    const scoreIndex = {};
+    for (const p of similarProjects) {
+      scoreIndex[`${p.source || 'historical'}:${p.id}`] = computeMatchScore(p, matchCriteria);
+    }
 
     let topProjects, projectDetailsRaw;
 
@@ -581,7 +621,12 @@ async function generateHandler(req, res, next) {
           bidYear,
           yearsSinceBid: yearsSinceBid ? parseFloat(yearsSinceBid) : null,
           inflationAdjusted: true,
-          similarityScore: originalProject?.similarity_score || 0,
+          similarityScore: (() => {
+            const src = originalProject?.source || 'historical';
+            const key = `${src}:${originalProject?.id}`;
+            // Use pre-computed score if available; otherwise compute from project detail
+            return scoreIndex[key] !== undefined ? scoreIndex[key] : computeMatchScore(p, matchCriteria);
+          })(),
           source: originalProject?.source || 'historical',
           ...computeScopeBreakdownsWithMapping(p, mappingIndex[
             (originalProject?.source === 'project') ? `project:${p.id}` : `historical:${p.id}`

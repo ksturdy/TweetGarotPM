@@ -918,31 +918,25 @@ const BudgetGenerator: React.FC = () => {
   // Get current budget (adjusted if in edit mode)
   const currentBudget = isEditMode && adjustedBudget ? adjustedBudget : budget;
 
-  // Chart data for cost breakdown
+  // Chart data for cost breakdown — derived from getCostTypeGroups() so it always matches the table below
   const getCostBreakdownChartData = () => {
     if (!currentBudget) return null;
+    const groups = getCostTypeGroups();
+
+    const entries: { label: string; value: number; color: string }[] = [
+      ...groups.map(g => ({ label: g.label, value: g.total, color: g.color })),
+      { label: 'Overhead',    value: currentBudget.totals.overhead,    color: '#f59e0b' },
+      { label: 'Profit',      value: currentBudget.totals.profit,      color: '#22c55e' },
+      { label: 'Contingency', value: currentBudget.totals.contingency, color: '#ef4444' },
+    ].filter(e => e.value > 0);
+
+    if (entries.length === 0) return null;
 
     return {
-      labels: ['Labor', 'Material', 'Equipment', 'Subcontract', 'Overhead', 'Profit', 'Contingency'],
+      labels: entries.map(e => e.label),
       datasets: [{
-        data: [
-          currentBudget.totals.laborSubtotal,
-          currentBudget.totals.materialSubtotal,
-          currentBudget.totals.equipmentSubtotal,
-          currentBudget.totals.subcontractSubtotal,
-          currentBudget.totals.overhead,
-          currentBudget.totals.profit,
-          currentBudget.totals.contingency
-        ],
-        backgroundColor: [
-          '#002356',
-          '#0066cc',
-          '#00a3e0',
-          '#7dd3fc',
-          '#f59e0b',
-          '#22c55e',
-          '#ef4444'
-        ],
+        data: entries.map(e => e.value),
+        backgroundColor: entries.map(e => e.color),
         borderWidth: 0
       }]
     };
