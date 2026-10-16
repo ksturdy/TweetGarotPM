@@ -539,6 +539,8 @@ const BudgetGenerator: React.FC = () => {
             assumptions: result.budget.assumptions,
             risks: result.budget.risks,
             comparable_projects: result.similarProjects.map(p => ({
+              id: p.id,
+              source: p.source || 'historical',
               name: p.name,
               building_type: buildingType.join(', '),
               square_footage: p.sqft,
@@ -704,6 +706,8 @@ const BudgetGenerator: React.FC = () => {
         assumptions: currentBudget.assumptions,
         risks: currentBudget.risks,
         comparable_projects: comparableProjects.map(p => ({
+          id: p.id,
+          source: p.source || 'historical',
           name: p.name,
           building_type: buildingType.join(', '),
           square_footage: p.sqft,
