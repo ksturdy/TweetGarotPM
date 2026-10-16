@@ -675,6 +675,39 @@ function calcCostTypeBreakdown(projectDetails) {
   };
 }
 
+// Compute cost attributable to the requested scopes from a comparable project's raw cost fields.
+// Shared costs (PM, insulation, balancing, electrical, GC/allowance) are always included.
+function computeScopeAdjustedCost(p, requestedScopes) {
+  const f = (v) => parseFloat(v) || 0;
+  let direct = 0;
+
+  if (requestedScopes.includes('Sheet Metal')) {
+    direct += f(p.s_field_cost) + f(p.s_materials_with_escalation);
+    direct += f(p.r_field_cost) + f(p.r_materials_with_escalation);
+    direct += f(p.e_field_cost) + f(p.e_material_with_escalation);
+    direct += f(p.o_field_cost) + f(p.o_materials_with_escalation);
+    direct += f(p.sm_equip_cost);
+  }
+  if (requestedScopes.includes('Piping')) {
+    direct += f(p.hw_field_cost) + f(p.hw_material_with_esc);
+    direct += f(p.chw_field_cost) + f(p.chw_material_with_esc);
+    direct += f(p.d_field_cost) + f(p.d_material_with_esc);
+    direct += f(p.g_field_cost) + f(p.g_material_with_esc);
+    direct += f(p.cw_field_cost) + f(p.cw_material_with_esc);
+  }
+  if (requestedScopes.includes('Plumbing')) {
+    direct += f(p.pf_equip_cost) + f(p.pf_misc_field_cost);
+  }
+  if (requestedScopes.includes('BAS')) {
+    direct += f(p.controls);
+  }
+
+  // Shared costs always included regardless of scope selection
+  direct += f(p.pm_cost) + f(p.insulation) + f(p.balancing) + f(p.electrical) + f(p.general) + f(p.allowance);
+
+  return direct;
+}
+
 // Helper function to build AI system prompt
 function buildBudgetSystemPrompt(projectName, market, buildingType, projectType, bidType, sqft, scope, projectDetails, averages, location, narrativeText = null, userSelectedProjects = false, scopesOfWork = []) {
   const formatCurrency = (val) => val ? `$${Math.round(val).toLocaleString()}` : '$0';
@@ -773,13 +806,19 @@ Apply these unit rates to the new ${formatNumber(sqft)} SF project to size each 
 ${projectDetails.map((p, i) => {
   const bidYear = p.bid_date ? new Date(p.bid_date).getFullYear() : 'N/A';
   const yearsAgo = p.bid_date ? ((new Date() - new Date(p.bid_date)) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1) : 'N/A';
+  const projectScopes = Array.isArray(p.scopes) && p.scopes.length > 0 ? p.scopes : null;
+  const hasScopeMismatch = scopesOfWork.length > 0 && projectScopes &&
+    (!scopesOfWork.every(s => projectScopes.includes(s)) || !projectScopes.every(s => scopesOfWork.includes(s)));
+  const scopeAdjustedCost = hasScopeMismatch ? computeScopeAdjustedCost(p, scopesOfWork) : null;
+  const scopeAdjustedPerSF = scopeAdjustedCost != null && parseFloat(p.total_sqft) > 0
+    ? scopeAdjustedCost / parseFloat(p.total_sqft) : null;
   return `
 ### Project ${i + 1}: ${p.name}
 - Building Type: ${p.building_type}, Project Type: ${p.project_type}, Bid Type: ${p.bid_type || 'N/A'}
-- Scopes in this contract: ${Array.isArray(p.scopes) && p.scopes.length > 0 ? p.scopes.join(', ') : 'Not specified'}
+- Scopes in this contract: ${projectScopes ? projectScopes.join(', ') : 'Not specified'}
 - Square Footage: ${formatNumber(p.total_sqft)} SF
 - Total Cost (Adjusted): ${formatCurrency(p.total_cost)}${p.original_total_cost ? ` (Original ${bidYear}: ${formatCurrency(p.original_total_cost)})` : ''}
-- Cost per SF (Adjusted): $${(parseFloat(p.total_cost_per_sqft) || 0).toFixed(2)}
+- Cost per SF (Adjusted): $${(parseFloat(p.total_cost_per_sqft) || 0).toFixed(2)}${scopeAdjustedPerSF != null ? ` | Scope-Adjusted $/SF (${scopesOfWork.join('+')} only): $${scopeAdjustedPerSF.toFixed(2)} ← USE THIS for benchmarking` : ''}
 - Bid Date: ${p.bid_date ? new Date(p.bid_date).toLocaleDateString() : 'N/A'} (${yearsAgo} years ago)
 
 Cost Breakdown:
@@ -820,7 +859,23 @@ SCOPE CONSTRAINT: This budget must include ONLY the following scopes of work: **
 ` : ''}
 
 ${userSelectedProjects
-  ? `WEIGHTING INSTRUCTION: The user manually selected these specific comparable projects. They are the PRIMARY basis for this estimate. Anchor your total cost/SF to the range established by these comparables ($${Math.min(...projectDetails.map(p => parseFloat(p.total_cost_per_sqft) || 0)).toFixed(2)}–$${Math.max(...projectDetails.map(p => parseFloat(p.total_cost_per_sqft) || 0)).toFixed(2)}/SF after inflation adjustment). Adjust within that range for size differences — larger projects typically achieve modest economies of scale (5–15% reduction per doubling of SF), but do NOT go below the comparable range without a specific justification. The historical averages above are provided as secondary context for category-level breakdowns only; do not let them pull your total cost/SF outside the comparable range.`
+  ? (() => {
+      const perSFValues = projectDetails.map(p => {
+        const projectScopes = Array.isArray(p.scopes) && p.scopes.length > 0 ? p.scopes : null;
+        const hasMismatch = scopesOfWork.length > 0 && projectScopes &&
+          (!scopesOfWork.every(s => projectScopes.includes(s)) || !projectScopes.every(s => scopesOfWork.includes(s)));
+        if (hasMismatch && parseFloat(p.total_sqft) > 0) {
+          return computeScopeAdjustedCost(p, scopesOfWork) / parseFloat(p.total_sqft);
+        }
+        return parseFloat(p.total_cost_per_sqft) || 0;
+      }).filter(v => v > 0);
+      const minPerSF = perSFValues.length > 0 ? Math.min(...perSFValues) : 0;
+      const maxPerSF = perSFValues.length > 0 ? Math.max(...perSFValues) : 0;
+      const rangeNote = scopesOfWork.length > 0
+        ? `scope-adjusted to ${scopesOfWork.join('+')} only`
+        : 'after inflation adjustment';
+      return `WEIGHTING INSTRUCTION: The user manually selected these specific comparable projects. They are the PRIMARY basis for this estimate. Anchor your total cost/SF to the range established by these comparables ($${minPerSF.toFixed(2)}–$${maxPerSF.toFixed(2)}/SF, ${rangeNote}). Adjust within that range for size differences — larger projects typically achieve modest economies of scale (5–15% reduction per doubling of SF), but do NOT go below the comparable range without a specific justification. The historical averages above are provided as secondary context for category-level breakdowns only; do not let them pull your total cost/SF outside the comparable range.`;
+    })()
   : `Scale costs proportionally based on both the historical data and comparable projects, using the comparable projects as the primary reference and the historical averages to calibrate individual cost categories.`
 }
 

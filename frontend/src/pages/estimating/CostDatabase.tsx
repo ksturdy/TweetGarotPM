@@ -117,6 +117,7 @@ const CostDatabase: React.FC = () => {
   const [budgetMarket, setBudgetMarket] = useState('');
   const [budgetLocation, setBudgetLocation] = useState('');
   const [budgetScope, setBudgetScope] = useState('');
+  const [budgetScopesOfWork, setBudgetScopesOfWork] = useState<string[]>([]);
   const [budgetNarrativeFile, setBudgetNarrativeFile] = useState<File | null>(null);
   const [budgetGenerating, setBudgetGenerating] = useState(false);
 
@@ -309,8 +310,8 @@ const CostDatabase: React.FC = () => {
   }, [filters.market]);
 
   const handleGenerateBudget = async () => {
-    if (!budgetName.trim() || !budgetSqft || !budgetMarket) {
-      toast.error('Please fill in project name, market, and square footage.');
+    if (!budgetName.trim() || !budgetSqft || !budgetMarket || budgetScopesOfWork.length === 0) {
+      toast.error('Please fill in project name, market, square footage, and at least one scope.');
       return;
     }
     setBudgetGenerating(true);
@@ -326,6 +327,7 @@ const CostDatabase: React.FC = () => {
         scope: budgetScope || undefined,
         projectStatuses: filters.status?.length ? filters.status : ['Open', 'Soft-Closed', 'Hard-Closed'],
         selectedProjectIds: selectedProjectIds?.length ? selectedProjectIds : undefined,
+        scopesOfWork: budgetScopesOfWork.length > 0 ? budgetScopesOfWork : undefined,
       };
       const result = budgetNarrativeFile
         ? await budgetGeneratorService.generateWithNarrative({ ...baseParams, narrativeFile: budgetNarrativeFile })
@@ -458,7 +460,13 @@ const CostDatabase: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <button
               className="sales-btn sales-btn-primary"
-              onClick={() => setShowBudgetModal(true)}
+              onClick={() => {
+                const inferredScopes = Array.from(
+                  new Set(projects?.filter(p => !excluded.has(p.id)).flatMap(p => p.scopes) ?? [])
+                ).filter(s => SCOPE_OPTIONS.includes(s));
+                setBudgetScopesOfWork(inferredScopes);
+                setShowBudgetModal(true);
+              }}
             >
               ✦ Generate Budget
             </button>
@@ -1307,6 +1315,39 @@ const CostDatabase: React.FC = () => {
                   </select>
                 </div>
                 <div className="form-group">
+                  <label className="form-label">Scopes of Work *</label>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', margin: '4px 0' }}>
+                    {SCOPE_OPTIONS.map(scope => {
+                      const selected = budgetScopesOfWork.includes(scope);
+                      const color = SCOPE_COLORS[scope];
+                      return (
+                        <button
+                          key={scope}
+                          type="button"
+                          onClick={() => setBudgetScopesOfWork(prev =>
+                            prev.includes(scope) ? prev.filter(s => s !== scope) : [...prev, scope]
+                          )}
+                          style={{
+                            padding: '5px 14px',
+                            borderRadius: '6px',
+                            border: `2px solid ${color.bg}`,
+                            background: selected ? color.bg : 'transparent',
+                            color: selected ? color.color : color.bg,
+                            fontWeight: 600,
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {scope}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>
+                    Select which trade scopes this budget should cover. Titan will normalize comparable project costs to match.
+                  </p>
+                </div>
+                <div className="form-group">
                   <label className="form-label">Square Footage *</label>
                   <input
                     type="text"
@@ -1377,7 +1418,7 @@ const CostDatabase: React.FC = () => {
                 <button
                   className="sales-btn sales-btn-primary"
                   onClick={handleGenerateBudget}
-                  disabled={!budgetName.trim() || !budgetSqft || !budgetMarket}
+                  disabled={!budgetName.trim() || !budgetSqft || !budgetMarket || budgetScopesOfWork.length === 0}
                 >
                   Generate Budget
                 </button>
