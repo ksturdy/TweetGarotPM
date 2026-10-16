@@ -157,6 +157,7 @@ const BudgetGenerator: React.FC = () => {
       // Populate form fields
       setProjectName(existingBudget.project_name || '');
       setMarket(existingBudget.market || '');
+      setScopesOfWork(Array.isArray(existingBudget.scopes_of_work) ? existingBudget.scopes_of_work : []);
       setBuildingType(existingBudget.building_type ? existingBudget.building_type.split(', ').filter((t: string) => CONSTRUCTION_TYPE_OPTIONS.includes(t)) : []);
       setProjectTypes(existingBudget.project_type ? [existingBudget.project_type] : []);
       setBidType(existingBudget.bid_type || '');
@@ -557,6 +558,7 @@ const BudgetGenerator: React.FC = () => {
               bas_cost_per_sqft: p.basCostPerSqft,
               scopes: p.scopes,
             })),
+            scopes_of_work: scopesOfWork.length ? scopesOfWork : undefined,
             status: 'draft',
             ...(result.narrativeAttachmentId ? { narrative_attachment_id: result.narrativeAttachmentId } : {})
           };
@@ -724,6 +726,7 @@ const BudgetGenerator: React.FC = () => {
           bas_cost_per_sqft: p.basCostPerSqft,
           scopes: p.scopes,
         })),
+        scopes_of_work: scopesOfWork.length ? scopesOfWork : undefined,
         status,
         ...(narrativeAttachmentId ? { narrative_attachment_id: narrativeAttachmentId } : {})
       };
@@ -999,21 +1002,39 @@ const BudgetGenerator: React.FC = () => {
     },
   };
 
+  const SCOPE_TO_WORK: Record<string, string[]> = {
+    HVAC: ['Sheet Metal', 'Piping'],
+    Plumbing: ['Plumbing'],
+    BAS: ['BAS'],
+  };
+
   const getActiveScopeCharts = (): string[] => {
     if (!currentBudget) return [];
     const sectionNames = currentBudget.sections.map(s => s.name.toLowerCase());
-    return Object.keys(SCOPE_CHART_CONFIG).filter(scope =>
-      sectionNames.some(SCOPE_CHART_CONFIG[scope].sectionMatch)
-    );
+    return Object.keys(SCOPE_CHART_CONFIG).filter(scope => {
+      // Must have at least one matching section
+      if (!sectionNames.some(SCOPE_CHART_CONFIG[scope].sectionMatch)) return false;
+      // Must be in the user's selected scopes (when set)
+      if (scopesOfWork.length > 0) {
+        const tradeNames = SCOPE_TO_WORK[scope] ?? [];
+        if (!tradeNames.some(t => scopesOfWork.includes(t))) return false;
+      }
+      return true;
+    });
   };
 
   const getBudgetScopeCostPerSF = (scopeKey: string): number => {
     if (!currentBudget) return 0;
     const sqft = currentBudget.summary.squareFootage || 1;
     const { sectionMatch } = SCOPE_CHART_CONFIG[scopeKey];
-    return currentBudget.sections
+    const scopeCost = currentBudget.sections
       .filter(s => sectionMatch(s.name.toLowerCase()))
-      .reduce((sum, s) => sum + s.subtotal, 0) / sqft;
+      .reduce((sum, s) => sum + s.subtotal, 0);
+    const totalSectionCost = currentBudget.sections.reduce((sum, s) => sum + s.subtotal, 0);
+    if (!scopeCost || !totalSectionCost) return 0;
+    // Allocate full budget cost (incl. overhead/profit/contingency) proportionally by scope
+    const grandTotal = currentBudget.totals.grandTotal || currentBudget.summary.estimatedTotalCost || 0;
+    return (scopeCost / totalSectionCost) * (grandTotal / sqft);
   };
 
   const handleMappingChange = async (target: {id:number; source:string}) => {
@@ -1057,7 +1078,7 @@ const BudgetGenerator: React.FC = () => {
     const pts: Pt[] = [];
     if (budgetSF > 0.01) {
       const n = currentBudget.summary.projectName || 'This Budget';
-      pts.push({ name: n.length > 20 ? n.slice(0, 18) + '…' : n, value: budgetSF, isBudget: true, isFallback: false, isVista: false });
+      pts.push({ name: n.length > 15 ? n.slice(0, 13) + '…' : n, value: budgetSF, isBudget: true, isFallback: false, isVista: false });
     }
     // Which source scopes map to this chart category
     const CHART_SCOPES: Record<string, string[]> = {
@@ -1071,7 +1092,7 @@ const BudgetGenerator: React.FC = () => {
       const scopeVal = config.getComparableSF(p);
       if (scopeVal > 0.01) {
         // Has real per-scope breakdown data — use it
-        const n = p.name.length > 20 ? p.name.slice(0, 18) + '…' : p.name;
+        const n = p.name.length > 15 ? p.name.slice(0, 13) + '…' : p.name;
         pts.push({ name: n, value: scopeVal, isBudget: false, isFallback: false, isVista: !!(vistaFlagKey && p[vistaFlagKey]) });
       } else {
         // No scope breakdown. Only fall back to total $/SF if the project's scope
@@ -1081,7 +1102,7 @@ const BudgetGenerator: React.FC = () => {
           projectScopes.length > 0 &&
           projectScopes.every(s => chartTrades.includes(s));
         if (singleScopeMatch && (p.costPerSqft || 0) > 0.01) {
-          const n = p.name.length > 20 ? p.name.slice(0, 18) + '…' : p.name;
+          const n = p.name.length > 15 ? p.name.slice(0, 13) + '…' : p.name;
           pts.push({ name: n, value: p.costPerSqft!, isBudget: false, isFallback: true, isVista: false });
         }
         // Otherwise omit — total $/SF spans multiple trades and would be misleading
@@ -1101,23 +1122,24 @@ const BudgetGenerator: React.FC = () => {
     const range = Math.max(maxVal - minVal, 0.01);
 
     // SVG layout constants
-    const W = 800; const H = 130;
+    const W = 800; const H = 150;
     const PADX = 50; const CW = W - 2 * PADX;
-    const AXIS_Y = 88;
-    const TICK_TOP = 79; const TICK_BOT = 97;
+    const AXIS_Y = 108;
+    const TICK_TOP = 99; const TICK_BOT = 117;
 
     const toX = (v: number) => PADX + ((v - minVal) / range) * CW;
 
     const sorted = [...pts].map(p => ({ ...p, x: toX(p.value) })).sort((a, b) => a.x - b.x);
 
-    // Two-row label collision avoidance
-    const MIN_GAP = 90;
-    const rowTail = [-Infinity, -Infinity];
+    // Three-row label collision avoidance
+    const MIN_GAP = 100;
+    const rowTail = [-Infinity, -Infinity, -Infinity];
     const rowOf = sorted.map(p => {
       if (rowTail[0] + MIN_GAP <= p.x) { rowTail[0] = p.x; return 0; }
-      rowTail[1] = p.x; return 1;
+      if (rowTail[1] + MIN_GAP <= p.x) { rowTail[1] = p.x; return 1; }
+      rowTail[2] = p.x; return 2;
     });
-    const LABEL_Y = [63, 40]; // text baseline y per row
+    const LABEL_Y = [83, 60, 37]; // text baseline y per row
 
     // Nice tick interval for the axis
     const step = (() => {

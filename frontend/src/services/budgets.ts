@@ -68,6 +68,7 @@ export interface Budget {
   created_at: string;
   updated_at: string;
   narrative_attachment_id?: number | null;
+  scopes_of_work?: string[] | null;
 }
 
 export interface BudgetStats {

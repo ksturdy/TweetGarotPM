@@ -1,0 +1,1 @@
+ALTER TABLE budgets ADD COLUMN IF NOT EXISTS scopes_of_work TEXT[] DEFAULT '{}';

@@ -34,7 +34,8 @@ class Budget {
       status,
       created_by,
       narrative_attachment_id,
-      baseline_sections
+      baseline_sections,
+      scopes_of_work
     } = budgetData;
 
     const result = await pool.query(
@@ -46,8 +47,8 @@ class Budget {
         overhead, profit, contingency, grand_total, overhead_percent,
         profit_percent, contingency_percent, sections, assumptions, risks,
         comparable_projects, status, created_by, narrative_attachment_id,
-        baseline_sections
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
+        baseline_sections, scopes_of_work
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
       RETURNING *`,
       [
         tenant_id, project_name, market || null, building_type, project_type, bid_type,
@@ -59,7 +60,8 @@ class Budget {
         JSON.stringify(assumptions || []), JSON.stringify(risks || []),
         JSON.stringify(comparable_projects || []), status || 'draft', created_by,
         narrative_attachment_id || null,
-        baseline_sections ? JSON.stringify(baseline_sections) : null
+        baseline_sections ? JSON.stringify(baseline_sections) : null,
+        Array.isArray(scopes_of_work) && scopes_of_work.length ? scopes_of_work : null
       ]
     );
     return result.rows[0];
@@ -125,7 +127,7 @@ class Budget {
       'overhead', 'profit', 'contingency', 'grand_total', 'overhead_percent',
       'profit_percent', 'contingency_percent', 'sections', 'assumptions',
       'risks', 'comparable_projects', 'status', 'narrative_attachment_id',
-      'baseline_sections'
+      'baseline_sections', 'scopes_of_work'
     ];
 
     const setClauses = [];
