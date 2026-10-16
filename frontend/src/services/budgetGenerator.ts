@@ -24,6 +24,12 @@ export interface SimilarProject {
   bidYear?: number | null;
   yearsSinceBid?: number | null;
   inflationAdjusted?: boolean;
+  // Scope-level $/SF breakdown (populated at generation time from raw cost fields)
+  sheetMetalCostPerSqft?: number;
+  pipingCostPerSqft?: number;
+  plumbingCostPerSqft?: number;
+  basCostPerSqft?: number;
+  scopes?: string[];
 }
 
 export interface BudgetSectionItem {

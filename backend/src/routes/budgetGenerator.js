@@ -569,7 +569,8 @@ async function generateHandler(req, res, next) {
           yearsSinceBid: yearsSinceBid ? parseFloat(yearsSinceBid) : null,
           inflationAdjusted: true,
           similarityScore: originalProject?.similarity_score || 0,
-          source: originalProject?.source || 'historical'
+          source: originalProject?.source || 'historical',
+          ...computeScopeBreakdowns(p),
         };
       }),
       averages: {
@@ -672,6 +673,31 @@ function calcCostTypeBreakdown(projectDetails) {
     avgPipingFtPerSqft: avgNonNull(r => r.pipingFtPerSqft),
     avgEquipCostPerUnit: avgNonNull(r => r.equipCostPerUnit),
     avgEquipUnitsPerSqft: avgNonNull(r => r.equipUnitsPerSqft),
+  };
+}
+
+// Compute per-scope $/SF breakdown from a comparable project's raw cost fields.
+function computeScopeBreakdowns(p) {
+  const f = (v) => parseFloat(v) || 0;
+  const sqft = parseFloat(p.total_sqft) || 1;
+  return {
+    sheetMetalCostPerSqft: (
+      f(p.s_field_cost) + f(p.s_materials_with_escalation) +
+      f(p.r_field_cost) + f(p.r_materials_with_escalation) +
+      f(p.e_field_cost) + f(p.e_material_with_escalation) +
+      f(p.o_field_cost) + f(p.o_materials_with_escalation) +
+      f(p.sm_equip_cost)
+    ) / sqft,
+    pipingCostPerSqft: (
+      f(p.hw_field_cost) + f(p.hw_material_with_esc) +
+      f(p.chw_field_cost) + f(p.chw_material_with_esc) +
+      f(p.d_field_cost) + f(p.d_material_with_esc) +
+      f(p.g_field_cost) + f(p.g_material_with_esc) +
+      f(p.cw_field_cost) + f(p.cw_material_with_esc)
+    ) / sqft,
+    plumbingCostPerSqft: (f(p.pf_equip_cost) + f(p.pf_misc_field_cost)) / sqft,
+    basCostPerSqft: f(p.controls) / sqft,
+    scopes: Array.isArray(p.scopes) ? p.scopes : [],
   };
 }
 

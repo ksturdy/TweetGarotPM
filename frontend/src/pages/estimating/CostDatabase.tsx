@@ -118,6 +118,9 @@ const CostDatabase: React.FC = () => {
   const [budgetLocation, setBudgetLocation] = useState('');
   const [budgetScope, setBudgetScope] = useState('');
   const [budgetScopesOfWork, setBudgetScopesOfWork] = useState<string[]>([]);
+  const [budgetOverhead, setBudgetOverhead] = useState('');
+  const [budgetProfit, setBudgetProfit] = useState('');
+  const [budgetContingency, setBudgetContingency] = useState('');
   const [budgetNarrativeFile, setBudgetNarrativeFile] = useState<File | null>(null);
   const [budgetGenerating, setBudgetGenerating] = useState(false);
 
@@ -333,9 +336,15 @@ const CostDatabase: React.FC = () => {
         ? await budgetGeneratorService.generateWithNarrative({ ...baseParams, narrativeFile: budgetNarrativeFile })
         : await budgetGeneratorService.generate(baseParams);
       const dc = result.budget.totals.directCostSubtotal;
-      const overheadPct = dc > 0 ? Math.round((result.budget.totals.overhead / dc) * 100) : 10;
-      const profitPct = dc > 0 ? Math.round((result.budget.totals.profit / dc) * 100) : 10;
-      const contingencyPct = dc > 0 ? Math.round((result.budget.totals.contingency / dc) * 100) : 5;
+      // Use user-specified markups if provided, otherwise derive from AI output
+      const overheadPct = budgetOverhead !== '' ? parseFloat(budgetOverhead) : (dc > 0 ? Math.round((result.budget.totals.overhead / dc) * 100) : 10);
+      const profitPct  = budgetProfit  !== '' ? parseFloat(budgetProfit)  : (dc > 0 ? Math.round((result.budget.totals.profit   / dc) * 100) : 10);
+      const contingencyPct = budgetContingency !== '' ? parseFloat(budgetContingency) : (dc > 0 ? Math.round((result.budget.totals.contingency / dc) * 100) : 5);
+      // Recompute totals if user overrode markups
+      const overhead    = dc * (overheadPct / 100);
+      const profit      = dc * (profitPct / 100);
+      const contingency = dc * (contingencyPct / 100);
+      const grandTotal  = dc + overhead + profit + contingency;
       const saveData: Partial<Budget> = {
         project_name: result.budget.summary.projectName,
         market: budgetMarket,
@@ -352,10 +361,10 @@ const CostDatabase: React.FC = () => {
         equipment_subtotal: result.budget.totals.equipmentSubtotal,
         subcontract_subtotal: result.budget.totals.subcontractSubtotal,
         direct_cost_subtotal: result.budget.totals.directCostSubtotal,
-        overhead: result.budget.totals.overhead,
-        profit: result.budget.totals.profit,
-        contingency: result.budget.totals.contingency,
-        grand_total: result.budget.totals.grandTotal,
+        overhead,
+        profit,
+        contingency,
+        grand_total: grandTotal,
         overhead_percent: overheadPct,
         profit_percent: profitPct,
         contingency_percent: contingencyPct,
@@ -371,6 +380,11 @@ const CostDatabase: React.FC = () => {
           cost_per_sqft: p.costPerSqft,
           year: new Date().getFullYear(),
           similarity_score: p.similarityScore,
+          sheet_metal_cost_per_sqft: p.sheetMetalCostPerSqft,
+          piping_cost_per_sqft: p.pipingCostPerSqft,
+          plumbing_cost_per_sqft: p.plumbingCostPerSqft,
+          bas_cost_per_sqft: p.basCostPerSqft,
+          scopes: p.scopes,
         })),
         status: 'draft',
       };
@@ -1382,6 +1396,31 @@ const CostDatabase: React.FC = () => {
                     onChange={e => setBudgetScope(e.target.value)}
                     style={{ resize: 'vertical', minHeight: '80px' }}
                   />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Markups <span style={{ fontWeight: 400, color: '#9ca3af' }}>(leave blank to let Titan decide)</span></label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                    {[
+                      { label: 'Overhead %', value: budgetOverhead, set: setBudgetOverhead },
+                      { label: 'Profit %',   value: budgetProfit,   set: setBudgetProfit },
+                      { label: 'Contingency %', value: budgetContingency, set: setBudgetContingency },
+                    ].map(({ label, value, set }) => (
+                      <div key={label}>
+                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '3px' }}>{label}</div>
+                        <input
+                          type="number"
+                          className="form-input"
+                          placeholder="e.g. 10"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          value={value}
+                          onChange={e => set(e.target.value)}
+                          style={{ textAlign: 'right' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Design Narrative (optional)</label>

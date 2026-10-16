@@ -224,7 +224,12 @@ const BudgetGenerator: React.FC = () => {
           sqft: Number(p.square_footage) || 0,
           totalCost: Number(p.total_cost) || 0,
           costPerSqft: Number(p.cost_per_sqft) || 0,
-          similarityScore: Number(p.similarity_score) || 0
+          similarityScore: Number(p.similarity_score) || 0,
+          sheetMetalCostPerSqft: p.sheet_metal_cost_per_sqft != null ? Number(p.sheet_metal_cost_per_sqft) : undefined,
+          pipingCostPerSqft: p.piping_cost_per_sqft != null ? Number(p.piping_cost_per_sqft) : undefined,
+          plumbingCostPerSqft: p.plumbing_cost_per_sqft != null ? Number(p.plumbing_cost_per_sqft) : undefined,
+          basCostPerSqft: p.bas_cost_per_sqft != null ? Number(p.bas_cost_per_sqft) : undefined,
+          scopes: Array.isArray(p.scopes) ? p.scopes : undefined,
         })));
       }
 
@@ -544,7 +549,12 @@ const BudgetGenerator: React.FC = () => {
               total_cost: p.totalCost,
               cost_per_sqft: p.costPerSqft,
               year: new Date().getFullYear(),
-              similarity_score: p.similarityScore
+              similarity_score: p.similarityScore,
+              sheet_metal_cost_per_sqft: p.sheetMetalCostPerSqft,
+              piping_cost_per_sqft: p.pipingCostPerSqft,
+              plumbing_cost_per_sqft: p.plumbingCostPerSqft,
+              bas_cost_per_sqft: p.basCostPerSqft,
+              scopes: p.scopes,
             })),
             status: 'draft',
             ...(result.narrativeAttachmentId ? { narrative_attachment_id: result.narrativeAttachmentId } : {})
@@ -704,7 +714,12 @@ const BudgetGenerator: React.FC = () => {
           total_cost: p.totalCost,
           cost_per_sqft: p.costPerSqft,
           year: new Date().getFullYear(),
-          similarity_score: p.similarityScore
+          similarity_score: p.similarityScore,
+          sheet_metal_cost_per_sqft: p.sheetMetalCostPerSqft,
+          piping_cost_per_sqft: p.pipingCostPerSqft,
+          plumbing_cost_per_sqft: p.plumbingCostPerSqft,
+          bas_cost_per_sqft: p.basCostPerSqft,
+          scopes: p.scopes,
         })),
         status,
         ...(narrativeAttachmentId ? { narrative_attachment_id: narrativeAttachmentId } : {})
@@ -952,20 +967,97 @@ const BudgetGenerator: React.FC = () => {
     return COST_TYPES.map(ct => ({ ...ct, ...map[ct.id] })).filter(g => g.total > 0);
   };
 
-  // Chart data grouped by cost type
-  const getCostTypeChartData = () => {
-    const groups = getCostTypeGroups();
-    if (!groups.length) return null;
-    return {
-      labels: groups.map(g => g.label),
-      datasets: [{
-        label: 'Cost',
-        data: groups.map(g => g.total),
-        backgroundColor: groups.map(g => g.color),
-        borderWidth: 0,
-        borderRadius: 4,
-      }]
+  // Scope chart helpers — one horizontal bar chart per trade scope
+  const SCOPE_CHART_CONFIG: Record<string, { color: string; field: keyof SimilarProject; sectionMatch: (n: string) => boolean }> = {
+    'Sheet Metal': {
+      color: '#10b981',
+      field: 'sheetMetalCostPerSqft',
+      sectionMatch: n => n.includes('sheet metal'),
+    },
+    'Piping': {
+      color: '#f59e0b',
+      field: 'pipingCostPerSqft',
+      sectionMatch: n => (n.includes('piping') || n.includes('hot water') || n.includes('chilled water')) && !n.includes('plumb'),
+    },
+    'Plumbing': {
+      color: '#3b82f6',
+      field: 'plumbingCostPerSqft',
+      sectionMatch: n => n.includes('plumb'),
+    },
+    'BAS': {
+      color: '#8b5cf6',
+      field: 'basCostPerSqft',
+      sectionMatch: n => n === 'controls' || n === 'bas' || n.startsWith('bas '),
+    },
+  };
+
+  const getActiveScopeCharts = (): string[] => {
+    if (!currentBudget || comparableProjects.length === 0) return [];
+    // Only show scope charts if comparables have scope breakdown data
+    const hasData = comparableProjects.some(p => p.sheetMetalCostPerSqft !== undefined);
+    if (!hasData) return [];
+    const sectionNames = currentBudget.sections.map(s => s.name.toLowerCase());
+    return Object.keys(SCOPE_CHART_CONFIG).filter(scope =>
+      sectionNames.some(SCOPE_CHART_CONFIG[scope].sectionMatch)
+    );
+  };
+
+  const getBudgetScopeCostPerSF = (scope: string): number => {
+    if (!currentBudget) return 0;
+    const sqft = currentBudget.summary.squareFootage || 1;
+    const { sectionMatch } = SCOPE_CHART_CONFIG[scope];
+    return currentBudget.sections
+      .filter(s => sectionMatch(s.name.toLowerCase()))
+      .reduce((sum, s) => sum + s.subtotal, 0) / sqft;
+  };
+
+  const getScopeChartData = (scope: string) => {
+    if (!currentBudget || comparableProjects.length === 0) return null;
+    const { color, field } = SCOPE_CHART_CONFIG[scope];
+    const sqft = currentBudget.summary.squareFootage || 1;
+    const budgetVal = getBudgetScopeCostPerSF(scope);
+    const label = (name: string, sf: number) => {
+      const short = name.length > 26 ? name.slice(0, 24) + '…' : name;
+      return `${short} (${Math.round(sf / 1000)}k SF)`;
     };
+    const labels = [
+      `► This Budget (${Math.round(sqft / 1000)}k SF)`,
+      ...comparableProjects.map(p => label(p.name, p.sqft)),
+    ];
+    const data = [budgetVal, ...comparableProjects.map(p => (p[field] as number) || 0)];
+    return {
+      labels,
+      datasets: [{
+        label: `${scope} $/SF`,
+        data,
+        backgroundColor: [color, ...comparableProjects.map(() => color + '99')],
+        borderColor: [color, ...comparableProjects.map(() => 'transparent')],
+        borderWidth: [2, ...comparableProjects.map(() => 0)],
+        borderRadius: 4,
+      }],
+    };
+  };
+
+  const scopeBarChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    indexAxis: 'y' as const,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx: any) => ` $${(ctx.raw as number).toFixed(2)}/SF`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        beginAtZero: true,
+        ticks: { callback: (v: any) => `$${v}`, font: { size: 10 } },
+        title: { display: true, text: '$/SF', font: { size: 10 } },
+      },
+      y: { ticks: { font: { size: 10 } } },
+    },
   };
 
   const chartOptions = {
@@ -2156,24 +2248,46 @@ const BudgetGenerator: React.FC = () => {
               {/* Charts Section */}
               <div className="card charts-card">
                 <h3 style={{ marginTop: 0 }}>Cost Analysis</h3>
-                <div className="charts-grid">
-                  <div className="chart-container">
-                    <h4>Cost Breakdown</h4>
-                    <div className="chart-wrapper">
-                      {getCostBreakdownChartData() && (
-                        <Doughnut data={getCostBreakdownChartData()!} options={chartOptions} />
-                      )}
-                    </div>
-                  </div>
-                  <div className="chart-container">
-                    <h4>By Cost Type</h4>
-                    <div className="chart-wrapper bar-chart">
-                      {getCostTypeChartData() && (
-                        <Bar data={getCostTypeChartData()!} options={barChartOptions} />
-                      )}
-                    </div>
+                {/* Top row: donut */}
+                <div style={{ maxWidth: 360 }}>
+                  <h4>Cost Breakdown</h4>
+                  <div className="chart-wrapper">
+                    {getCostBreakdownChartData() && (
+                      <Doughnut data={getCostBreakdownChartData()!} options={chartOptions} />
+                    )}
                   </div>
                 </div>
+                {/* Scope $/SF comparison charts */}
+                {getActiveScopeCharts().length > 0 && (
+                  <div style={{ marginTop: '1.5rem' }}>
+                    <h4 style={{ marginBottom: '1rem' }}>$/SF by Scope vs Comparable Projects</h4>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(${Math.min(getActiveScopeCharts().length, 3)}, 1fr)`,
+                      gap: '1.25rem',
+                    }}>
+                      {getActiveScopeCharts().map(scope => (
+                        <div key={scope}>
+                          <div style={{
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            color: SCOPE_CHART_CONFIG[scope].color,
+                            marginBottom: '0.4rem',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                          }}>
+                            {scope}
+                          </div>
+                          <div style={{ height: `${(1 + comparableProjects.length) * 44 + 40}px`, position: 'relative' }}>
+                            {getScopeChartData(scope) && (
+                              <Bar data={getScopeChartData(scope)!} options={scopeBarChartOptions} />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Comparable Projects */}
