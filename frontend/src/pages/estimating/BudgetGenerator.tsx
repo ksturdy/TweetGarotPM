@@ -1077,8 +1077,7 @@ const BudgetGenerator: React.FC = () => {
     const vistaFlagKey = VISTA_FLAG_KEY[scopeKey];
     const pts: Pt[] = [];
     if (budgetSF > 0.01) {
-      const n = currentBudget.summary.projectName || 'This Budget';
-      pts.push({ name: n.length > 15 ? n.slice(0, 13) + '…' : n, value: budgetSF, isBudget: true, isFallback: false, isVista: false });
+      pts.push({ name: currentBudget.summary.projectName || 'This Budget', value: budgetSF, isBudget: true, isFallback: false, isVista: false });
     }
     // Which source scopes map to this chart category
     const CHART_SCOPES: Record<string, string[]> = {
@@ -1092,8 +1091,7 @@ const BudgetGenerator: React.FC = () => {
       const scopeVal = config.getComparableSF(p);
       if (scopeVal > 0.01) {
         // Has real per-scope breakdown data — use it
-        const n = p.name.length > 15 ? p.name.slice(0, 13) + '…' : p.name;
-        pts.push({ name: n, value: scopeVal, isBudget: false, isFallback: false, isVista: !!(vistaFlagKey && p[vistaFlagKey]) });
+        pts.push({ name: p.name, value: scopeVal, isBudget: false, isFallback: false, isVista: !!(vistaFlagKey && p[vistaFlagKey]) });
       } else {
         // No scope breakdown. Only fall back to total $/SF if the project's scope
         // list is a subset of this chart's trades (total ≈ this scope's cost).
@@ -1102,8 +1100,7 @@ const BudgetGenerator: React.FC = () => {
           projectScopes.length > 0 &&
           projectScopes.every(s => chartTrades.includes(s));
         if (singleScopeMatch && (p.costPerSqft || 0) > 0.01) {
-          const n = p.name.length > 15 ? p.name.slice(0, 13) + '…' : p.name;
-          pts.push({ name: n, value: p.costPerSqft!, isBudget: false, isFallback: true, isVista: false });
+          pts.push({ name: p.name, value: p.costPerSqft!, isBudget: false, isFallback: true, isVista: false });
         }
         // Otherwise omit — total $/SF spans multiple trades and would be misleading
       }
@@ -1122,10 +1119,10 @@ const BudgetGenerator: React.FC = () => {
     const range = Math.max(maxVal - minVal, 0.01);
 
     // SVG layout constants
-    const W = 800; const H = 150;
+    const W = 800; const H = 80;
     const PADX = 50; const CW = W - 2 * PADX;
-    const AXIS_Y = 108;
-    const TICK_TOP = 99; const TICK_BOT = 117;
+    const AXIS_Y = 52;
+    const TICK_TOP = 46; const TICK_BOT = 58;
 
     const toX = (v: number) => PADX + ((v - minVal) / range) * CW;
 
@@ -1139,7 +1136,7 @@ const BudgetGenerator: React.FC = () => {
       if (rowTail[1] + MIN_GAP <= p.x) { rowTail[1] = p.x; return 1; }
       rowTail[2] = p.x; return 2;
     });
-    const LABEL_Y = [83, 60, 37]; // text baseline y per row
+    const LABEL_Y = [38, 25, 12]; // text baseline y per row
 
     // Nice tick interval for the axis
     const step = (() => {
@@ -1158,7 +1155,7 @@ const BudgetGenerator: React.FC = () => {
         border: `1px solid ${config.color}22`,
         borderLeft: `3px solid ${config.color}`,
         borderRadius: '8px',
-        padding: '0.75rem 1.25rem 0.625rem',
+        padding: '0.375rem 1.25rem 0.25rem',
         boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       }}>
         {/* Scope header */}
@@ -1189,37 +1186,35 @@ const BudgetGenerator: React.FC = () => {
             stroke={config.color} strokeWidth={2} opacity={0.35} />
 
           {/* Axis end caps */}
-          <line x1={PADX} y1={AXIS_Y - 5} x2={PADX} y2={AXIS_Y + 5}
+          <line x1={PADX} y1={AXIS_Y - 4} x2={PADX} y2={AXIS_Y + 4}
             stroke="#cbd5e1" strokeWidth={1.5} />
-          <line x1={W - PADX} y1={AXIS_Y - 5} x2={W - PADX} y2={AXIS_Y + 5}
+          <line x1={W - PADX} y1={AXIS_Y - 4} x2={W - PADX} y2={AXIS_Y + 4}
             stroke="#cbd5e1" strokeWidth={1.5} />
 
           {/* Inner tick marks */}
           {ticks.map(t => (
             <g key={t}>
-              <line x1={toX(t)} y1={AXIS_Y - 4} x2={toX(t)} y2={AXIS_Y + 4}
+              <line x1={toX(t)} y1={AXIS_Y - 3} x2={toX(t)} y2={AXIS_Y + 3}
                 stroke="#cbd5e1" strokeWidth={1} />
-              <text x={toX(t)} y={AXIS_Y + 16} textAnchor="middle"
-                fontSize={7.5} fill="#94a3b8">
+              <text x={toX(t)} y={AXIS_Y + 13} textAnchor="middle"
+                fontSize={7} fill="#94a3b8">
                 ${t.toFixed(0)}
               </text>
             </g>
           ))}
 
           {/* Range end labels */}
-          <text x={PADX} y={AXIS_Y + 16} textAnchor="middle"
-            fontSize={7.5} fill="#94a3b8">${minVal.toFixed(0)}</text>
-          <text x={W - PADX} y={AXIS_Y + 16} textAnchor="middle"
-            fontSize={7.5} fill="#94a3b8">${maxVal.toFixed(0)}</text>
-          <text x={W / 2} y={AXIS_Y + 26} textAnchor="middle"
-            fontSize={7} fill="#c0c8d4">$/SF</text>
+          <text x={PADX} y={AXIS_Y + 13} textAnchor="middle"
+            fontSize={7} fill="#94a3b8">${minVal.toFixed(0)}</text>
+          <text x={W - PADX} y={AXIS_Y + 13} textAnchor="middle"
+            fontSize={7} fill="#94a3b8">${maxVal.toFixed(0)}</text>
 
           {sorted.map((pt, i) => {
             const lY = LABEL_Y[rowOf[i]];
             return (
               <g key={i}>
                 {/* Leader line from label to tick */}
-                <line x1={pt.x} y1={lY + 5} x2={pt.x} y2={TICK_TOP - 2}
+                <line x1={pt.x} y1={lY + 4} x2={pt.x} y2={TICK_TOP - 1}
                   stroke={pt.isBudget ? config.color : '#d1d5db'}
                   strokeWidth={pt.isBudget ? 1.5 : 1}
                   strokeDasharray={pt.isBudget ? undefined : '3,3'} />
@@ -1230,12 +1225,12 @@ const BudgetGenerator: React.FC = () => {
                 {/* Marker dot */}
                 {pt.isBudget ? (
                   <>
-                    <circle cx={pt.x} cy={AXIS_Y} r={14} fill={config.color} opacity={0.08} />
-                    <circle cx={pt.x} cy={AXIS_Y} r={7} fill={config.color} />
-                    <circle cx={pt.x} cy={AXIS_Y} r={5} fill="none" stroke="white" strokeWidth={1.5} opacity={0.5} />
+                    <circle cx={pt.x} cy={AXIS_Y} r={9} fill={config.color} opacity={0.1} />
+                    <circle cx={pt.x} cy={AXIS_Y} r={5} fill={config.color} />
+                    <circle cx={pt.x} cy={AXIS_Y} r={3.5} fill="none" stroke="white" strokeWidth={1.2} opacity={0.5} />
                   </>
                 ) : (
-                  <circle cx={pt.x} cy={AXIS_Y} r={5}
+                  <circle cx={pt.x} cy={AXIS_Y} r={4}
                     fill="white"
                     stroke={pt.isFallback ? '#cbd5e1' : '#94a3b8'}
                     strokeWidth={pt.isFallback ? 1.5 : 2}
@@ -1243,21 +1238,21 @@ const BudgetGenerator: React.FC = () => {
                 )}
                 {/* Project name */}
                 <text x={pt.x} y={lY} textAnchor="middle"
-                  fontSize={pt.isBudget ? 11 : 9.5}
+                  fontSize={pt.isBudget ? 10 : 9}
                   fontWeight={pt.isBudget ? '700' : '500'}
                   fill={pt.isBudget ? config.color : (pt.isFallback ? '#9ca3af' : '#374151')}>
                   {pt.isBudget ? `▸ ${pt.name}` : pt.name}
                 </text>
                 {/* $/SF value */}
-                <text x={pt.x} y={TICK_BOT + 16} textAnchor="middle"
-                  fontSize={pt.isBudget ? 10.5 : 9}
+                <text x={pt.x} y={TICK_BOT + 13} textAnchor="middle"
+                  fontSize={pt.isBudget ? 9.5 : 8.5}
                   fontWeight={pt.isBudget ? '700' : '400'}
                   fill={pt.isBudget ? config.color : (pt.isFallback ? '#9ca3af' : '#6b7280')}>
                   ${pt.value.toFixed(2)}
                 </text>
                 {pt.isVista && !pt.isBudget && (
-                  <text x={pt.x} y={TICK_BOT + 25} textAnchor="middle"
-                    fontSize={7} fontWeight="700" fill="#6366f1">V</text>
+                  <text x={pt.x} y={TICK_BOT + 21} textAnchor="middle"
+                    fontSize={6.5} fontWeight="700" fill="#6366f1">V</text>
                 )}
               </g>
             );
