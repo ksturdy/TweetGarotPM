@@ -992,10 +992,7 @@ const BudgetGenerator: React.FC = () => {
   };
 
   const getActiveScopeCharts = (): string[] => {
-    if (!currentBudget || comparableProjects.length === 0) return [];
-    // Only show scope charts if comparables have scope breakdown data
-    const hasData = comparableProjects.some(p => p.sheetMetalCostPerSqft !== undefined);
-    if (!hasData) return [];
+    if (!currentBudget) return [];
     const sectionNames = currentBudget.sections.map(s => s.name.toLowerCase());
     return Object.keys(SCOPE_CHART_CONFIG).filter(scope =>
       sectionNames.some(SCOPE_CHART_CONFIG[scope].sectionMatch)
@@ -1012,7 +1009,7 @@ const BudgetGenerator: React.FC = () => {
   };
 
   const getScopeChartData = (scope: string) => {
-    if (!currentBudget || comparableProjects.length === 0) return null;
+    if (!currentBudget) return null;
     const { color, field } = SCOPE_CHART_CONFIG[scope];
     const sqft = currentBudget.summary.squareFootage || 1;
     const budgetVal = getBudgetScopeCostPerSF(scope);
