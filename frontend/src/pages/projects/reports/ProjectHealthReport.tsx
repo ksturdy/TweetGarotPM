@@ -220,8 +220,10 @@ const ProjectHealthReport: React.FC = () => {
   const costsMap   = useMemo(() => new Map((segCosts as SegmentCosts[]).map(c => [c.segment_key, c])), [segCosts]);
   const activeKeys: string[] = segmentsData?.activeKeys ?? [];
 
-  // ─── Chart infrastructure (used by labor_forecast PDF section) ────────────
+  // ─── Chart infrastructure ──────────────────────────────────────────────────
   const laborChartsRef = useRef<HTMLDivElement>(null);
+  const finChartsRef = useRef<HTMLDivElement>(null);
+  const laborHoursChartsRef = useRef<HTMLDivElement>(null);
 
   const shiftSettings = useMemo<ShiftSettings>(() => {
     const parse = (raw: string | null): ShiftSettings | null => {
@@ -296,6 +298,26 @@ const ProjectHealthReport: React.FC = () => {
   }, [segCosts, project, activeKeys, segmentMap, costsMap, allMonths]);
 
   const hasLaborCharts = allMonths.length > 0 && (laborDatasets.length > 0 || monthlyRevenue.some(v => v > 0));
+
+  const finChartData = useMemo(() => {
+    if (!contract) return null;
+    return {
+      categories: ['Labor', 'Material', 'Subcontracts', 'Rentals'],
+      estData:  [safeN(costSummary?.labor_totals?.est_cost),       safeN(contract.material_estimate),       safeN(contract.subcontracts_estimate),       safeN(contract.rentals_estimate)],
+      projData: [safeN(costSummary?.labor_totals?.projected_cost), safeN(contract.material_projected),      safeN(contract.subcontracts_projected),      safeN(contract.rentals_projected)],
+      jtdData:  [safeN(costSummary?.labor_totals?.jtd_cost),       safeN(contract.material_jtd),            safeN(contract.subcontracts_jtd),            safeN(contract.rentals_jtd)],
+    };
+  }, [contract, costSummary]);
+
+  const laborHoursChartData = useMemo(() => {
+    if (!contract) return null;
+    return {
+      tradeNames: ['Pipefitter', 'Sheet Metal', 'Plumbing'],
+      estHrs:  [safeN(contract.pf_hours_estimate), safeN(contract.sm_hours_estimate), safeN(contract.pl_hours_estimate)],
+      jtdHrs:  [safeN(contract.pf_hours_jtd),      safeN(contract.sm_hours_jtd),      safeN(contract.pl_hours_jtd)],
+      projHrs: [safeN(contract.pf_hours_projected), safeN(contract.sm_hours_projected), safeN(contract.pl_hours_projected)],
+    };
+  }, [contract]);
 
   // ─── Derived metrics ───────────────────────────────────────────────────────
 
@@ -463,6 +485,20 @@ const ProjectHealthReport: React.FC = () => {
         doc.addPage();
         accentBar();
         y = sectionHeader('Financial Summary', 18);
+
+        if (finChartsRef.current && finChartData) {
+          try {
+            const canvas = await html2canvas(finChartsRef.current, { scale: 1.5, backgroundColor: '#ffffff', useCORS: true });
+            const imgData = canvas.toDataURL('image/png');
+            const availW = pw - 80;
+            const naturalH = (canvas.height / canvas.width) * availW;
+            const fitH = Math.min(naturalH, 155);
+            const fitW = (fitH / naturalH) * availW;
+            doc.addImage(imgData, 'PNG', 40, y, fitW, fitH);
+            y += fitH + 10;
+          } catch {}
+        }
+
         const finRows = [
           ['Contract Value', fmt(contract.orig_contract_amount), fmt(contract.projected_revenue), fmt(contract.billed_amount), ''],
           ['Total Cost', fmt(contract.current_est_cost), fmt(contract.projected_cost), fmt(contract.actual_cost), ''],
@@ -485,7 +521,7 @@ const ProjectHealthReport: React.FC = () => {
           body: finRows,
           margin: { left: 40, right: 40 },
           styles: { fontSize: 8, cellPadding: 5, textColor: [30, 41, 59] },
-          headStyles: { fillColor: LIGHT, textColor: SLATE, fontStyle: 'bold', fontSize: 7.5 },
+          headStyles: { fillColor: [30, 42, 60], textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
           alternateRowStyles: { fillColor: [248, 250, 252] },
           columnStyles: { 0: { halign: 'left' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
           didParseCell: (data: any) => {
@@ -503,9 +539,23 @@ const ProjectHealthReport: React.FC = () => {
 
       // ── Labor Hours ──────────────────────────────────────────────────────────
       if (on('labor_hours') && contract) {
-        const lastY = (doc as any).lastAutoTable?.finalY;
-        const startY = on('financial_summary') && lastY ? lastY + 20 : (() => { doc.addPage(); accentBar(); return 18; })();
-        y = sectionHeader('Labor Hours', startY);
+        doc.addPage();
+        accentBar();
+        y = sectionHeader('Labor Hours', 18);
+
+        if (laborHoursChartsRef.current && laborHoursChartData) {
+          try {
+            const canvas = await html2canvas(laborHoursChartsRef.current, { scale: 1.5, backgroundColor: '#ffffff', useCORS: true });
+            const imgData = canvas.toDataURL('image/png');
+            const availW = pw - 80;
+            const naturalH = (canvas.height / canvas.width) * availW;
+            const fitH = Math.min(naturalH, 155);
+            const fitW = (fitH / naturalH) * availW;
+            doc.addImage(imgData, 'PNG', 40, y, fitW, fitH);
+            y += fitH + 10;
+          } catch {}
+        }
+
         autoTable(doc, {
           startY: y,
           head: [['Trade', 'Est Hours', 'JTD Hours', 'Proj Hours', 'Remaining']],
@@ -517,7 +567,7 @@ const ProjectHealthReport: React.FC = () => {
           ],
           margin: { left: 40, right: 40 },
           styles: { fontSize: 8, cellPadding: 5, textColor: [30, 41, 59] },
-          headStyles: { fillColor: LIGHT, textColor: SLATE, fontStyle: 'bold', fontSize: 7.5 },
+          headStyles: { fillColor: [30, 42, 60], textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
           alternateRowStyles: { fillColor: [248, 250, 252] },
           columnStyles: { 0: { halign: 'left' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
           didDrawPage: () => { accentBar(); footer(); },
@@ -988,7 +1038,46 @@ const ProjectHealthReport: React.FC = () => {
         </div>
       </section>
 
-      {/* Hidden labor charts for PDF capture */}
+      {/* Hidden financial summary chart for PDF capture */}
+      {finChartData && (
+        <div ref={finChartsRef} style={{ position: 'fixed', left: -9999, top: 0, width: 700, background: '#fff', padding: '8px 12px' }}>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cost by Category — Estimate vs Projected vs JTD</div>
+          <div style={{ height: 200, position: 'relative' }}>
+            <Bar
+              data={{ labels: finChartData.categories, datasets: [
+                { label: 'Estimate',   data: finChartData.estData,  backgroundColor: '#3b82f6cc', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 2 },
+                { label: 'Projected',  data: finChartData.projData, backgroundColor: '#10b981cc', borderColor: '#10b981', borderWidth: 1, borderRadius: 2 },
+                { label: 'JTD Actual', data: finChartData.jtdData,  backgroundColor: '#f59e0bcc', borderColor: '#f59e0b', borderWidth: 1, borderRadius: 2 },
+              ]}}
+              options={{ maintainAspectRatio: false, responsive: true,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 }, padding: 8 } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtCompact(ctx.parsed.y)}` } } },
+                scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#64748b' } }, y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 10 }, color: '#64748b', callback: v => fmtCompact(v as number) } } }
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Hidden labor hours chart for PDF capture */}
+      {laborHoursChartData && (
+        <div ref={laborHoursChartsRef} style={{ position: 'fixed', left: -9999, top: 0, width: 600, background: '#fff', padding: '8px 12px' }}>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Hours by Trade — Estimate vs JTD vs Projected</div>
+          <div style={{ height: 200, position: 'relative' }}>
+            <Bar
+              data={{ labels: laborHoursChartData.tradeNames, datasets: [
+                { label: 'Est Hours',  data: laborHoursChartData.estHrs,  backgroundColor: '#3b82f6cc', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 2 },
+                { label: 'JTD Hours',  data: laborHoursChartData.jtdHrs,  backgroundColor: '#f59e0bcc', borderColor: '#f59e0b', borderWidth: 1, borderRadius: 2 },
+                { label: 'Proj Hours', data: laborHoursChartData.projHrs, backgroundColor: '#10b981cc', borderColor: '#10b981', borderWidth: 1, borderRadius: 2 },
+              ]}}
+              options={{ maintainAspectRatio: false, responsive: true,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 }, padding: 8 } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y).toLocaleString()}` } } },
+                scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#64748b' } }, y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 10 }, color: '#64748b', callback: v => Math.round(v as number).toLocaleString() } } }
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Hidden labor charts — identical markup to Labor Forecast report for consistent PDF capture */}
       {hasLaborCharts && (
         <div ref={laborChartsRef} style={{ position: 'fixed', left: -9999, top: 0, width: 1100, background: '#fff', display: 'flex', gap: '0.875rem', alignItems: 'flex-start', padding: 8 }}>
