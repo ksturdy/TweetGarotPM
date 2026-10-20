@@ -20,6 +20,8 @@ import { employeesApi } from '../../services/employees';
 import '../../styles/SalesPipeline.css';
 import { exportListToPdf } from '../../utils/listExportPdf';
 
+const CANONICAL_STATUSES = ['Open', 'Soft-Closed', 'Hard-Closed'];
+
 const ProjectList: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -187,8 +189,8 @@ const ProjectList: React.FC = () => {
     .reduce((sum, k) => sum + columnWidths[k], 0) + 200; // 200px reserved for flex project column
 
   const { data: projects, isLoading } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => projectsApi.getAll().then((res) => res.data),
+    queryKey: ['projects', statusFilter.length > 0 ? statusFilter.join(',') : null],
+    queryFn: () => projectsApi.getAll(statusFilter.length > 0 ? { statuses: statusFilter } : undefined).then((res) => res.data),
   });
 
   // Fetch favorited project IDs as a separate query so it survives project data refetches
@@ -284,7 +286,11 @@ const ProjectList: React.FC = () => {
   });
 
   // Get unique values for filters
-  const uniqueStatuses = [...new Set((projects || []).map(p => p.status).filter(Boolean))].sort();
+  const uniqueStatuses = useMemo(() => {
+    const extras = [...new Set((projects || []).map(p => p.status).filter(Boolean))]
+      .filter(s => !CANONICAL_STATUSES.includes(s));
+    return [...CANONICAL_STATUSES, ...extras];
+  }, [projects]);
   const uniqueDepartments = [...new Set((projects || []).map(p => p.department_number).filter(Boolean))].sort();
   const uniqueMarkets = [...new Set((projects || []).map(p => p.market).filter(Boolean))].sort();
   const uniqueProjectManagers = useMemo(() => {
@@ -450,10 +456,8 @@ const ProjectList: React.FC = () => {
     return colors[index];
   };
 
-  // Filter projects based on search term and dropdown filters
+  // Filter projects based on search term and dropdown filters (status is pre-filtered server-side)
   const filteredProjects = (projects || []).filter(project => {
-    // Apply dropdown filters first
-    if (statusFilter.length > 0 && !statusFilter.includes(project.status)) return false;
     if (departmentFilter !== 'all' && project.department_number !== departmentFilter) return false;
     if (marketFilter !== 'all' && project.market !== marketFilter) return false;
     if (projectManagerFilter && project.manager_id !== Number(projectManagerFilter)) return false;

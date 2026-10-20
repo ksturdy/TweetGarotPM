@@ -179,7 +179,10 @@ const Project = {
     `;
     const params = [tenantId];
 
-    if (filters.status) {
+    if (filters.statuses && filters.statuses.length > 0) {
+      params.push(filters.statuses);
+      query += ` AND p.status = ANY($${params.length})`;
+    } else if (filters.status) {
       params.push(filters.status);
       query += ` AND p.status = $${params.length}`;
     }
@@ -366,7 +369,7 @@ const Project = {
         WHERE p2.tenant_id = $1
           AND (COALESCE(vc.gross_profit_percent, p2.gross_margin_percent) >= 0.995
                OR COALESCE(vc.gross_profit_percent, p2.gross_margin_percent) = 0)
-          AND p2.status NOT IN ('completed', 'cancelled', 'Hard-Closed')
+          AND p2.status = 'Open'
       ) sub
       WHERE p.id = sub.id
     `, [tenantId, overridePercent]);
@@ -393,6 +396,7 @@ const Project = {
       FROM projects p
       LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
       WHERE p.tenant_id = $1
+        AND p.status = 'Open'
         AND p.override_gm_percent IS NOT NULL
         AND (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
              OR COALESCE(vc.gross_profit_percent, p.gross_margin_percent) = 0)

@@ -87,8 +87,10 @@ export interface GeocodeResult {
 }
 
 export const projectsApi = {
-  getAll: (filters?: { status?: string; managerId?: number }) =>
-    api.get<Project[]>('/projects', { params: filters }),
+  getAll: (filters?: { status?: string; statuses?: string[]; managerId?: number }) =>
+    api.get<Project[]>('/projects', {
+      params: { ...filters, statuses: filters?.statuses?.join(',') },
+    }),
 
   getById: (id: number) => api.get<Project>(`/projects/${id}`),
 

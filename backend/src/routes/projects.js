@@ -52,6 +52,7 @@ router.get('/', async (req, res, next) => {
   try {
     const filters = {
       status: req.query.status,
+      statuses: req.query.statuses ? req.query.statuses.split(',').map(s => s.trim()).filter(Boolean) : undefined,
       managerId: req.query.managerId,
     };
 

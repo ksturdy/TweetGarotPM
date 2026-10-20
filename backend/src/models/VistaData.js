@@ -2113,6 +2113,12 @@ const VistaData = {
     return 'Open';
   },
 
+  // Returns null when Vista has no explicit status (so callers can COALESCE with the existing DB value).
+  _safeMapStatus(raw) {
+    const s = raw && raw.trim() !== '' ? raw : null;
+    return s ? this._mapVistaStatusToProjectStatus(s) : null;
+  },
+
   // Import unmatched VP contracts as new Titan projects
   async importUnmatchedContractsToTitan(tenantId, userId) {
     const client = await db.getClient();
@@ -2168,8 +2174,9 @@ const VistaData = {
             }
           }
 
-          // Map VP status to valid Titan project status
-          const projectStatus = this._mapVistaStatusToProjectStatus(vpContract.status);
+          // Vista BI exports all contracts with status='Open' regardless of close state.
+          // month_closed being set is the authoritative signal that a contract is closed.
+          const projectStatus = vpContract.month_closed ? 'Soft-Closed' : (this._safeMapStatus(vpContract.status) || 'Open');
 
           // Truncate strings to fit VARCHAR constraints
           const projectNumber = (vpContract.contract_number || '').substring(0, 50);
@@ -2196,12 +2203,12 @@ const VistaData = {
               tenant_id, number, name, client, customer_id, status, manager_id, department_id,
               contract_value, gross_margin_percent, backlog, start_date, market,
               created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ) VALUES ($1, $2, $3, $4, $5, COALESCE($6, 'Open'), $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (tenant_id, number) DO UPDATE SET
               name = EXCLUDED.name,
               client = EXCLUDED.client,
               customer_id = COALESCE(EXCLUDED.customer_id, projects.customer_id),
-              status = EXCLUDED.status,
+              status = COALESCE($6, projects.status),
               manager_id = COALESCE(EXCLUDED.manager_id, projects.manager_id),
               department_id = COALESCE(EXCLUDED.department_id, projects.department_id),
               contract_value = COALESCE(EXCLUDED.contract_value, projects.contract_value),
@@ -2585,8 +2592,7 @@ const VistaData = {
             }
           }
 
-          // Map VP status to valid Titan project status
-          const projectStatus = this._mapVistaStatusToProjectStatus(vpWorkOrder.status);
+          const projectStatus = this._safeMapStatus(vpWorkOrder.status);
 
           // Truncate strings to fit VARCHAR constraints
           const projectNumber = ('WO-' + (vpWorkOrder.work_order_number || '')).substring(0, 50);
@@ -2599,11 +2605,11 @@ const VistaData = {
               tenant_id, number, name, client, status, manager_id, department_id,
               contract_value, gross_margin_percent, backlog, market,
               created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ) VALUES ($1, $2, $3, $4, COALESCE($5, 'Open'), $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (tenant_id, number) DO UPDATE SET
               name = EXCLUDED.name,
               client = EXCLUDED.client,
-              status = EXCLUDED.status,
+              status = COALESCE($5, projects.status),
               manager_id = COALESCE(EXCLUDED.manager_id, projects.manager_id),
               department_id = COALESCE(EXCLUDED.department_id, projects.department_id),
               contract_value = COALESCE(EXCLUDED.contract_value, projects.contract_value),
