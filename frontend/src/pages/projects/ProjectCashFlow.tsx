@@ -325,7 +325,9 @@ const ProjectCashFlow: React.FC = () => {
     });
 
     // ── Net and cumulative, seeded from JTD net cash flow ─────────
-    const jtdCashFlow = num(c.cash_flow);
+    // Seed from billed − paid (not received − paid) so the ending cumulative
+    // ties to projected gross margin regardless of outstanding receivables.
+    const jtdCashFlow = num(c.billed_amount) - num(c.actual_cost);
     const netCashFlow = new Map<string, number>();
     const cumulativeCashFlow = new Map<string, number>();
     let cumul = jtdCashFlow;
@@ -598,7 +600,7 @@ const ProjectCashFlow: React.FC = () => {
               <div style={{ padding: '0.5rem 0.75rem', borderBottom: '2px solid #e2e8f0', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase' }}>Projected Cash Flow</span>
                 <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                  Cumulative starts from JTD net cash flow:{' '}
+                  Cumulative starts from JTD billed margin:{' '}
                   <strong style={{ color: cashFlowData.jtdCashFlow >= 0 ? '#10b981' : '#ef4444' }}>
                     {fmt(cashFlowData.jtdCashFlow)}
                   </strong>
@@ -665,7 +667,7 @@ const ProjectCashFlow: React.FC = () => {
                     <td style={{ ...tfS, textAlign: 'left', color: '#2563eb', position: 'sticky', left: 0, backgroundColor: '#eff6ff', zIndex: 1 }}>
                       Cumulative Cash Flow
                       <span style={{ fontWeight: 400, fontSize: '0.65rem', color: '#94a3b8', marginLeft: '0.4rem' }}>
-                        (starts: {fmt(cashFlowData.jtdCashFlow)})
+                        (JTD billed margin: {fmt(cashFlowData.jtdCashFlow)})
                       </span>
                     </td>
                     {columns.map(col => {
