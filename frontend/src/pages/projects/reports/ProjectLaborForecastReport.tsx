@@ -54,8 +54,9 @@ const fmtHrs = (v: number | null | undefined) =>
   v != null && !isNaN(v as number) ? Math.round(v).toLocaleString() : '—';
 const fmtDateShort = (s: string | null | undefined) => {
   if (!s) return '—';
-  const d = new Date(s + 'T00:00:00');
-  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`;
+  const [y, m, d] = s.slice(0, 10).split('-');
+  if (!y || !m || !d) return '—';
+  return `${m}/${d}/${y.slice(2)}`;
 };
 const calcDur = (start: string | null, end: string | null) => {
   if (!start || !end) return '—';

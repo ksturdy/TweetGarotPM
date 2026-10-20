@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend } from 'chart.js';
+import { Line, Bar } from 'react-chartjs-2';
 import { useAuth } from '../../../context/AuthContext';
 import { vistaDataService } from '../../../services/vistaData';
 import { projectsApi } from '../../../services/projects';
@@ -11,7 +14,10 @@ import { submittalsApi } from '../../../services/submittals';
 import { changeOrdersApi } from '../../../services/changeOrders';
 import { fieldIssuesApi } from '../../../services/fieldIssues';
 import { projectionNotesApi } from '../../../services/projectionNotes';
-import { scheduleSegmentsService, SEGMENT_DEFINITIONS, type SegmentCosts } from '../../../services/scheduleSegments';
+import { scheduleSegmentsService, SEGMENT_DEFINITIONS, type SegmentCosts, type ScheduleSegment } from '../../../services/scheduleSegments';
+import { getContourMultipliers, type ContourType } from '../../../utils/contours';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend);
 
 // ─── Formatters ────────────────────────────────────────────────────────────────
 
@@ -44,12 +50,13 @@ const fmtCompact = (v: number | null | undefined) => {
 const fmtHrs = (v: number | null | undefined) => v != null && !isNaN(v as number) ? Math.round(v).toLocaleString() : '—';
 const fmtDateShort = (s: string | null | undefined) => {
   if (!s) return '—';
-  const d = new Date(s + 'T00:00:00');
-  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`;
+  const [y, m, d] = s.slice(0, 10).split('-');
+  if (!y || !m || !d) return '—';
+  return `${m}/${d}/${y.slice(2)}`;
 };
 const calcDurLabel = (start: string | null, end: string | null) => {
   if (!start || !end) return '—';
-  const days = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000);
+  const days = Math.round((new Date(end.slice(0, 10)).getTime() - new Date(start.slice(0, 10)).getTime()) / 86400000);
   if (days < 0) return '—';
   const months = Math.round(days / 30.44);
   return months >= 2 ? `${months}mo` : `${days}d`;
@@ -63,6 +70,46 @@ const calcRateHealth = (costs: SegmentCosts | undefined) => {
   const estCost = safeN(costs?.est_cost), estHrs = safeN(costs?.est_hours);
   return estCost > 0 && estHrs > 0 ? estCost / estHrs : null;
 };
+
+// ─── Shift / Chart helpers (shared with CostTypeSchedule) ─────────────────────
+interface ShiftSetting { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number; }
+type ShiftSettings = Record<string, ShiftSetting>;
+const SHIFT_DAY_KEYS: (keyof ShiftSetting)[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const SHIFT_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const DEFAULT_SHIFT: ShiftSetting = { mon: 8, tue: 8, wed: 8, thu: 8, fri: 8, sat: 0, sun: 0 };
+const SHIFT_DEFAULTS: ShiftSettings = {
+  '30': { ...DEFAULT_SHIFT }, '35': { ...DEFAULT_SHIFT },
+  '40': { ...DEFAULT_SHIFT }, '45': { ...DEFAULT_SHIFT },
+  '50': { ...DEFAULT_SHIFT }, '55': { ...DEFAULT_SHIFT },
+  '70': { ...DEFAULT_SHIFT }, bas: { ...DEFAULT_SHIFT },
+};
+const weeklyHoursH = (s: ShiftSetting) => SHIFT_DAY_KEYS.reduce((sum, d) => sum + (s[d] ?? 0), 0);
+const hrsPerPersonPerMonth = (s: ShiftSetting) => weeklyHoursH(s) * (52 / 12);
+const LABOR_CHART_COLORS: Record<string, string> = {
+  '30': '#3b82f6', '35': '#1d4ed8', '40': '#0ea5e9', '45': '#0369a1',
+  '50': '#06b6d4', '55': '#0e7490', '70': '#64748b', bas: '#8b5cf6',
+};
+const toIsoH = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+function distributeMonthlyH(
+  remaining: number | null, startDate: string | null, endDate: string | null,
+  contourType: string, allMonths: Date[]
+): number[] {
+  if (!remaining || !startDate || !endDate) return allMonths.map(() => 0);
+  const start = new Date(startDate.slice(0, 10)), end = new Date(endDate.slice(0, 10));
+  const segIdx: number[] = [];
+  allMonths.forEach((m, i) => {
+    const mEnd = new Date(m.getFullYear(), m.getMonth() + 1, 1);
+    if (m <= end && mEnd > start) segIdx.push(i);
+  });
+  if (segIdx.length === 0) return allMonths.map(() => 0);
+  const mults = getContourMultipliers(segIdx.length, contourType as ContourType);
+  const mSum = mults.reduce((a, b) => a + b, 0) || 1;
+  const result = allMonths.map(() => 0);
+  segIdx.forEach((idx, i) => { result[idx] = (mults[i] / mSum) * remaining; });
+  return result;
+}
 
 // ─── Section definitions ───────────────────────────────────────────────────────
 
@@ -172,6 +219,83 @@ const ProjectHealthReport: React.FC = () => {
   const segmentMap = useMemo(() => new Map((segmentsData?.segments ?? []).map(s => [s.segment_key, s])), [segmentsData]);
   const costsMap   = useMemo(() => new Map((segCosts as SegmentCosts[]).map(c => [c.segment_key, c])), [segCosts]);
   const activeKeys: string[] = segmentsData?.activeKeys ?? [];
+
+  // ─── Chart infrastructure (used by labor_forecast PDF section) ────────────
+  const laborChartsRef = useRef<HTMLDivElement>(null);
+
+  const shiftSettings = useMemo<ShiftSettings>(() => {
+    const parse = (raw: string | null): ShiftSettings | null => {
+      if (!raw) return null;
+      try {
+        const p = JSON.parse(raw);
+        if (p && typeof Object.values(p)[0] === 'object' && 'hoursPerDay' in (Object.values(p)[0] as any)) return null;
+        return { ...SHIFT_DEFAULTS, ...p };
+      } catch { return null; }
+    };
+    return parse(localStorage.getItem(`costTypeSchedule_shifts_${pid}`))
+      ?? parse(localStorage.getItem('costTypeSchedule_shifts'))
+      ?? { ...SHIFT_DEFAULTS };
+  }, [pid]);
+
+  const allMonths = useMemo<Date[]>(() => {
+    const segs = segmentsData?.segments ?? [];
+    const starts = segs.map(s => s.start_date ? new Date(s.start_date.slice(0, 10)).getTime() : null).filter(Boolean) as number[];
+    const ends   = segs.map(s => s.end_date   ? new Date(s.end_date.slice(0, 10)).getTime()   : null).filter(Boolean) as number[];
+    if (!starts.length && !ends.length) return [];
+    const tStart = Math.min(...starts), tEnd = Math.max(...ends);
+    const months: Date[] = [];
+    const cur = new Date(tStart); cur.setDate(1);
+    while (cur.getTime() <= tEnd) { months.push(new Date(cur)); cur.setMonth(cur.getMonth() + 1); }
+    return months;
+  }, [segmentsData]);
+
+  const chartLabels = useMemo(() =>
+    allMonths.map(m => m.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' })),
+    [allMonths]
+  );
+
+  const todayIsoH = toIsoH(new Date());
+  const clampStartH = (s: string | null | undefined) => s && s.slice(0, 10) < todayIsoH ? todayIsoH : (s?.slice(0, 10) ?? null);
+
+  const laborDatasets = useMemo(() => {
+    return SEGMENT_DEFINITIONS
+      .filter(d => d.isLabor && activeKeys.includes(d.key))
+      .map(def => {
+        const seg = segmentMap.get(def.key);
+        const c = costsMap.get(def.key);
+        const shift = shiftSettings[def.key] ?? SHIFT_DEFAULTS[def.key] ?? DEFAULT_SHIFT;
+        const capacity = hrsPerPersonPerMonth(shift);
+        const estHrs = safeN(c?.est_hours), jtdHrs = safeN(c?.jtd_hours);
+        const remHrs = estHrs > 0 ? Math.max(0, estHrs - jtdHrs) : null;
+        const hours = remHrs != null && remHrs > 0
+          ? distributeMonthlyH(remHrs, clampStartH(seg?.start_date), seg?.end_date ?? null, seg?.contour_type ?? 'bell', allMonths)
+          : allMonths.map(() => 0);
+        const data = hours.map(h => capacity > 0 ? Math.round((h / capacity) * 10) / 10 : 0);
+        return { label: def.label, data, color: LABOR_CHART_COLORS[def.key] ?? '#6b7280' };
+      })
+      .filter(ds => ds.data.some(v => v > 0));
+  }, [activeKeys, segmentMap, costsMap, shiftSettings, allMonths]);
+
+  const monthlyRevenue = useMemo(() => {
+    const totalJtd = (segCosts as SegmentCosts[]).reduce((s, c) => s + safeN(c.jtd_cost), 0);
+    const totalRem = (segCosts as SegmentCosts[]).reduce((s, c) => s + (safeN(c.projected_cost) - safeN(c.jtd_cost)), 0);
+    const projCostFromSegs = totalJtd + totalRem;
+    const projRev = safeN(project?.projected_revenue);
+    const revMult = projRev > 0 && projCostFromSegs > 0 ? projRev / projCostFromSegs : 0;
+    const monthlyTotalCost = allMonths.map((_, i) =>
+      SEGMENT_DEFINITIONS.reduce((sum, def) => {
+        if (!activeKeys.includes(def.key)) return sum;
+        const seg = segmentMap.get(def.key);
+        const c = costsMap.get(def.key);
+        const rem = safeN(c?.projected_cost) - safeN(c?.jtd_cost);
+        if (rem <= 0) return sum;
+        return sum + (distributeMonthlyH(rem, clampStartH(seg?.start_date), seg?.end_date ?? null, seg?.contour_type ?? 'bell', allMonths)[i] ?? 0);
+      }, 0)
+    );
+    return monthlyTotalCost.map(c => c * revMult);
+  }, [segCosts, project, activeKeys, segmentMap, costsMap, allMonths]);
+
+  const hasLaborCharts = allMonths.length > 0 && (laborDatasets.length > 0 || monthlyRevenue.some(v => v > 0));
 
   // ─── Derived metrics ───────────────────────────────────────────────────────
 
@@ -406,7 +530,21 @@ const ProjectHealthReport: React.FC = () => {
         accentBar();
         y = sectionHeader('Labor Forecast', 18);
 
-        // Cost Type Schedule table (from schedule segments)
+        // Capture shift schedule + charts from hidden DOM element
+        if (laborChartsRef.current && hasLaborCharts) {
+          try {
+            const canvas = await html2canvas(laborChartsRef.current, { scale: 1.5, backgroundColor: '#ffffff', useCORS: true });
+            const imgData = canvas.toDataURL('image/png');
+            const availW = pw;
+            const naturalH = (canvas.height / canvas.width) * availW;
+            const fitH = Math.min(naturalH, 170);
+            const fitW = (fitH / naturalH) * availW;
+            doc.addImage(imgData, 'PNG', 40, y, fitW, fitH);
+            y += fitH + 10;
+          } catch {}
+        }
+
+        // Cost Type Schedule table
         if (activeKeys.length > 0) {
           doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...SLATE);
           doc.text('Cost Type Schedule', 40, y + 6);
@@ -439,7 +577,15 @@ const ProjectHealthReport: React.FC = () => {
             margin: { left: 40, right: 40 },
             styles: { fontSize: 7, cellPadding: 2.5, textColor: [30, 41, 59] },
             headStyles: { fillColor: [30, 42, 60], textColor: 255, fontStyle: 'bold', fontSize: 6.5 },
-            columnStyles: { 0: { halign: 'left' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } },
+            columnStyles: {
+              0: { halign: 'left',  cellWidth: 100 },
+              1: { halign: 'right', cellWidth: 60 },
+              2: { halign: 'right', cellWidth: 60 },
+              3: { halign: 'right', cellWidth: 55 },
+              4: { halign: 'right', cellWidth: 55 },
+              5: { halign: 'right', cellWidth: 55 },
+              6: { halign: 'right', cellWidth: 40 },
+            },
             didParseCell: (data: any) => {
               const row = segRows[data.row.index];
               if (row && (row[0] === 'LABOR' || row[0] === 'NON-LABOR') && data.section === 'body') {
@@ -459,7 +605,7 @@ const ProjectHealthReport: React.FC = () => {
           y += 14;
           autoTable(doc, {
             startY: y,
-            head: [['Trade', 'Est Hours', 'JTD Hours', 'Proj Hours', 'Est Cost', 'JTD Cost', 'Proj Cost', 'Variance $', 'Variance %']],
+            head: [['Trade', 'Est Hrs', 'JTD Hrs', 'Proj Hrs', 'Est Cost', 'JTD Cost', 'Proj Cost', 'Variance $', 'Var %']],
             body: trades.map(t => {
               const variance = (t.projCost ?? 0) - (t.estCost ?? 0);
               const pct = t.estCost && t.estCost !== 0 ? `${((variance / t.estCost) * 100).toFixed(1)}%` : '—';
@@ -469,7 +615,17 @@ const ProjectHealthReport: React.FC = () => {
             styles: { fontSize: 7, cellPadding: 2.5, textColor: [30, 41, 59] },
             headStyles: { fillColor: [249, 115, 22], textColor: 255, fontStyle: 'bold', fontSize: 6.5 },
             alternateRowStyles: { fillColor: [248, 250, 252] },
-            columnStyles: { 0: { halign: 'left' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' } },
+            columnStyles: {
+              0: { halign: 'left',  cellWidth: 70 },
+              1: { halign: 'right', cellWidth: 55 },
+              2: { halign: 'right', cellWidth: 55 },
+              3: { halign: 'right', cellWidth: 55 },
+              4: { halign: 'right', cellWidth: 70 },
+              5: { halign: 'right', cellWidth: 70 },
+              6: { halign: 'right', cellWidth: 70 },
+              7: { halign: 'right', cellWidth: 70 },
+              8: { halign: 'right', cellWidth: 42 },
+            },
             didParseCell: (data: any) => {
               if (data.section === 'body' && (data.column.index === 7 || data.column.index === 8)) {
                 const v = String(data.cell.raw ?? '');
@@ -839,6 +995,62 @@ const ProjectHealthReport: React.FC = () => {
           ))}
         </div>
       </section>
+
+      {/* Hidden labor charts for PDF capture */}
+      {hasLaborCharts && (
+        <div ref={laborChartsRef} style={{ position: 'fixed', left: -9999, top: 0, width: 900, background: '#fff', display: 'flex', gap: 12, padding: 8 }}>
+          {/* Shift Schedule */}
+          <div style={{ flexShrink: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
+            <div style={{ padding: '0.4rem 0.75rem', background: '#eef2f7', borderBottom: '1px solid #e2e8f0', fontSize: '0.62rem', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Shift Schedule</div>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '0.2rem 0.75rem', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+              <span style={{ flex: 1, fontSize: '0.58rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Trade</span>
+              {SHIFT_DAY_LABELS.map((lbl, i) => (
+                <span key={i} style={{ width: 22, textAlign: 'center', fontSize: '0.58rem', fontWeight: 700, color: i >= 5 ? '#f59e0b' : '#64748b', flexShrink: 0 }}>{lbl}</span>
+              ))}
+              <span style={{ width: 34, textAlign: 'right', fontSize: '0.58rem', color: '#94a3b8', flexShrink: 0 }}>Wk</span>
+            </div>
+            {SEGMENT_DEFINITIONS.filter(d => d.isLabor && activeKeys.includes(d.key)).map((def, ri) => {
+              const shift = shiftSettings[def.key] ?? DEFAULT_SHIFT;
+              return (
+                <div key={def.key} style={{ display: 'flex', alignItems: 'center', padding: '0.22rem 0.75rem', borderBottom: '1px solid #f1f5f9', background: ri % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.35rem', minWidth: 100 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 2, background: LABOR_CHART_COLORS[def.key] ?? '#6b7280', flexShrink: 0, display: 'inline-block' }} />
+                    <span style={{ fontSize: '0.65rem', color: '#374151', whiteSpace: 'nowrap' }}>{def.label}</span>
+                  </div>
+                  {SHIFT_DAY_KEYS.map((day, di) => (
+                    <span key={day} style={{ width: 22, textAlign: 'center', fontSize: '0.65rem', flexShrink: 0, color: shift[day] === 0 ? '#cbd5e1' : di >= 5 ? '#d97706' : '#1e293b' }}>{shift[day]}</span>
+                  ))}
+                  <span style={{ width: 34, textAlign: 'right', fontSize: '0.65rem', fontWeight: 600, color: '#3b82f6', flexShrink: 0 }}>{weeklyHoursH(shift)}h</span>
+                </div>
+              );
+            })}
+          </div>
+          {/* Remaining Labor chart */}
+          {laborDatasets.length > 0 && (
+            <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.75rem' }}>
+              <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#374151', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Remaining Labor Resources by Month</div>
+              <div style={{ height: 180, position: 'relative' }}>
+                <Line
+                  data={{ labels: chartLabels, datasets: laborDatasets.map(ds => ({ label: ds.label, data: ds.data, borderColor: ds.color, backgroundColor: ds.color + '18', tension: 0.4, pointRadius: 0, borderWidth: 2, fill: false })) }}
+                  options={{ maintainAspectRatio: false, responsive: true, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: laborDatasets.length > 1, position: 'top', labels: { boxWidth: 12, boxHeight: 2, font: { size: 9 }, padding: 6 } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } }, scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 8 }, maxRotation: 45, color: '#64748b' } }, y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 8 }, color: '#64748b', stepSize: 1 } } } }}
+                />
+              </div>
+            </div>
+          )}
+          {/* Revenue chart */}
+          {monthlyRevenue.some(v => v > 0) && (
+            <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.75rem' }}>
+              <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#374151', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Revenue by Month</div>
+              <div style={{ height: 180, position: 'relative' }}>
+                <Bar
+                  data={{ labels: chartLabels, datasets: [{ label: 'Revenue', data: monthlyRevenue, backgroundColor: '#10b981' + '70', borderColor: '#10b981', borderWidth: 1, borderRadius: 2 }] }}
+                  options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Revenue: ${fmtCompact(ctx.parsed.y)}` } } }, scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 8 }, maxRotation: 45, color: '#64748b' } }, y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 8 }, color: '#64748b', callback: (v) => fmtCompact(v as number) } } } }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
