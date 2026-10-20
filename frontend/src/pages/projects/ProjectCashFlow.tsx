@@ -357,20 +357,30 @@ const ProjectCashFlow: React.FC = () => {
 
   const chartData = useMemo(() => {
     if (!cashFlowData) return null;
-    const monthlyCols = columns.filter(col => !col.isYear);
-    const labels = monthlyCols.map(col => col.label);
 
-    const billings  = monthlyCols.map(col => cashFlowData.monthlyRevenue.get(col.key) ?? 0);
-    const costs     = monthlyCols.map(col => {
-      const labor = cashFlowData.monthlyLaborCost.get(col.key) ?? 0;
-      const nl    = cashFlowData.monthlyNonLabor.get(col.key) ?? {};
+    // Collect every individual monthly key (yyyy-MM) across all maps — covers full job duration
+    const keySet = new Set<string>();
+    const isMonthKey = (k: string) => /^\d{4}-\d{2}$/.test(k);
+    cashFlowData.monthlyRevenue.forEach((_, k) => { if (isMonthKey(k)) keySet.add(k); });
+    cashFlowData.monthlyLaborCost.forEach((_, k) => { if (isMonthKey(k)) keySet.add(k); });
+    cashFlowData.monthlyNonLabor.forEach((_, k) => { if (isMonthKey(k)) keySet.add(k); });
+
+    const sortedKeys = Array.from(keySet).sort();
+    const labels  = sortedKeys.map(k => format(parseISO(k + '-01'), 'MMM yy'));
+    const billings = sortedKeys.map(k => cashFlowData.monthlyRevenue.get(k) ?? 0);
+    const costs    = sortedKeys.map(k => {
+      const labor = cashFlowData.monthlyLaborCost.get(k) ?? 0;
+      const nl    = cashFlowData.monthlyNonLabor.get(k) ?? {};
       return labor + NON_LABOR_CATS.reduce((s, cat) => s + (nl[cat.key] ?? 0), 0);
     });
-    const nets   = monthlyCols.map(col => cashFlowData.netCashFlow.get(col.key) ?? 0);
-    const cumuls = monthlyCols.map(col => cashFlowData.cumulativeCashFlow.get(col.key) ?? 0);
+    const nets = billings.map((b, i) => b - costs[i]);
+
+    // Recompute cumulative over the full sorted month sequence
+    let cumul = cashFlowData.jtdCashFlow;
+    const cumuls = nets.map(net => { cumul += net; return cumul; });
 
     return { labels, billings, costs, nets, cumuls };
-  }, [cashFlowData, columns]);
+  }, [cashFlowData]);
 
   const overUnderBilled = num(c?.billed_amount) - num(c?.earned_revenue);
 
@@ -447,7 +457,7 @@ const ProjectCashFlow: React.FC = () => {
 
           {/* ── CHARTS ────────────────────────────────────────────── */}
           {chartData && (
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
               {/* Billings vs Costs + Cumulative combo */}
               <div className="card" style={{ padding: '0.75rem' }}>
                 <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
