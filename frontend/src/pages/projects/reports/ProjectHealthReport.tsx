@@ -322,7 +322,9 @@ const ProjectHealthReport: React.FC = () => {
   // ─── Derived metrics ───────────────────────────────────────────────────────
 
   const metrics = useMemo(() => {
-    const origMargin = contract?.original_estimated_margin ?? 0;
+    const origMargin = project?.override_original_estimated_margin != null
+      ? Number(project.override_original_estimated_margin)
+      : (contract?.original_estimated_margin ?? 0);
     const curMargin = contract?.gross_profit_dollars ?? 0;
     const gainFade = curMargin - origMargin;
     const laborProjCost = costSummary?.labor_totals?.projected_cost ?? 0;
@@ -506,7 +508,7 @@ const ProjectHealthReport: React.FC = () => {
           ['  Material', fmt(contract.material_estimate), fmt(contract.material_projected), fmt(contract.material_jtd), ''],
           ['  Subcontracts', fmt(contract.subcontracts_estimate), fmt(contract.subcontracts_projected), fmt(contract.subcontracts_jtd), ''],
           ['  Rentals', fmt(contract.rentals_estimate), fmt(contract.rentals_projected), fmt(contract.rentals_jtd), ''],
-          ['Gross Profit', fmt(contract.original_estimated_margin), fmt(contract.gross_profit_dollars), '—', ''],
+          ['Gross Profit', fmt(project?.override_original_estimated_margin != null ? Number(project.override_original_estimated_margin) : contract.original_estimated_margin), fmt(contract.gross_profit_dollars), '—', ''],
         ].map(row => {
           const est = row[1] === '—' ? null : parseFloat(row[1].replace(/[$,]/g, ''));
           const proj = row[2] === '—' ? null : parseFloat(row[2].replace(/[$,]/g, ''));
@@ -993,7 +995,7 @@ const ProjectHealthReport: React.FC = () => {
                   { label: 'Material', est: contract.material_estimate, proj: contract.material_projected, jtd: contract.material_jtd },
                   { label: 'Subcontracts', est: contract.subcontracts_estimate, proj: contract.subcontracts_projected, jtd: contract.subcontracts_jtd },
                   { label: 'Rentals', est: contract.rentals_estimate, proj: contract.rentals_projected, jtd: contract.rentals_jtd },
-                  { label: 'Gross Profit', est: contract.original_estimated_margin, proj: contract.gross_profit_dollars, jtd: null },
+                  { label: 'Gross Profit', est: project?.override_original_estimated_margin != null ? Number(project.override_original_estimated_margin) : contract.original_estimated_margin, proj: contract.gross_profit_dollars, jtd: null },
                 ].map(row => {
                   const variance = (row.proj ?? 0) - (row.est ?? 0);
                   const isGP = row.label === 'Gross Profit';
