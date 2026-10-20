@@ -1,8 +1,19 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { format, addMonths, startOfMonth, differenceInMonths, parseISO } from 'date-fns';
-import { vistaDataService, VPContract } from '../../services/vistaData';
+import { vistaDataService, VPContract, PhaseCodeCostSummary, LaborTradeSummary } from '../../services/vistaData';
 import { ContourType, contourOptions, getContourMultipliers, getDefaultContour, ContourVisual } from '../../utils/contours';
+import { ScheduleSegment } from '../../services/scheduleSegments';
+
+const SEG_TRADE_MAP: { segKey: string; trade: string; location: string | null }[] = [
+  { segKey: '40', trade: 'pf',    location: 'field' },
+  { segKey: '45', trade: 'pf',    location: 'shop'  },
+  { segKey: '30', trade: 'sm',    location: 'field' },
+  { segKey: '35', trade: 'sm',    location: 'shop'  },
+  { segKey: '50', trade: 'pl',    location: 'field' },
+  { segKey: '55', trade: 'pl',    location: 'shop'  },
+  { segKey: '70', trade: 'admin', location: null    },
+];
 
 const dateToMonthOffset = (dateStr: string | null | undefined): number | null => {
   if (!dateStr) return null;
@@ -40,9 +51,11 @@ interface Props {
   scrollRef?: React.RefObject<HTMLDivElement>;
   onScroll?: React.UIEventHandler<HTMLDivElement>;
   schedulingMode?: 'summary' | 'cost_type' | 'phase';
+  segments?: ScheduleSegment[];
+  costSummary?: PhaseCodeCostSummary;
 }
 
-const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScroll, schedulingMode }) => {
+const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScroll, schedulingMode, segments, costSummary }) => {
   const datesLocked = (schedulingMode ?? 'summary') !== 'summary';
   const queryClient = useQueryClient();
 
@@ -164,6 +177,126 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
   }, [contract.earned_revenue, contract.projected_revenue, contract.backlog, contract.contract_amount,
       startMonths, endMonths, contourOverride]);
 
+  // Cost-type mode: derive revenue from total cost profile, matching Schedule page's "Revenue By Month"
+  const costTypeRevenue = useMemo(() => {
+    if (!datesLocked || !segments?.length || !costSummary) return null;
+    const now = startOfMonth(new Date());
+    const backlogVal = parseNum(contract.backlog);
+    if (backlogVal <= 0) return null;
+
+    const pctCompletePct = parseNum(contract.projected_revenue) > 0
+      ? (parseNum(contract.earned_revenue) / parseNum(contract.projected_revenue)) * 100 : 0;
+    const contractValue = parseNum(contract.contract_amount) || parseNum(contract.projected_revenue);
+
+    const resolveWindow = (segKey: string) => {
+      const seg = segments.find(s => s.segment_key === segKey);
+      if (seg?.start_date) {
+        const d = parseISO(seg.start_date.slice(0, 10));
+        if (!isNaN(d.getTime())) {
+          const sOff = differenceInMonths(startOfMonth(d), now);
+          const eD = seg.end_date ? parseISO(seg.end_date.slice(0, 10)) : null;
+          const eUserOff = eD && !isNaN(eD.getTime()) ? differenceInMonths(startOfMonth(eD), now) : null;
+          const eOff = eUserOff != null
+            ? Math.max(sOff + 1, Math.min(37, eUserOff + 1))
+            : sOff + Math.max(1, Math.min(36, Math.ceil(defaultDurationForValue(contractValue) * (1 - pctCompletePct / 100))));
+          return { sOff, eOff, segContour: (seg.contour_type as ContourType) || getDefaultContour(pctCompletePct) };
+        }
+      }
+      return null;
+    };
+
+    const fallbackStart = Math.max(0, dateToMonthOffset(contract.user_adjusted_start_date) ?? 0);
+    const fallbackEndUser = dateToMonthOffset(contract.user_adjusted_end_date);
+    const fallbackEnd = fallbackEndUser != null
+      ? Math.max(fallbackStart + 1, Math.min(37, fallbackEndUser + 1))
+      : fallbackStart + Math.max(1, Math.min(36, Math.ceil(defaultDurationForValue(contractValue) * (1 - pctCompletePct / 100))));
+    const fallbackContour = (contract.user_selected_contour as ContourType) || getDefaultContour(pctCompletePct);
+    const fallbackWindow = { sOff: fallbackStart, eOff: fallbackEnd, segContour: fallbackContour };
+
+    const distrib = (target: Map<string, number>, cost: number, sOff: number, eOff: number, sc: ContourType) => {
+      const months = Math.max(0, eOff - sOff);
+      if (months <= 0 || cost <= 0) return;
+      const mults = getContourMultipliers(months, sc);
+      const base = cost / months;
+      for (let i = 0; i < months; i++) {
+        const idx = sOff + i;
+        if (idx < 0) continue;
+        const mk = format(addMonths(now, idx), 'yyyy-MM');
+        target.set(mk, (target.get(mk) ?? 0) + base * mults[i]);
+      }
+    };
+
+    const monthlyTotalCost = new Map<string, number>();
+
+    SEG_TRADE_MAP.forEach(({ segKey, trade, location }) => {
+      const rows = (costSummary.labor as LaborTradeSummary[]).filter(l =>
+        l.trade === trade && (location === null || l.location === location)
+      );
+      const remaining = rows.reduce((s, r) => s + Math.max(0, r.projected_cost - r.jtd_cost), 0);
+      if (remaining <= 0) return;
+      const w = resolveWindow(segKey) ?? fallbackWindow;
+      distrib(monthlyTotalCost, remaining, w.sOff, w.eOff, w.segContour);
+    });
+
+    const cs = costSummary.costs;
+    [
+      { segKey: 'material',    rem: Math.max(0, cs.material.projected_cost - cs.material.jtd_cost) },
+      { segKey: 'subcontract', rem: Math.max(0, cs.subcontracts.projected_cost - cs.subcontracts.jtd_cost) },
+      { segKey: 'rental',      rem: Math.max(0, cs.rentals.projected_cost - cs.rentals.jtd_cost) },
+      { segKey: 'equipment',   rem: Math.max(0, cs.mep_equipment.projected_cost - cs.mep_equipment.jtd_cost) },
+      { segKey: 'gc',          rem: Math.max(0, cs.general_conditions.projected_cost - cs.general_conditions.jtd_cost) },
+    ].forEach(({ segKey, rem }) => {
+      if (rem <= 0) return;
+      const w = resolveWindow(segKey) ?? fallbackWindow;
+      distrib(monthlyTotalCost, rem, w.sOff, w.eOff, w.segContour);
+    });
+
+    const totalRemCost = Array.from(monthlyTotalCost.values()).reduce((s, v) => s + v, 0);
+    if (totalRemCost <= 0) return null;
+
+    const revMultiplier = backlogVal / totalRemCost;
+    const monthlyRevenue = new Map<string, number>();
+    const twelveOut = addMonths(now, 11);
+
+    monthlyTotalCost.forEach((cost, mk) => {
+      const rev = cost * revMultiplier;
+      monthlyRevenue.set(mk, rev);
+      const md = parseISO(mk + '-01');
+      if (md > twelveOut) {
+        const yrKey = String(md.getFullYear());
+        monthlyRevenue.set(yrKey, (monthlyRevenue.get(yrKey) ?? 0) + rev);
+      }
+    });
+
+    // Derive effective window for display
+    let minOff: number | null = null;
+    let maxOff: number | null = null;
+    for (const seg of segments) {
+      if (seg.start_date) {
+        const d = parseISO(seg.start_date.slice(0, 10));
+        if (!isNaN(d.getTime())) {
+          const off = differenceInMonths(startOfMonth(d), now);
+          if (minOff === null || off < minOff) minOff = off;
+        }
+      }
+      if (seg.end_date) {
+        const d = parseISO(seg.end_date.slice(0, 10));
+        if (!isNaN(d.getTime())) {
+          const off = differenceInMonths(startOfMonth(d), now);
+          if (maxOff === null || off > maxOff) maxOff = off;
+        }
+      }
+    }
+
+    return {
+      monthlyRevenue,
+      effectiveStartOff: minOff !== null ? Math.max(0, minOff) : fallbackStart,
+      effectiveEndOff:   maxOff ?? (fallbackEnd - 1),
+    };
+  }, [datesLocked, segments, costSummary, contract.backlog, contract.projected_revenue,
+      contract.earned_revenue, contract.contract_amount, contract.user_adjusted_start_date,
+      contract.user_adjusted_end_date, contract.user_selected_contour]);
+
   const backlog = projection.backlog;
   const startOffset = projection.startOffset;
   const remainingMonths = projection.remainingMonths;
@@ -242,73 +375,75 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
             </td>
             <td style={{ ...cellStyle, textAlign: 'center' }}>
               {backlog > 0 ? (
-                <select
-                  value={startOffset}
-                  disabled={datesLocked}
-                  onChange={(e) => {
-                    if (datesLocked) return;
-                    const newStart = parseInt(e.target.value);
-                    setStartMonths(newStart);
-                    const currentEnd = endMonths ?? (startOffset + remainingMonths - 1);
-                    if (newStart >= currentEnd) {
-                      const newEnd = newStart + 1;
-                      setEndMonths(newEnd);
-                      save({ user_adjusted_start_months: newStart, user_adjusted_end_months: newEnd });
-                    } else {
-                      save({ user_adjusted_start_months: newStart });
-                    }
-                  }}
-                  style={{
-                    padding: '0.15rem 0.25rem',
-                    fontSize: '0.65rem',
-                    border: datesLocked ? '1px solid #e5e7eb' : startMonths != null ? '1px solid #16a34a' : '1px solid #e2e8f0',
-                    borderRadius: '3px',
-                    background: datesLocked ? '#f3f4f6' : startMonths != null ? '#dcfce7' : 'transparent',
-                    color: datesLocked ? '#6b7280' : startMonths != null ? '#15803d' : '#64748b',
-                    cursor: datesLocked ? 'not-allowed' : 'pointer',
-                    width: '70px',
-                  }}
-                  title={datesLocked
-                    ? `Dates are controlled by the ${schedulingMode === 'cost_type' ? 'Cost Type' : 'Phase'} schedule. Switch to Summary mode on the Schedule tab to edit directly.`
-                    : 'Click to adjust start date'}
-                >
-                  {Array.from({ length: 36 }, (_, i) => i).map(months => {
-                    const startDate = addMonths(startOfMonth(new Date()), months);
-                    return <option key={months} value={months}>{format(startDate, 'MMM yy')}</option>;
-                  })}
-                </select>
+                datesLocked ? (
+                  <span style={{ fontSize: '0.65rem', color: '#6b7280', background: '#f3f4f6', padding: '0.15rem 0.35rem', borderRadius: '3px', border: '1px solid #e5e7eb', display: 'inline-block' }}
+                    title={`Derived from ${schedulingMode === 'cost_type' ? 'Cost Type' : 'Phase'} schedule`}>
+                    {format(addMonths(startOfMonth(new Date()), costTypeRevenue?.effectiveStartOff ?? startOffset), 'MMM yy')}
+                  </span>
+                ) : (
+                  <select
+                    value={startOffset}
+                    onChange={(e) => {
+                      const newStart = parseInt(e.target.value);
+                      setStartMonths(newStart);
+                      const currentEnd = endMonths ?? (startOffset + remainingMonths - 1);
+                      if (newStart >= currentEnd) {
+                        const newEnd = newStart + 1;
+                        setEndMonths(newEnd);
+                        save({ user_adjusted_start_months: newStart, user_adjusted_end_months: newEnd });
+                      } else {
+                        save({ user_adjusted_start_months: newStart });
+                      }
+                    }}
+                    style={{
+                      padding: '0.15rem 0.25rem', fontSize: '0.65rem',
+                      border: startMonths != null ? '1px solid #16a34a' : '1px solid #e2e8f0',
+                      borderRadius: '3px',
+                      background: startMonths != null ? '#dcfce7' : 'transparent',
+                      color: startMonths != null ? '#15803d' : '#64748b',
+                      cursor: 'pointer', width: '70px',
+                    }}
+                    title="Click to adjust start date"
+                  >
+                    {Array.from({ length: 36 }, (_, i) => i).map(months => {
+                      const startDate = addMonths(startOfMonth(new Date()), months);
+                      return <option key={months} value={months}>{format(startDate, 'MMM yy')}</option>;
+                    })}
+                  </select>
+                )
               ) : '-'}
             </td>
             <td style={{ ...cellStyle, textAlign: 'center' }}>
               {backlog > 0 ? (
-                <select
-                  value={endMonths ?? (startOffset + remainingMonths - 1)}
-                  disabled={datesLocked}
-                  onChange={(e) => {
-                    if (datesLocked) return;
-                    const newEndMonths = parseInt(e.target.value);
-                    setEndMonths(newEndMonths);
-                    save({ user_adjusted_end_months: newEndMonths });
-                  }}
-                  style={{
-                    padding: '0.15rem 0.25rem',
-                    fontSize: '0.65rem',
-                    border: datesLocked ? '1px solid #e5e7eb' : endMonths != null ? '1px solid #16a34a' : '1px solid #e2e8f0',
-                    borderRadius: '3px',
-                    background: datesLocked ? '#f3f4f6' : endMonths != null ? '#dcfce7' : 'transparent',
-                    color: datesLocked ? '#6b7280' : endMonths != null ? '#15803d' : '#64748b',
-                    cursor: datesLocked ? 'not-allowed' : 'pointer',
-                    width: '70px',
-                  }}
-                  title={datesLocked
-                    ? `Dates are controlled by the ${schedulingMode === 'cost_type' ? 'Cost Type' : 'Phase'} schedule. Switch to Summary mode on the Schedule tab to edit directly.`
-                    : 'Click to adjust end date'}
-                >
-                  {Array.from({ length: 36 }, (_, i) => i + 1).filter(m => m > startOffset).map(months => {
-                    const endDate = addMonths(startOfMonth(new Date()), months);
-                    return <option key={months} value={months}>{format(endDate, 'MMM yy')}</option>;
-                  })}
-                </select>
+                datesLocked ? (
+                  <span style={{ fontSize: '0.65rem', color: '#6b7280', background: '#f3f4f6', padding: '0.15rem 0.35rem', borderRadius: '3px', border: '1px solid #e5e7eb', display: 'inline-block' }}
+                    title={`Derived from ${schedulingMode === 'cost_type' ? 'Cost Type' : 'Phase'} schedule`}>
+                    {format(addMonths(startOfMonth(new Date()), costTypeRevenue?.effectiveEndOff ?? (startOffset + remainingMonths - 1)), 'MMM yy')}
+                  </span>
+                ) : (
+                  <select
+                    value={endMonths ?? (startOffset + remainingMonths - 1)}
+                    onChange={(e) => {
+                      const newEndMonths = parseInt(e.target.value);
+                      setEndMonths(newEndMonths);
+                      save({ user_adjusted_end_months: newEndMonths });
+                    }}
+                    style={{
+                      padding: '0.15rem 0.25rem', fontSize: '0.65rem',
+                      border: endMonths != null ? '1px solid #16a34a' : '1px solid #e2e8f0',
+                      borderRadius: '3px',
+                      background: endMonths != null ? '#dcfce7' : 'transparent',
+                      color: endMonths != null ? '#15803d' : '#64748b',
+                      cursor: 'pointer', width: '70px',
+                    }}
+                    title="Click to adjust end date"
+                  >
+                    {Array.from({ length: 36 }, (_, i) => i + 1).filter(m => m > startOffset).map(months => {
+                      const endDate = addMonths(startOfMonth(new Date()), months);
+                      return <option key={months} value={months}>{format(endDate, 'MMM yy')}</option>;
+                    })}
+                  </select>
+                )
               ) : '-'}
             </td>
             <td style={{ ...cellStyle, textAlign: 'center' }}
@@ -351,7 +486,8 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
               ) : '-'}
             </td>
             {columns.map(col => {
-              const value = projection.monthlyRevenue.get(col.key) || 0;
+              const revenueMap = costTypeRevenue?.monthlyRevenue ?? projection.monthlyRevenue;
+              const value = revenueMap.get(col.key) || 0;
               return (
                 <td
                   key={col.key}

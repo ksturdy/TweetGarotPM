@@ -114,6 +114,7 @@ import ProjectPhotos from './pages/projects/ProjectPhotos';
 import PreJobChecklist from './pages/projects/PreJobChecklist';
 import DrawingDetail from './pages/projects/DrawingDetail';
 import ProjectFinancials from './pages/projects/ProjectFinancials';
+import ProjectCashFlow from './pages/projects/ProjectCashFlow';
 import CostDrillIn from './pages/projects/CostDrillIn';
 import ProjectPerformance from './pages/projects/ProjectPerformance';
 import ProjectedRevenue from './pages/projects/ProjectedRevenue';
@@ -581,6 +582,7 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/weekly-goals" element={<ProjectWeeklyGoals />} />
                 <Route path="/projects/:id/financials" element={<ProjectFinancials />} />
                 <Route path="/projects/:id/financials/cost-detail" element={<CostDrillIn />} />
+                <Route path="/projects/:id/cash-flow" element={<ProjectCashFlow />} />
                 <Route path="/projects/:id/performance" element={<ProjectPerformance />} />
                 <Route path="/projects/:id/specifications" element={<ProjectSpecifications />} />
                 <Route path="/projects/:id/specifications/:specId" element={<SpecificationDetail />} />

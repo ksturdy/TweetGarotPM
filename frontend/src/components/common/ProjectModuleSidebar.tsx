@@ -64,6 +64,7 @@ const MODULE_GROUPS: ModuleGroup[] = [
     icon: <AccountBalanceIcon />,
     modules: [
       { path: 'financials', label: 'Financials' },
+      { path: 'cash-flow', label: 'Cash Flow' },
       { path: 'cost-model', label: 'Cost Model' },
       { path: 'stratus', label: 'Stratus' },
     ],

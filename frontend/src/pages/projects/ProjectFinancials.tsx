@@ -192,6 +192,7 @@ const ContourIcon: React.FC<{ contour: ContourType }> = ({ contour }) => (
 const HPP = 173;
 const fmtHC = (hrs: number) => hrs < 0.05 ? '-' : hrs.toFixed(1);
 const fmtK = (v: number) => v < 500 ? '-' : v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` : `$${(v / 1_000).toFixed(0)}K`;
+const fmtCashK = (v: number): string => { const a = Math.abs(v); if (a < 500) return '-'; const s = a >= 1_000_000 ? `$${(a / 1_000_000).toFixed(1)}M` : `$${(a / 1_000).toFixed(0)}K`; return v < 0 ? `(${s})` : s; };
 const TRADE_META = [
   { key: 'pf'    as const, label: 'Pipefitter (PF)', color: '#3b82f6' },
   { key: 'sm'    as const, label: 'Sheet Metal (SM)', color: '#10b981' },
@@ -510,6 +511,7 @@ const ProjectFinancials: React.FC = () => {
     }
     return { monthlyHours, monthlyCosts, columns, contour: projectContour, tradeHours, totalRem, pctComplete, prevWeekCost, monthlySegHC };
   }, [costSummary, c, project, segmentsData]);
+
 
   const captureSnapshotMutation = useMutation({
     mutationFn: () => projectSnapshotsApi.create(Number(projectId)),
@@ -872,7 +874,7 @@ const ProjectFinancials: React.FC = () => {
           </div>
 
           {/* ===== PROJECTED REVENUE STRIP (synced with /projects/projected-revenue) ===== */}
-          <ContractProjectionStrip contract={c} scrollRef={projRevScrollRef} onScroll={syncFromProjRev} schedulingMode={project?.scheduling_mode} />
+          <ContractProjectionStrip contract={c} scrollRef={projRevScrollRef} onScroll={syncFromProjRev} schedulingMode={project?.scheduling_mode} segments={segmentsData?.segments} costSummary={costSummary} />
 
           {/* ===== LABOR FORECAST (expandable) ===== */}
           {laborForecastData && (
