@@ -1070,7 +1070,7 @@ const ProjectHealthReport: React.FC = () => {
                 { label: 'Proj Hours', data: laborHoursChartData.projHrs, backgroundColor: '#10b981cc', borderColor: '#10b981', borderWidth: 1, borderRadius: 2 },
               ]}}
               options={{ maintainAspectRatio: false, responsive: true,
-                plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 }, padding: 8 } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y).toLocaleString()}` } } },
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 }, padding: 8 } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y ?? 0).toLocaleString()}` } } },
                 scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#64748b' } }, y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 10 }, color: '#64748b', callback: v => Math.round(v as number).toLocaleString() } } }
               }}
             />
