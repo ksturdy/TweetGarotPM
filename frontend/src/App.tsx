@@ -153,6 +153,14 @@ import ProjectionsReport from './pages/reports/ProjectionsReport';
 import Rolling12Report from './pages/reports/Rolling12Report';
 import HistoricalRevenueReport from './pages/reports/HistoricalRevenueReport';
 import PhaseReport from './pages/reports/PhaseReport';
+import ProjectHealthReport from './pages/projects/reports/ProjectHealthReport';
+import ProjectLaborForecastReport from './pages/projects/reports/ProjectLaborForecastReport';
+import ProjectCashFlowReport from './pages/projects/reports/ProjectCashFlowReport';
+import ProjectGainFadeReport from './pages/projects/reports/ProjectGainFadeReport';
+import ProjectIssuesLogReport from './pages/projects/reports/ProjectIssuesLogReport';
+import ProjectChangeOrderLogReport from './pages/projects/reports/ProjectChangeOrderLogReport';
+import ProjectRFILogReport from './pages/projects/reports/ProjectRFILogReport';
+import ProjectSubmittalLogReport from './pages/projects/reports/ProjectSubmittalLogReport';
 import TenantSettings from './pages/TenantSettings';
 import DesignList from './pages/design/DesignList';
 import PlumbingDesignViewer from './pages/design/PlumbingDesign';
@@ -590,6 +598,15 @@ const App: React.FC = () => {
                 <Route path="/projects/:id/drawings/:drawingId" element={<DrawingDetail />} />
                 <Route path="/projects/:id/cost-model" element={<ProjectCostModel />} />
                 <Route path="/projects/:projectId/photos" element={<ProjectPhotos />} />
+                <Route path="/projects/:projectId/reports" element={<Navigate to="health" replace />} />
+                <Route path="/projects/:projectId/reports/health" element={<ProjectHealthReport />} />
+                <Route path="/projects/:projectId/reports/labor-forecast" element={<ProjectLaborForecastReport />} />
+                <Route path="/projects/:projectId/reports/cash-flow" element={<ProjectCashFlowReport />} />
+                <Route path="/projects/:projectId/reports/gain-fade" element={<ProjectGainFadeReport />} />
+                <Route path="/projects/:projectId/reports/issues-log" element={<ProjectIssuesLogReport />} />
+                <Route path="/projects/:projectId/reports/change-orders" element={<ProjectChangeOrderLogReport />} />
+                <Route path="/projects/:projectId/reports/rfis" element={<ProjectRFILogReport />} />
+                <Route path="/projects/:projectId/reports/submittals" element={<ProjectSubmittalLogReport />} />
               </Routes>
             </Layout>
               </ForemanRoute>

@@ -5,6 +5,7 @@ import ConstructionIcon from '@mui/icons-material/Construction';
 import DescriptionIcon from '@mui/icons-material/Description';
 import DateRangeIcon from '@mui/icons-material/DateRange';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -67,6 +68,20 @@ const MODULE_GROUPS: ModuleGroup[] = [
       { path: 'cash-flow', label: 'Cash Flow' },
       { path: 'cost-model', label: 'Cost Model' },
       { path: 'stratus', label: 'Stratus' },
+    ],
+  },
+  {
+    label: 'Reports',
+    icon: <AssessmentIcon />,
+    modules: [
+      { path: 'reports/health', label: 'Project Health' },
+      { path: 'reports/labor-forecast', label: 'Labor Forecast' },
+      { path: 'reports/cash-flow', label: 'Cash Flow' },
+      { path: 'reports/gain-fade', label: 'Gain / Fade' },
+      { path: 'reports/issues-log', label: 'Issues Log' },
+      { path: 'reports/change-orders', label: 'Change Order Log' },
+      { path: 'reports/rfis', label: 'RFI Log' },
+      { path: 'reports/submittals', label: 'Submittal Log' },
     ],
   },
 ];
