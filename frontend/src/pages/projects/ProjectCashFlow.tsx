@@ -324,19 +324,31 @@ const ProjectCashFlow: React.FC = () => {
       if (Object.values(yrNL).some(v => (v ?? 0) > 0)) monthlyNonLabor.set(col.key, yrNL);
     });
 
-    // ── Net and cumulative, seeded from JTD net cash flow ─────────
-    // Seed from billed − paid (not received − paid) so the ending cumulative
-    // ties to projected gross margin regardless of outstanding receivables.
-    const jtdCashFlow = num(c.billed_amount) - num(c.actual_cost);
+    // ── Net and cumulative, seeded from actual cash position ──────
+    // Seed = received − paid (actual cash in bank).
+    // Open receivables are added as a near-term inflow so the ending
+    // cumulative converges to the projected gross margin.
+    const jtdCashFlow = num(c.cash_flow);   // received − paid
+    const openReceivables = num(c.open_receivables);
+    // Spread open receivables evenly over current + next month
+    const monthlyReceivables = new Map<string, number>();
+    if (openReceivables > 0) {
+      const mk0 = format(now, 'yyyy-MM');
+      const mk1 = format(addMonths(now, 1), 'yyyy-MM');
+      monthlyReceivables.set(mk0, openReceivables / 2);
+      monthlyReceivables.set(mk1, openReceivables / 2);
+    }
+
     const netCashFlow = new Map<string, number>();
     const cumulativeCashFlow = new Map<string, number>();
     let cumul = jtdCashFlow;
     columns.forEach(col => {
-      const rev     = monthlyRevenue.get(col.key) ?? 0;
-      const labor   = monthlyLaborCost.get(col.key) ?? 0;
-      const nl      = monthlyNonLabor.get(col.key) ?? {};
-      const nlTotal = NON_LABOR_CATS.reduce((s, cat) => s + (nl[cat.key] ?? 0), 0);
-      const net     = rev - labor - nlTotal;
+      const rev      = monthlyRevenue.get(col.key) ?? 0;
+      const labor    = monthlyLaborCost.get(col.key) ?? 0;
+      const nl       = monthlyNonLabor.get(col.key) ?? {};
+      const nlTotal  = NON_LABOR_CATS.reduce((s, cat) => s + (nl[cat.key] ?? 0), 0);
+      const recvbl   = monthlyReceivables.get(col.key) ?? 0;
+      const net      = rev + recvbl - labor - nlTotal;
       netCashFlow.set(col.key, net);
       cumul += net;
       cumulativeCashFlow.set(col.key, cumul);
@@ -346,8 +358,10 @@ const ProjectCashFlow: React.FC = () => {
       monthlyRevenue,
       monthlyLaborCost,
       monthlyNonLabor,
+      monthlyReceivables,
       remainingLabor: Math.max(0, lt.projected_cost - lt.jtd_cost),
       remainingNonLabor,
+      openReceivables,
       netCashFlow,
       cumulativeCashFlow,
       jtdCashFlow,
@@ -367,7 +381,9 @@ const ProjectCashFlow: React.FC = () => {
 
     const sortedKeys = Array.from(keySet).sort();
     const labels  = sortedKeys.map(k => format(parseISO(k + '-01'), 'MMM yy'));
-    const billings = sortedKeys.map(k => cashFlowData.monthlyRevenue.get(k) ?? 0);
+    const billings = sortedKeys.map(k =>
+      (cashFlowData.monthlyRevenue.get(k) ?? 0) + (cashFlowData.monthlyReceivables.get(k) ?? 0)
+    );
     const costs    = sortedKeys.map(k => {
       const labor = cashFlowData.monthlyLaborCost.get(k) ?? 0;
       const nl    = cashFlowData.monthlyNonLabor.get(k) ?? {};
@@ -610,10 +626,17 @@ const ProjectCashFlow: React.FC = () => {
               <div style={{ padding: '0.5rem 0.75rem', borderBottom: '2px solid #e2e8f0', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase' }}>Projected Cash Flow</span>
                 <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                  Cumulative starts from JTD billed margin:{' '}
+                  Cumulative starts from JTD net cash flow:{' '}
                   <strong style={{ color: cashFlowData.jtdCashFlow >= 0 ? '#10b981' : '#ef4444' }}>
                     {fmt(cashFlowData.jtdCashFlow)}
                   </strong>
+                  {cashFlowData.openReceivables > 0 && (
+                    <span style={{ marginLeft: '0.75rem', color: '#64748b' }}>
+                      + open receivables:{' '}
+                      <strong style={{ color: '#2563eb' }}>{fmt(cashFlowData.openReceivables)}</strong>
+                      {' '}collected over 2 months
+                    </span>
+                  )}
                 </span>
                 <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: 'auto' }}>
                   Labor: <strong style={{ color: '#2563eb' }}>
@@ -644,6 +667,16 @@ const ProjectCashFlow: React.FC = () => {
                       return <td key={col.key} style={{ ...tdS, color: v > 500 ? '#10b981' : '#cbd5e1', background: col.isYear ? '#fafafa' : undefined }}>{fmtCashK(v)}</td>;
                     })}
                   </tr>
+                  {/* Open Receivables */}
+                  {cashFlowData.openReceivables > 0 && (
+                    <tr>
+                      <td style={{ ...tdS, textAlign: 'left', fontWeight: 600, color: '#2563eb', position: 'sticky', left: 0, backgroundColor: 'white', zIndex: 1 }}>Open Receivables</td>
+                      {columns.map(col => {
+                        const v = cashFlowData.monthlyReceivables.get(col.key) ?? 0;
+                        return <td key={col.key} style={{ ...tdS, color: v > 500 ? '#2563eb' : '#cbd5e1', background: col.isYear ? '#fafafa' : undefined }}>{fmtCashK(v)}</td>;
+                      })}
+                    </tr>
+                  )}
                   {/* Labor */}
                   {cashFlowData.remainingLabor > 0 && (
                     <tr>
@@ -677,7 +710,7 @@ const ProjectCashFlow: React.FC = () => {
                     <td style={{ ...tfS, textAlign: 'left', color: '#2563eb', position: 'sticky', left: 0, backgroundColor: '#eff6ff', zIndex: 1 }}>
                       Cumulative Cash Flow
                       <span style={{ fontWeight: 400, fontSize: '0.65rem', color: '#94a3b8', marginLeft: '0.4rem' }}>
-                        (JTD billed margin: {fmt(cashFlowData.jtdCashFlow)})
+                        (starts: {fmt(cashFlowData.jtdCashFlow)})
                       </span>
                     </td>
                     {columns.map(col => {
