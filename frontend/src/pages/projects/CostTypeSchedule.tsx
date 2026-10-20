@@ -229,6 +229,17 @@ const SEG_LABEL: Record<string, string> = Object.fromEntries(SEGMENT_DEFINITIONS
 
 // ─── Provisional codes modal (Cost Type scheduling mode) ──────────────────────
 
+const fmtNumInput = (raw: string): string => {
+  if (!raw || raw === '-') return raw;
+  const neg = raw.startsWith('-');
+  const body = raw.slice(neg ? 1 : 0);
+  const [intPart, ...rest] = body.split('.');
+  const digits = intPart.replace(/\D/g, '');
+  const formatted = digits ? Number(digits).toLocaleString() : '';
+  const result = rest.length > 0 ? `${formatted}.${rest.join('')}` : formatted;
+  return neg ? (result ? `-${result}` : '-') : result;
+};
+
 const CostTypeProvisionalsModal: React.FC<{
   projectId: number;
   defaultJob: string;
@@ -254,12 +265,15 @@ const CostTypeProvisionalsModal: React.FC<{
     job: defaultJob, phase: '', cost_type: 1,
     est_hours: 0, est_cost: 0, phase_description: '', provisional_notes: '',
   });
+  const [estHoursStr, setEstHoursStr] = useState('');
+  const [estCostStr, setEstCostStr] = useState('');
 
   const addOne = useMutation({
     mutationFn: (data: ProvisionalPhaseCodeInput) => phaseScheduleApi.createProvisional(projectId, data),
     onSuccess: () => {
       invalidate();
       setForm(f => ({ ...f, phase: '', phase_description: '', est_hours: 0, est_cost: 0, provisional_notes: '' }));
+      setEstHoursStr(''); setEstCostStr('');
       toast.success('Provisional code added');
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to add'),
@@ -273,11 +287,17 @@ const CostTypeProvisionalsModal: React.FC<{
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<ProvisionalPhaseCodeInput>>({});
+  const [editHoursStr, setEditHoursStr] = useState('');
+  const [editCostStr, setEditCostStr] = useState('');
   const startEdit = (r: ProvisionalPhaseCode) => {
     setEditingId(r.id);
-    setEditDraft({ phase: r.phase, cost_type: r.cost_type, job: r.job, phase_description: r.phase_description || '', est_hours: Number(r.est_hours) || 0, est_cost: Number(r.est_cost) || 0 });
+    const hours = Number(r.est_hours) || 0;
+    const cost = Number(r.est_cost) || 0;
+    setEditDraft({ phase: r.phase, cost_type: r.cost_type, job: r.job, phase_description: r.phase_description || '', est_hours: hours, est_cost: cost });
+    setEditHoursStr(hours !== 0 ? fmtNumInput(String(hours)) : '');
+    setEditCostStr(cost !== 0 ? fmtNumInput(String(cost)) : '');
   };
-  const cancelEdit = () => { setEditingId(null); setEditDraft({}); };
+  const cancelEdit = () => { setEditingId(null); setEditDraft({}); setEditHoursStr(''); setEditCostStr(''); };
 
   const updateOne = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<ProvisionalPhaseCodeInput> }) =>
@@ -378,7 +398,7 @@ const CostTypeProvisionalsModal: React.FC<{
               <div>
                 <label style={labelStyle}>Phase Code *</label>
                 <input style={inputStyle} value={form.phase}
-                  onChange={e => setForm({ ...form, phase: e.target.value })}
+                  onChange={e => { if (!e.target.value.startsWith('-')) setForm({ ...form, phase: e.target.value }); }}
                   placeholder="e.g. 35-001 or 350010" />
                 {form.phase.trim() && (
                   <div style={{ marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.72rem' }}>
@@ -409,16 +429,16 @@ const CostTypeProvisionalsModal: React.FC<{
               </div>
               <div>
                 <label style={labelStyle}>Est Hours</label>
-                <input style={inputStyle} type="text" inputMode="numeric"
-                  value={(form.est_hours ?? 0) > 0 ? (form.est_hours ?? 0).toLocaleString() : ''}
-                  onChange={e => setForm({ ...form, est_hours: parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0 })}
+                <input style={inputStyle} type="text" inputMode="decimal"
+                  value={estHoursStr}
+                  onChange={e => { const f = fmtNumInput(e.target.value.replace(/,/g, '')); setEstHoursStr(f); const v = parseFloat(f.replace(/,/g, '')); if (!isNaN(v)) setForm({ ...form, est_hours: v }); }}
                   placeholder="0" />
               </div>
               <div>
                 <label style={labelStyle}>Est Cost</label>
-                <input style={inputStyle} type="text" inputMode="numeric"
-                  value={(form.est_cost ?? 0) > 0 ? (form.est_cost ?? 0).toLocaleString() : ''}
-                  onChange={e => setForm({ ...form, est_cost: parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0 })}
+                <input style={inputStyle} type="text" inputMode="decimal"
+                  value={estCostStr}
+                  onChange={e => { const f = fmtNumInput(e.target.value.replace(/,/g, '')); setEstCostStr(f); const v = parseFloat(f.replace(/,/g, '')); if (!isNaN(v)) setForm({ ...form, est_cost: v }); }}
                   placeholder="0" />
               </div>
               <div style={{ gridColumn: 'span 2' }}>
@@ -541,16 +561,16 @@ const CostTypeProvisionalsModal: React.FC<{
                           </td>
                           <td style={{ padding: '0.3rem 0.6rem', textAlign: 'right' }}>
                             {isEditing
-                              ? <input type="text" inputMode="numeric" style={{ ...cellInput, textAlign: 'right' }}
-                                  value={(editDraft.est_hours ?? 0) > 0 ? (editDraft.est_hours ?? 0).toLocaleString() : ''}
-                                  onChange={e => setEditDraft(d => ({ ...d, est_hours: parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0 }))} />
+                              ? <input type="text" inputMode="decimal" style={{ ...cellInput, textAlign: 'right' }}
+                                  value={editHoursStr}
+                                  onChange={e => { const f = fmtNumInput(e.target.value.replace(/,/g, '')); setEditHoursStr(f); const v = parseFloat(f.replace(/,/g, '')); if (!isNaN(v)) setEditDraft(d => ({ ...d, est_hours: v })); }} />
                               : Number(r.est_hours).toLocaleString()}
                           </td>
                           <td style={{ padding: '0.3rem 0.6rem', textAlign: 'right' }}>
                             {isEditing
-                              ? <input type="text" inputMode="numeric" style={{ ...cellInput, textAlign: 'right' }}
-                                  value={(editDraft.est_cost ?? 0) > 0 ? (editDraft.est_cost ?? 0).toLocaleString() : ''}
-                                  onChange={e => setEditDraft(d => ({ ...d, est_cost: parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0 }))} />
+                              ? <input type="text" inputMode="decimal" style={{ ...cellInput, textAlign: 'right' }}
+                                  value={editCostStr}
+                                  onChange={e => { const f = fmtNumInput(e.target.value.replace(/,/g, '')); setEditCostStr(f); const v = parseFloat(f.replace(/,/g, '')); if (!isNaN(v)) setEditDraft(d => ({ ...d, est_cost: v })); }} />
                               : `$${Number(r.est_cost).toLocaleString()}`}
                           </td>
                           <td style={{ padding: '0.3rem 0.6rem' }}>

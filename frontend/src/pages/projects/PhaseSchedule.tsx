@@ -857,6 +857,8 @@ const ProvisionalCodesModal: React.FC<{
     est_hours: 0, est_cost: 0,
     phase_description: '', provisional_notes: '',
   });
+  const [estHoursStr, setEstHoursStr] = useState('');
+  const [estCostStr, setEstCostStr] = useState('');
 
   const addOne = useMutation({
     mutationFn: async (data: ProvisionalPhaseCodeInput) => {
@@ -867,6 +869,7 @@ const ProvisionalCodesModal: React.FC<{
     onSuccess: ({ scheduled }) => {
       invalidate();
       setForm(f => ({ ...f, phase: '', phase_description: '', est_hours: 0, est_cost: 0, provisional_notes: '' }));
+      setEstHoursStr(''); setEstCostStr('');
       toast.success(scheduled > 0 ? 'Provisional code added and scheduled' : 'Provisional code added');
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to add'),
@@ -880,20 +883,26 @@ const ProvisionalCodesModal: React.FC<{
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<ProvisionalPhaseCodeInput>>({});
+  const [modalEditHoursStr, setModalEditHoursStr] = useState('');
+  const [modalEditCostStr, setModalEditCostStr] = useState('');
 
   const startEdit = (r: ProvisionalPhaseCode) => {
     setEditingId(r.id);
+    const hours = Number(r.est_hours) || 0;
+    const cost = Number(r.est_cost) || 0;
     setEditDraft({
       phase: r.phase,
       cost_type: r.cost_type,
       job: r.job,
       phase_description: r.phase_description || '',
-      est_hours: Number(r.est_hours) || 0,
-      est_cost: Number(r.est_cost) || 0,
+      est_hours: hours,
+      est_cost: cost,
     });
+    setModalEditHoursStr(hours !== 0 ? String(hours) : '');
+    setModalEditCostStr(cost !== 0 ? String(cost) : '');
   };
 
-  const cancelEdit = () => { setEditingId(null); setEditDraft({}); };
+  const cancelEdit = () => { setEditingId(null); setEditDraft({}); setModalEditHoursStr(''); setModalEditCostStr(''); };
 
   const updateOne = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<ProvisionalPhaseCodeInput> }) =>
@@ -1014,13 +1023,21 @@ const ProvisionalCodesModal: React.FC<{
               </div>
               <div>
                 <label style={labelStyle}>Est Hours</label>
-                <input style={inputStyle} type="number" min={0} value={form.est_hours ?? 0}
-                  onChange={e => setForm({ ...form, est_hours: parseFloat(e.target.value) || 0 })} />
+                <input style={inputStyle} type="text" inputMode="decimal" placeholder="0" value={estHoursStr}
+                  onChange={e => {
+                    setEstHoursStr(e.target.value);
+                    const v = parseFloat(e.target.value);
+                    if (!isNaN(v)) setForm({ ...form, est_hours: v });
+                  }} />
               </div>
               <div>
                 <label style={labelStyle}>Est Cost</label>
-                <input style={inputStyle} type="number" min={0} value={form.est_cost ?? 0}
-                  onChange={e => setForm({ ...form, est_cost: parseFloat(e.target.value) || 0 })} />
+                <input style={inputStyle} type="text" inputMode="decimal" placeholder="0" value={estCostStr}
+                  onChange={e => {
+                    setEstCostStr(e.target.value);
+                    const v = parseFloat(e.target.value);
+                    if (!isNaN(v)) setForm({ ...form, est_cost: v });
+                  }} />
               </div>
               <div>
                 <label style={labelStyle}>Notes</label>
@@ -1156,12 +1173,12 @@ const ProvisionalCodesModal: React.FC<{
                           </td>
                           <td style={{ padding: '0.3rem 0.6rem', textAlign: 'right' }}>
                             {isEditing
-                              ? <input type="number" min={0} style={{ ...cellInput, textAlign: 'right' }} value={editDraft.est_hours ?? 0} onChange={e => setEditDraft(d => ({ ...d, est_hours: parseFloat(e.target.value) || 0 }))} />
+                              ? <input type="text" inputMode="decimal" style={{ ...cellInput, textAlign: 'right' }} value={modalEditHoursStr} onChange={e => { setModalEditHoursStr(e.target.value); const v = parseFloat(e.target.value); if (!isNaN(v)) setEditDraft(d => ({ ...d, est_hours: v })); }} />
                               : Number(r.est_hours).toLocaleString()}
                           </td>
                           <td style={{ padding: '0.3rem 0.6rem', textAlign: 'right' }}>
                             {isEditing
-                              ? <input type="number" min={0} style={{ ...cellInput, textAlign: 'right' }} value={editDraft.est_cost ?? 0} onChange={e => setEditDraft(d => ({ ...d, est_cost: parseFloat(e.target.value) || 0 }))} />
+                              ? <input type="text" inputMode="decimal" style={{ ...cellInput, textAlign: 'right' }} value={modalEditCostStr} onChange={e => { setModalEditCostStr(e.target.value); const v = parseFloat(e.target.value); if (!isNaN(v)) setEditDraft(d => ({ ...d, est_cost: v })); }} />
                               : `$${Number(r.est_cost).toLocaleString()}`}
                           </td>
                           <td style={{ padding: '0.3rem 0.6rem' }}>
@@ -1397,7 +1414,7 @@ const EditItemPanel: React.FC<{
     () => provisionalCodes.filter(pc => item.phase_code_ids?.includes(pc.id)),
     [provisionalCodes, item.phase_code_ids]
   );
-  const [provDrafts, setProvDrafts] = useState<Record<number, { est_hours: number; est_cost: number; phase: string; phase_description: string }>>(
+  const [provDrafts, setProvDrafts] = useState<Record<number, { est_hours: number; est_cost: number; phase: string; phase_description: string; _hoursStr?: string; _costStr?: string }>>(
     () => Object.fromEntries(
       matchedProvisional.map(pc => [pc.id, {
         est_hours: Number(pc.est_hours) || 0,
@@ -1552,10 +1569,11 @@ const EditItemPanel: React.FC<{
               Manually-entered code — edit the estimate below. Reconciled to Vista when real data lands.
             </div>
             {matchedProvisional.map(pc => {
-              const draft = provDrafts[pc.id] || { est_hours: Number(pc.est_hours) || 0, est_cost: Number(pc.est_cost) || 0, phase: pc.phase, phase_description: pc.phase_description || '' };
+              const draft = provDrafts[pc.id] || { est_hours: Number(pc.est_hours) || 0, est_cost: Number(pc.est_cost) || 0, phase: pc.phase, phase_description: pc.phase_description || '', _hoursStr: undefined as string | undefined, _costStr: undefined as string | undefined };
               const setDraft = (patch: Partial<typeof draft>) =>
                 setProvDrafts(prev => ({ ...prev, [pc.id]: { ...draft, ...patch } }));
-              const costDisplay = draft.est_cost ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(draft.est_cost) : '';
+              const hoursDisplay = draft._hoursStr !== undefined ? draft._hoursStr : (draft.est_hours !== 0 ? String(draft.est_hours) : '');
+              const costDisplay = draft._costStr !== undefined ? draft._costStr : (draft.est_cost ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(draft.est_cost) : '');
               return (
                 <div key={pc.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
                   <div style={{ gridColumn: 'span 2' }}>
@@ -1572,8 +1590,8 @@ const EditItemPanel: React.FC<{
                   </div>
                   <div>
                     <label style={{ fontSize: '0.65rem', color: '#854d0e', display: 'block', marginBottom: '0.15rem' }}>Est Hours</label>
-                    <input type="number" min={0} value={draft.est_hours || ''}
-                      onChange={e => setDraft({ est_hours: parseFloat(e.target.value) || 0 })}
+                    <input type="text" inputMode="decimal" value={hoursDisplay}
+                      onChange={e => { setDraft({ _hoursStr: e.target.value, est_hours: isNaN(parseFloat(e.target.value)) ? draft.est_hours : parseFloat(e.target.value) }); }}
                       placeholder="0"
                       style={{ width: '100%', padding: '0.35rem 0.5rem', border: '1px solid #fde68a', borderRadius: '4px', fontSize: '0.8rem', boxSizing: 'border-box', backgroundColor: 'white', textAlign: 'right' }} />
                   </div>
@@ -1582,12 +1600,7 @@ const EditItemPanel: React.FC<{
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: '#854d0e', fontSize: '0.8rem', pointerEvents: 'none' }}>$</span>
                       <input type="text" inputMode="decimal" value={costDisplay}
-                        onChange={e => {
-                          const cleaned = e.target.value.replace(/[^0-9.]/g, '');
-                          const parts = cleaned.split('.');
-                          const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned;
-                          setDraft({ est_cost: parseFloat(normalized) || 0 });
-                        }}
+                        onChange={e => { const v = parseFloat(e.target.value); setDraft({ _costStr: e.target.value, est_cost: isNaN(v) ? draft.est_cost : v }); }}
                         placeholder="0"
                         style={{ width: '100%', padding: '0.35rem 0.5rem 0.35rem 1.1rem', border: '1px solid #fde68a', borderRadius: '4px', fontSize: '0.8rem', boxSizing: 'border-box', backgroundColor: 'white', textAlign: 'right' }} />
                     </div>
