@@ -577,15 +577,7 @@ const ProjectHealthReport: React.FC = () => {
             margin: { left: 40, right: 40 },
             styles: { fontSize: 7, cellPadding: 2.5, textColor: [30, 41, 59] },
             headStyles: { fillColor: [30, 42, 60], textColor: 255, fontStyle: 'bold', fontSize: 6.5 },
-            columnStyles: {
-              0: { halign: 'left',  cellWidth: 100 },
-              1: { halign: 'right', cellWidth: 60 },
-              2: { halign: 'right', cellWidth: 60 },
-              3: { halign: 'right', cellWidth: 55 },
-              4: { halign: 'right', cellWidth: 55 },
-              5: { halign: 'right', cellWidth: 55 },
-              6: { halign: 'right', cellWidth: 40 },
-            },
+            columnStyles: { 0: { halign: 'left' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } },
             didParseCell: (data: any) => {
               const row = segRows[data.row.index];
               if (row && (row[0] === 'LABOR' || row[0] === 'NON-LABOR') && data.section === 'body') {
@@ -997,54 +989,55 @@ const ProjectHealthReport: React.FC = () => {
       </section>
 
       {/* Hidden labor charts for PDF capture */}
+      {/* Hidden labor charts — identical markup to Labor Forecast report for consistent PDF capture */}
       {hasLaborCharts && (
-        <div ref={laborChartsRef} style={{ position: 'fixed', left: -9999, top: 0, width: 900, background: '#fff', display: 'flex', gap: 12, padding: 8 }}>
+        <div ref={laborChartsRef} style={{ position: 'fixed', left: -9999, top: 0, width: 1100, background: '#fff', display: 'flex', gap: '0.875rem', alignItems: 'flex-start', padding: 8 }}>
           {/* Shift Schedule */}
           <div style={{ flexShrink: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
-            <div style={{ padding: '0.4rem 0.75rem', background: '#eef2f7', borderBottom: '1px solid #e2e8f0', fontSize: '0.62rem', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Shift Schedule</div>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '0.2rem 0.75rem', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-              <span style={{ flex: 1, fontSize: '0.58rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Trade</span>
+            <div style={{ padding: '0.5rem 0.75rem', background: '#eef2f7', borderBottom: '1px solid #e2e8f0', fontSize: '0.68rem', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Shift Schedule</div>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.75rem', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+              <span style={{ flex: 1, fontSize: '0.6rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Trade</span>
               {SHIFT_DAY_LABELS.map((lbl, i) => (
-                <span key={i} style={{ width: 22, textAlign: 'center', fontSize: '0.58rem', fontWeight: 700, color: i >= 5 ? '#f59e0b' : '#64748b', flexShrink: 0 }}>{lbl}</span>
+                <span key={i} style={{ width: 24, textAlign: 'center', fontSize: '0.6rem', fontWeight: 700, color: i >= 5 ? '#f59e0b' : '#64748b', flexShrink: 0 }}>{lbl}</span>
               ))}
-              <span style={{ width: 34, textAlign: 'right', fontSize: '0.58rem', color: '#94a3b8', flexShrink: 0 }}>Wk</span>
+              <span style={{ width: 36, textAlign: 'right', fontSize: '0.6rem', color: '#94a3b8', flexShrink: 0 }}>Wk</span>
             </div>
             {SEGMENT_DEFINITIONS.filter(d => d.isLabor && activeKeys.includes(d.key)).map((def, ri) => {
               const shift = shiftSettings[def.key] ?? DEFAULT_SHIFT;
               return (
-                <div key={def.key} style={{ display: 'flex', alignItems: 'center', padding: '0.22rem 0.75rem', borderBottom: '1px solid #f1f5f9', background: ri % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.35rem', minWidth: 100 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: 2, background: LABOR_CHART_COLORS[def.key] ?? '#6b7280', flexShrink: 0, display: 'inline-block' }} />
-                    <span style={{ fontSize: '0.65rem', color: '#374151', whiteSpace: 'nowrap' }}>{def.label}</span>
+                <div key={def.key} style={{ display: 'flex', alignItems: 'center', padding: '0.28rem 0.75rem', borderBottom: '1px solid #f1f5f9', background: ri % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 110 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 2, background: LABOR_CHART_COLORS[def.key] ?? '#6b7280', flexShrink: 0, display: 'inline-block' }} />
+                    <span style={{ fontSize: '0.7rem', color: '#374151', whiteSpace: 'nowrap' }}>{def.label}</span>
                   </div>
                   {SHIFT_DAY_KEYS.map((day, di) => (
-                    <span key={day} style={{ width: 22, textAlign: 'center', fontSize: '0.65rem', flexShrink: 0, color: shift[day] === 0 ? '#cbd5e1' : di >= 5 ? '#d97706' : '#1e293b' }}>{shift[day]}</span>
+                    <span key={day} style={{ width: 24, textAlign: 'center', fontSize: '0.7rem', flexShrink: 0, color: shift[day] === 0 ? '#cbd5e1' : di >= 5 ? '#d97706' : '#1e293b' }}>{shift[day]}</span>
                   ))}
-                  <span style={{ width: 34, textAlign: 'right', fontSize: '0.65rem', fontWeight: 600, color: '#3b82f6', flexShrink: 0 }}>{weeklyHoursH(shift)}h</span>
+                  <span style={{ width: 36, textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#3b82f6', flexShrink: 0 }}>{weeklyHoursH(shift)}h</span>
                 </div>
               );
             })}
           </div>
           {/* Remaining Labor chart */}
           {laborDatasets.length > 0 && (
-            <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.75rem' }}>
-              <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#374151', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Remaining Labor Resources by Month</div>
-              <div style={{ height: 180, position: 'relative' }}>
+            <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Remaining Labor Resources by Month</div>
+              <div style={{ height: 200, position: 'relative' }}>
                 <Line
-                  data={{ labels: chartLabels, datasets: laborDatasets.map(ds => ({ label: ds.label, data: ds.data, borderColor: ds.color, backgroundColor: ds.color + '18', tension: 0.4, pointRadius: 0, borderWidth: 2, fill: false })) }}
-                  options={{ maintainAspectRatio: false, responsive: true, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: laborDatasets.length > 1, position: 'top', labels: { boxWidth: 12, boxHeight: 2, font: { size: 9 }, padding: 6 } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } }, scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 8 }, maxRotation: 45, color: '#64748b' } }, y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 8 }, color: '#64748b', stepSize: 1 } } } }}
+                  data={{ labels: chartLabels, datasets: laborDatasets.map(ds => ({ label: ds.label, data: ds.data, borderColor: ds.color, backgroundColor: ds.color + '18', tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2, fill: false })) }}
+                  options={{ maintainAspectRatio: false, responsive: true, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: laborDatasets.length > 1, position: 'top', labels: { boxWidth: 12, boxHeight: 2, font: { size: 10 }, padding: 8, usePointStyle: true, pointStyleWidth: 12 } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } }, scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } }, y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', stepSize: 1 } } } }}
                 />
               </div>
             </div>
           )}
           {/* Revenue chart */}
           {monthlyRevenue.some(v => v > 0) && (
-            <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.75rem' }}>
-              <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#374151', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Revenue by Month</div>
-              <div style={{ height: 180, position: 'relative' }}>
+            <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Revenue by Month</div>
+              <div style={{ height: 200, position: 'relative' }}>
                 <Bar
                   data={{ labels: chartLabels, datasets: [{ label: 'Revenue', data: monthlyRevenue, backgroundColor: '#10b981' + '70', borderColor: '#10b981', borderWidth: 1, borderRadius: 2 }] }}
-                  options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Revenue: ${fmtCompact(ctx.parsed.y)}` } } }, scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 8 }, maxRotation: 45, color: '#64748b' } }, y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 8 }, color: '#64748b', callback: (v) => fmtCompact(v as number) } } } }}
+                  options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Revenue: ${fmtCompact(ctx.parsed.y)}` } } }, scales: { x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } }, y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: (v) => fmtCompact(v as number) } } } }}
                 />
               </div>
             </div>
