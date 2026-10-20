@@ -107,9 +107,22 @@ const NON_LABOR_CATS = [
 
 type NonLaborKey = typeof NON_LABOR_CATS[number]['key'];
 
+const cfSettingsKey = (pid: string) => `cf-settings-${pid}`;
+const loadCfSetting = (pid: string, key: string, def: number): number => {
+  try { return JSON.parse(localStorage.getItem(cfSettingsKey(pid)) ?? '{}')[key] ?? def; } catch { return def; }
+};
+
 const ProjectCashFlow: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+
+  const [billingAdvanceMo, setBillingAdvanceMo] = React.useState(() => loadCfSetting(projectId ?? '', 'billingAdvanceMo', 0));
+  const [paymentTermsDays, setPaymentTermsDays] = React.useState(() => loadCfSetting(projectId ?? '', 'paymentTermsDays', 0));
+
+  const saveCfSetting = (patch: Record<string, number>) => {
+    const current = { billingAdvanceMo, paymentTermsDays };
+    localStorage.setItem(cfSettingsKey(projectId ?? ''), JSON.stringify({ ...current, ...patch }));
+  };
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -324,31 +337,62 @@ const ProjectCashFlow: React.FC = () => {
       if (Object.values(yrNL).some(v => (v ?? 0) > 0)) monthlyNonLabor.set(col.key, yrNL);
     });
 
+    // ── Billing & collection timing shifts ────────────────────────
+    // Billing advance: invoices go out N months before work is scheduled
+    // Payment terms: cash arrives M months after invoice
+    const billingShiftMo = -Math.round(billingAdvanceMo);         // negative = earlier
+    const collectionShiftMo = Math.round(paymentTermsDays / 30);  // positive = later
+
+    const shiftMonthly = (src: Map<string, number>, shift: number): Map<string, number> => {
+      if (shift === 0) return src;
+      const out = new Map<string, number>();
+      src.forEach((v, k) => {
+        if (!/^\d{4}-\d{2}$/.test(k)) return;
+        const mk = format(addMonths(parseISO(k + '-01'), shift), 'yyyy-MM');
+        out.set(mk, (out.get(mk) ?? 0) + v);
+      });
+      return out;
+    };
+
+    // monthlyRevenue = work schedule; billing = shifted earlier; collections = shifted later from billing
+    const monthlyBillings    = shiftMonthly(monthlyRevenue, billingShiftMo);
+    const monthlyCollections = shiftMonthly(monthlyBillings, collectionShiftMo);
+
+    // Add year rollups for billing and collection maps
+    columns.filter(col => col.isYear).forEach(col => {
+      let yrBill = 0, yrColl = 0;
+      for (let m = 0; m < 12; m++) {
+        const md = new Date(parseInt(col.key), m, 1);
+        if (md <= twelveOut) continue;
+        const mk = format(md, 'yyyy-MM');
+        yrBill += monthlyBillings.get(mk) ?? 0;
+        yrColl += monthlyCollections.get(mk) ?? 0;
+      }
+      if (yrBill > 0) monthlyBillings.set(col.key, yrBill);
+      if (yrColl > 0) monthlyCollections.set(col.key, yrColl);
+    });
+
     // ── Net and cumulative, seeded from actual cash position ──────
-    // Seed = received − paid (actual cash in bank).
-    // Open receivables are added as a near-term inflow so the ending
-    // cumulative converges to the projected gross margin.
     const jtdCashFlow = num(c.cash_flow);   // received − paid
     const openReceivables = num(c.open_receivables);
-    // Spread open receivables evenly over current + next month
+
+    // Open receivables: spread over current + next month
     const monthlyReceivables = new Map<string, number>();
     if (openReceivables > 0) {
-      const mk0 = format(now, 'yyyy-MM');
-      const mk1 = format(addMonths(now, 1), 'yyyy-MM');
-      monthlyReceivables.set(mk0, openReceivables / 2);
-      monthlyReceivables.set(mk1, openReceivables / 2);
+      monthlyReceivables.set(format(now, 'yyyy-MM'), openReceivables / 2);
+      monthlyReceivables.set(format(addMonths(now, 1), 'yyyy-MM'), openReceivables / 2);
     }
 
     const netCashFlow = new Map<string, number>();
     const cumulativeCashFlow = new Map<string, number>();
     let cumul = jtdCashFlow;
     columns.forEach(col => {
-      const rev      = monthlyRevenue.get(col.key) ?? 0;
-      const labor    = monthlyLaborCost.get(col.key) ?? 0;
-      const nl       = monthlyNonLabor.get(col.key) ?? {};
-      const nlTotal  = NON_LABOR_CATS.reduce((s, cat) => s + (nl[cat.key] ?? 0), 0);
-      const recvbl   = monthlyReceivables.get(col.key) ?? 0;
-      const net      = rev + recvbl - labor - nlTotal;
+      const coll    = monthlyCollections.get(col.key) ?? 0;   // cash in = collections, not billings
+      const labor   = monthlyLaborCost.get(col.key) ?? 0;
+      const nl      = monthlyNonLabor.get(col.key) ?? {};
+      const nlTotal = NON_LABOR_CATS.reduce((s, cat) => s + (nl[cat.key] ?? 0), 0);
+      const recvbl  = monthlyReceivables.get(col.key) ?? 0;
+      const net     = coll + recvbl - labor - nlTotal;
       netCashFlow.set(col.key, net);
       cumul += net;
       cumulativeCashFlow.set(col.key, cumul);
@@ -356,6 +400,8 @@ const ProjectCashFlow: React.FC = () => {
 
     return {
       monthlyRevenue,
+      monthlyBillings,
+      monthlyCollections,
       monthlyLaborCost,
       monthlyNonLabor,
       monthlyReceivables,
@@ -366,23 +412,26 @@ const ProjectCashFlow: React.FC = () => {
       cumulativeCashFlow,
       jtdCashFlow,
       schedulingMode,
+      billingAdvanceMo,
+      paymentTermsDays,
     };
-  }, [c, costSummary, project, segmentsData, columns]);
+  }, [c, costSummary, project, segmentsData, columns, billingAdvanceMo, paymentTermsDays]);
 
   const chartData = useMemo(() => {
     if (!cashFlowData) return null;
 
-    // Collect every individual monthly key (yyyy-MM) across all maps — covers full job duration
+    // Collect every individual monthly key across all maps — covers full job duration
     const keySet = new Set<string>();
     const isMonthKey = (k: string) => /^\d{4}-\d{2}$/.test(k);
-    cashFlowData.monthlyRevenue.forEach((_, k) => { if (isMonthKey(k)) keySet.add(k); });
+    cashFlowData.monthlyBillings.forEach((_, k) => { if (isMonthKey(k)) keySet.add(k); });
+    cashFlowData.monthlyCollections.forEach((_, k) => { if (isMonthKey(k)) keySet.add(k); });
     cashFlowData.monthlyLaborCost.forEach((_, k) => { if (isMonthKey(k)) keySet.add(k); });
     cashFlowData.monthlyNonLabor.forEach((_, k) => { if (isMonthKey(k)) keySet.add(k); });
 
     const sortedKeys = Array.from(keySet).sort();
     const labels  = sortedKeys.map(k => format(parseISO(k + '-01'), 'MMM yy'));
     const billings = sortedKeys.map(k =>
-      (cashFlowData.monthlyRevenue.get(k) ?? 0) + (cashFlowData.monthlyReceivables.get(k) ?? 0)
+      (cashFlowData.monthlyBillings.get(k) ?? 0) + (cashFlowData.monthlyReceivables.get(k) ?? 0)
     );
     const costs    = sortedKeys.map(k => {
       const labor = cashFlowData.monthlyLaborCost.get(k) ?? 0;
@@ -625,24 +674,42 @@ const ProjectCashFlow: React.FC = () => {
             <div className="card" style={{ padding: 0, overflow: 'auto' }}>
               <div style={{ padding: '0.5rem 0.75rem', borderBottom: '2px solid #e2e8f0', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase' }}>Projected Cash Flow</span>
-                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                  Cumulative starts from JTD net cash flow:{' '}
-                  <strong style={{ color: cashFlowData.jtdCashFlow >= 0 ? '#10b981' : '#ef4444' }}>
-                    {fmt(cashFlowData.jtdCashFlow)}
-                  </strong>
-                  {cashFlowData.openReceivables > 0 && (
-                    <span style={{ marginLeft: '0.75rem', color: '#64748b' }}>
-                      + open receivables:{' '}
-                      <strong style={{ color: '#2563eb' }}>{fmt(cashFlowData.openReceivables)}</strong>
-                      {' '}collected over 2 months
-                    </span>
-                  )}
-                </span>
+
+                {/* ── Billing lead ── */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', color: '#475569' }}>
+                  <span>Billing Lead:</span>
+                  <select
+                    value={billingAdvanceMo}
+                    onChange={e => { const v = Number(e.target.value); setBillingAdvanceMo(v); saveCfSetting({ billingAdvanceMo: v }); }}
+                    style={{ fontSize: '0.72rem', padding: '0.1rem 0.3rem', border: billingAdvanceMo > 0 ? '1px solid #16a34a' : '1px solid #e2e8f0', borderRadius: '3px', background: billingAdvanceMo > 0 ? '#dcfce7' : '#fff', color: billingAdvanceMo > 0 ? '#15803d' : '#334155', cursor: 'pointer' }}
+                    title="How far in advance you can bill before work is performed"
+                  >
+                    <option value={0}>None</option>
+                    <option value={1}>1 month</option>
+                    <option value={2}>2 months</option>
+                  </select>
+                </label>
+
+                {/* ── Payment terms ── */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', color: '#475569' }}>
+                  <span>Payment Terms:</span>
+                  <select
+                    value={paymentTermsDays}
+                    onChange={e => { const v = Number(e.target.value); setPaymentTermsDays(v); saveCfSetting({ paymentTermsDays: v }); }}
+                    style={{ fontSize: '0.72rem', padding: '0.1rem 0.3rem', border: paymentTermsDays > 0 ? '1px solid #16a34a' : '1px solid #e2e8f0', borderRadius: '3px', background: paymentTermsDays > 0 ? '#dcfce7' : '#fff', color: paymentTermsDays > 0 ? '#15803d' : '#334155', cursor: 'pointer' }}
+                    title="How long after billing you typically receive payment"
+                  >
+                    <option value={0}>Immediate</option>
+                    <option value={30}>Net 30</option>
+                    <option value={45}>Net 45</option>
+                    <option value={60}>Net 60</option>
+                    <option value={90}>Net 90</option>
+                  </select>
+                </label>
+
                 <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: 'auto' }}>
-                  Labor: <strong style={{ color: '#2563eb' }}>
-                    {cashFlowData.schedulingMode === 'cost_type' ? 'Cost Type windows' : 'Project window'}
-                  </strong>
-                  {' · '}Non-labor: <strong style={{ color: '#64748b' }}>proportional to billings</strong>
+                  JTD cash:{' '}<strong style={{ color: cashFlowData.jtdCashFlow >= 0 ? '#10b981' : '#ef4444' }}>{fmt(cashFlowData.jtdCashFlow)}</strong>
+                  {cashFlowData.openReceivables > 0 && <span> · AR: <strong style={{ color: '#2563eb' }}>{fmt(cashFlowData.openReceivables)}</strong></span>}
                 </span>
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed' }}>
@@ -659,14 +726,24 @@ const ProjectCashFlow: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* Revenue */}
+                  {/* Revenue / Billings */}
                   <tr>
                     <td style={{ ...tdS, textAlign: 'left', fontWeight: 600, color: '#10b981', position: 'sticky', left: 0, backgroundColor: 'white', zIndex: 1 }}>Proj Billings</td>
                     {columns.map(col => {
-                      const v = cashFlowData.monthlyRevenue.get(col.key) ?? 0;
+                      const v = cashFlowData.monthlyBillings.get(col.key) ?? 0;
                       return <td key={col.key} style={{ ...tdS, color: v > 500 ? '#10b981' : '#cbd5e1', background: col.isYear ? '#fafafa' : undefined }}>{fmtCashK(v)}</td>;
                     })}
                   </tr>
+                  {/* Est. Collections — shown when payment terms shift the timing */}
+                  {cashFlowData.paymentTermsDays > 0 && (
+                    <tr>
+                      <td style={{ ...tdS, textAlign: 'left', fontWeight: 600, color: '#0ea5e9', position: 'sticky', left: 0, backgroundColor: 'white', zIndex: 1, fontStyle: 'italic' }}>Est. Collections</td>
+                      {columns.map(col => {
+                        const v = cashFlowData.monthlyCollections.get(col.key) ?? 0;
+                        return <td key={col.key} style={{ ...tdS, color: v > 500 ? '#0ea5e9' : '#cbd5e1', background: col.isYear ? '#fafafa' : undefined, fontStyle: 'italic' }}>{fmtCashK(v)}</td>;
+                      })}
+                    </tr>
+                  )}
                   {/* Open Receivables */}
                   {cashFlowData.openReceivables > 0 && (
                     <tr>
