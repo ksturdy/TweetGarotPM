@@ -50,7 +50,8 @@ const STATUS_LABELS: Record<string, string> = { open: 'Open', in_progress: 'In P
 export async function generateMeetingMinutesPdf(
   meeting: Meeting,
   projectName: string,
-  logoUrl?: string
+  logoUrl?: string,
+  tenantCompany?: string,
 ): Promise<Blob> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
 
@@ -140,7 +141,7 @@ export async function generateMeetingMinutesPdf(
       head: [['Name', 'Company', 'Attended']],
       body: attendees.map(a => [
         a.user_name || a.contact_name || a.name || '—',
-        a.contact_company || a.company || '—',
+        a.contact_company || a.company || (a.user_id ? (tenantCompany || '—') : '—'),
         a.attended ? 'Yes' : 'No',
       ]),
       styles: { fontSize: 9, cellPadding: 4 },

@@ -119,8 +119,8 @@ const MeetingDetail: React.FC = () => {
     if (!meeting) return;
     setExportingPdf(true);
     try {
-      const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
-      const blob = await generateMeetingMinutesPdf(meeting, project?.name || '', logoUrl);
+      const logoUrl = '/api/tenant/logo';
+      const blob = await generateMeetingMinutesPdf(meeting, project?.name || '', logoUrl, tenant?.name);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
