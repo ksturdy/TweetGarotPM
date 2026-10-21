@@ -11,6 +11,15 @@ import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
+import { useAuth } from '../../../context/AuthContext';
+import {
+  safetyObservationsApi,
+  AUDIT_AREAS,
+  buildBlankSection,
+  ObservationSection,
+  ObservationAnswer,
+} from '../../../services/safetyObservations';
+import { attachmentsApi } from '../../../services/attachments';
 
 const WEATHER_OPTIONS = ['Sunny', 'Partly Cloudy', 'Cloudy', 'Rainy', 'Windy', 'Snowy', 'Stormy', 'Foggy', 'Other'];
 
@@ -24,15 +33,6 @@ const wmoToWeather = (code: number): string => {
   if (code >= 95) return 'Stormy';
   return 'Cloudy';
 };
-import { useAuth } from '../../../context/AuthContext';
-import {
-  safetyObservationsApi,
-  AUDIT_AREAS,
-  buildBlankSection,
-  ObservationSection,
-  ObservationAnswer,
-} from '../../../services/safetyObservations';
-import { attachmentsApi } from '../../../services/attachments';
 
 // ── Wizard steps ──────────────────────────────────────────────────────────────
 // Step 0: area selection

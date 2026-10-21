@@ -28,8 +28,6 @@ import {
   uploadCustomerLogo,
   deleteCustomerLogo,
 } from '../services/customers';
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Filler);
 import CustomerFormModal from '../components/modals/CustomerFormModal';
 import ContactModal from '../components/modals/ContactModal';
 import AssessmentScoring from '../components/assessments/AssessmentScoring';
@@ -37,6 +35,8 @@ import { assessmentsApi } from '../services/assessments';
 import { useTitanFeedback } from '../context/TitanFeedbackContext';
 import './CustomerDetail.css';
 import '../styles/SalesPipeline.css';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Filler);
 
 interface Contact {
   id: number;

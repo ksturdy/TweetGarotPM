@@ -131,7 +131,7 @@ const BidFormUpload: React.FC<BidFormUploadProps> = ({ estimateId, onUploadCompl
   };
 
   const handleDelete = () => {
-    if (confirm('Are you sure you want to remove the bid form? This will not delete the estimate data.')) {
+    if (window.confirm('Are you sure you want to remove the bid form? This will not delete the estimate data.')) {
       deleteMutation.mutate();
     }
   };

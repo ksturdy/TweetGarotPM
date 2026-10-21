@@ -21,6 +21,10 @@ import opportunitiesService, { Opportunity } from '../../services/opportunities'
 import { vistaDataService, VPContract } from '../../services/vistaData';
 import { format, addMonths, startOfMonth, differenceInMonths, parseISO, isBefore } from 'date-fns';
 import { ContourType, getContourMultipliers, getDefaultContour } from '../../utils/contours';
+import { getBacklogFitSettings, saveBacklogFitSettings, BacklogFitSettings, RegionTarget } from '../../services/tenant';
+import api from '../../services/api';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import { LOCATION_GROUPS } from '../../constants/locationGroups';
 
 const dateToMonthOffset = (dateStr: string | null | undefined): number | null => {
   if (!dateStr) return null;
@@ -28,10 +32,6 @@ const dateToMonthOffset = (dateStr: string | null | undefined): number | null =>
   if (isNaN(d.getTime())) return null;
   return differenceInMonths(startOfMonth(d), startOfMonth(new Date()));
 };
-import { getBacklogFitSettings, saveBacklogFitSettings, BacklogFitSettings, RegionTarget } from '../../services/tenant';
-import api from '../../services/api';
-import { useTitanFeedback } from '../../context/TitanFeedbackContext';
-import { LOCATION_GROUPS } from '../../constants/locationGroups';
 
 const REGIONS = [
   { prefix: '10', label: 'NE Wisconsin', color: '#3b82f6' },

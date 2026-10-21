@@ -14,6 +14,9 @@ import MultiSearchableSelect from '../../components/MultiSearchableSelect';
 import '../../components/modals/Modal.css';
 import '../../styles/SalesPipeline.css';
 import { format, addMonths, addWeeks, startOfMonth, startOfWeek, differenceInMonths, parseISO, isBefore } from 'date-fns';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { LOCATION_GROUPS } from '../../constants/locationGroups';
 
 // Convert an absolute YYYY-MM-DD date string to a month offset from the current month.
 // Returns null if input is null/invalid. Caller decides whether to clamp negatives.
@@ -28,8 +31,6 @@ const dateToMonthOffset = (dateStr: string | null | undefined): number | null =>
 // at the first of that month, for persistence.
 const monthOffsetToDateString = (offset: number): string =>
   format(addMonths(startOfMonth(new Date()), offset), 'yyyy-MM-dd');
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 function loadImageAsDataUrl(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -112,8 +113,6 @@ const TRADES: TradeInfo[] = [
 ];
 
 // ─── Location groups (derived from department code prefix) ──
-
-import { LOCATION_GROUPS } from '../../constants/locationGroups';
 
 const getLocationGroup = (deptCode: string | null | undefined): string | null => {
   if (!deptCode) return null;

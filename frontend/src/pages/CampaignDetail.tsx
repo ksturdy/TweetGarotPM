@@ -2229,7 +2229,7 @@ export default function CampaignDetail() {
                         </div>
                         <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
                           <button onClick={async () => {
-                            if (confirm('Delete this opportunity?')) {
+                            if (window.confirm('Delete this opportunity?')) {
                               await deleteCampaignOpportunity(campaignId, detailView.id, opp.id);
                               setDetailOpps(prev => prev.filter(o => o.id !== opp.id));
                             }
@@ -2278,7 +2278,7 @@ export default function CampaignDetail() {
                         {est.notes && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px', fontStyle: 'italic' }}>{est.notes}</div>}
                         <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
                           <button onClick={async () => {
-                            if (confirm('Delete this estimate?')) {
+                            if (window.confirm('Delete this estimate?')) {
                               await deleteCampaignEstimate(campaignId, detailView.id, est.id);
                               setDetailEstimates(prev => prev.filter(e => e.id !== est.id));
                             }

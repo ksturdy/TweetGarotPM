@@ -10,6 +10,10 @@ import { teamsApi } from '../../services/teams';
 import SearchableSelect from '../../components/SearchableSelect';
 import MultiSearchableSelect from '../../components/MultiSearchableSelect';
 import { format, differenceInMonths, addMonths, startOfMonth, parseISO, isBefore } from 'date-fns';
+import '../../styles/SalesPipeline.css';
+import '../../components/modals/Modal.css';
+import { ContourType, contourOptions, getContourMultipliers, getDefaultContour, ContourVisual } from '../../utils/contours';
+import { scheduleSegmentsService, ScheduleSegment } from '../../services/scheduleSegments';
 
 // Convert an absolute YYYY-MM-DD date string to a month offset from the current month.
 // Returns null if input is null/invalid. Caller decides whether to clamp negatives.
@@ -24,8 +28,6 @@ const dateToMonthOffset = (dateStr: string | null | undefined): number | null =>
 // at the first of that month, for persistence.
 const monthOffsetToDateString = (offset: number): string =>
   format(addMonths(startOfMonth(new Date()), offset), 'yyyy-MM-dd');
-import '../../styles/SalesPipeline.css';
-import '../../components/modals/Modal.css';
 
 // Formatting helpers
 const fmt = (value: number | null | undefined): string => {
@@ -56,9 +58,6 @@ const parseNum = (value: number | string | null | undefined): number => {
   const num = typeof value === 'string' ? parseFloat(value) : value;
   return isNaN(num) ? 0 : num;
 };
-
-import { ContourType, contourOptions, getContourMultipliers, getDefaultContour, ContourVisual } from '../../utils/contours';
-import { scheduleSegmentsService, ScheduleSegment } from '../../services/scheduleSegments';
 
 interface ProjectProjection {
   contract: VPContract;

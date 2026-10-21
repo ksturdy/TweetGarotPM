@@ -16,8 +16,6 @@ import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import { useAuth } from '../../context/AuthContext';
 import CostControlCompare from './CostControlCompare';
 import RateAnalysisPanel from './RateAnalysisPanel';
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 import {
   CostControlMatrix as CCMatrix,
   CostControlVersion,
@@ -44,6 +42,8 @@ import {
   deleteRiskItem as apiDeleteRiskItem,
 } from '../../services/costControl';
 import './CostControlMatrix.css';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 const fmt = (n: number | null | undefined) =>
   n == null ? '—' : '$' + Math.round(n).toLocaleString();

@@ -215,11 +215,10 @@ import VistaDataSettings from './pages/settings/VistaDataSettings';
 import VistaLinkingManager from './pages/settings/VistaLinkingManager';
 import EstProductSettings from './pages/settings/EstProductSettings';
 import BuildQuestionnaire from './pages/BuildQuestionnaire';
-// Traceover module (lazy-loaded)
-const TraceoverWorkspace = React.lazy(() => import('./modules/traceover/pages/TraceoverWorkspace'));
-// Platform Admin pages
 import PlatformDashboard from './pages/platform/PlatformDashboard';
 import TenantList from './pages/platform/TenantList';
+// Traceover module (lazy-loaded)
+const TraceoverWorkspace = React.lazy(() => import('./modules/traceover/pages/TraceoverWorkspace'));
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
