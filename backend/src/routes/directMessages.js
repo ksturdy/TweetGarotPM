@@ -52,8 +52,8 @@ router.post('/conversations/dm', async (req, res, next) => {
 router.post('/conversations/group', async (req, res, next) => {
   try {
     const { name, memberIds } = req.body;
-    if (!name || !memberIds || memberIds.length < 1) {
-      return res.status(400).json({ error: 'Group name and at least one other member required' });
+    if (!memberIds || memberIds.length < 1) {
+      return res.status(400).json({ error: 'At least one other member required' });
     }
     const conversation = await DirectMessage.createGroupConversation(
       req.user.tenantId, req.user.id, name, memberIds

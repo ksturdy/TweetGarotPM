@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
-import GroupAddIcon from '@mui/icons-material/GroupAdd';
-import PersonIcon from '@mui/icons-material/Person';
 import api from '../../services/api';
 import { UserPresence } from '../../services/directMessages';
 import { useAuth } from '../../context/AuthContext';
@@ -45,9 +43,7 @@ const NewConversationDialog: React.FC<NewConversationDialogProps> = ({
 }) => {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
-  const [mode, setMode] = useState<'dm' | 'group'>('dm');
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
-  const [groupName, setGroupName] = useState('');
 
   const { data: users } = useQuery({
     queryKey: ['users-for-chat'],
@@ -62,62 +58,35 @@ const NewConversationDialog: React.FC<NewConversationDialogProps> = ({
     return name.includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
   });
 
-  const handleUserClick = (userId: number) => {
-    if (mode === 'dm') {
-      onStartDm(userId);
-    } else {
-      setSelectedUsers(prev =>
-        prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
-      );
+  const toggleUser = (userId: number) => {
+    setSelectedUsers(prev =>
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && filteredUsers.length === 1) {
+      toggleUser(filteredUsers[0].id);
+      setSearch('');
     }
   };
 
-  const handleCreateGroup = () => {
-    if (groupName.trim() && selectedUsers.length > 0) {
-      onCreateGroup(groupName.trim(), selectedUsers);
+  const handleStart = () => {
+    if (selectedUsers.length === 1) {
+      onStartDm(selectedUsers[0]);
+    } else if (selectedUsers.length > 1) {
+      onCreateGroup('', selectedUsers);
     }
   };
 
   return (
     <div className="new-conversation-dialog">
       <div className="new-conversation-header">
-        <h3>{mode === 'dm' ? 'New Message' : 'New Group'}</h3>
+        <h3>New Message</h3>
         <button className="new-conversation-close" onClick={onClose}>
           <CloseIcon fontSize="small" />
         </button>
       </div>
-
-      <div className="new-conversation-mode-toggle">
-        <button
-          className={`mode-btn ${mode === 'dm' ? 'active' : ''}`}
-          onClick={() => { setMode('dm'); setSelectedUsers([]); }}
-        >
-          <PersonIcon fontSize="small" /> Direct Message
-        </button>
-        <button
-          className={`mode-btn ${mode === 'group' ? 'active' : ''}`}
-          onClick={() => setMode('group')}
-        >
-          <GroupAddIcon fontSize="small" /> Group Chat
-        </button>
-      </div>
-
-      {mode === 'group' && (
-        <div className="new-conversation-group-name">
-          <input
-            type="text"
-            placeholder="Group name..."
-            value={groupName}
-            onChange={e => setGroupName(e.target.value)}
-            className="group-name-input"
-          />
-          {selectedUsers.length > 0 && (
-            <div className="selected-count">
-              {selectedUsers.length} selected
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="new-conversation-search">
         <SearchIcon fontSize="small" style={{ color: '#9ca3af' }} />
@@ -126,9 +95,25 @@ const NewConversationDialog: React.FC<NewConversationDialogProps> = ({
           placeholder="Search users..."
           value={search}
           onChange={e => setSearch(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
           autoFocus
         />
       </div>
+
+      {selectedUsers.length > 0 && (
+        <div className="selected-chips">
+          {selectedUsers.map(uid => {
+            const u = (users || []).find(u => u.id === uid);
+            if (!u) return null;
+            return (
+              <span key={uid} className="selected-chip">
+                {u.first_name} {u.last_name}
+                <button onClick={() => toggleUser(uid)} aria-label="Remove">×</button>
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       <div className="new-conversation-user-list">
         {filteredUsers.map(u => {
@@ -138,7 +123,7 @@ const NewConversationDialog: React.FC<NewConversationDialogProps> = ({
             <button
               key={u.id}
               className={`new-conversation-user ${isSelected ? 'selected' : ''}`}
-              onClick={() => handleUserClick(u.id)}
+              onClick={() => toggleUser(u.id)}
             >
               <div className="new-conversation-user-avatar">
                 {u.first_name[0]}{u.last_name[0]}
@@ -156,14 +141,12 @@ const NewConversationDialog: React.FC<NewConversationDialogProps> = ({
                 </span>
               </div>
               {presence && <PresenceDot status={presence.status} size={8} />}
-              {mode === 'group' && (
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  readOnly
-                  className="new-conversation-checkbox"
-                />
-              )}
+              <input
+                type="checkbox"
+                checked={isSelected}
+                readOnly
+                className="new-conversation-checkbox"
+              />
             </button>
           );
         })}
@@ -172,17 +155,17 @@ const NewConversationDialog: React.FC<NewConversationDialogProps> = ({
         )}
       </div>
 
-      {mode === 'group' && (
-        <div className="new-conversation-footer">
-          <button
-            className="create-group-btn"
-            disabled={!groupName.trim() || selectedUsers.length === 0}
-            onClick={handleCreateGroup}
-          >
-            Create Group ({selectedUsers.length} members)
-          </button>
-        </div>
-      )}
+      <div className="new-conversation-footer">
+        <button
+          className="create-group-btn"
+          disabled={selectedUsers.length === 0}
+          onClick={handleStart}
+        >
+          {selectedUsers.length > 1
+            ? `Start Chat (${selectedUsers.length} people)`
+            : 'Start Chat'}
+        </button>
+      </div>
     </div>
   );
 };

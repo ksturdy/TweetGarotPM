@@ -32,6 +32,10 @@ const ConversationList: React.FC<ConversationListProps> = ({
 
   function getDisplayName(conv: DmConversation): string {
     if (conv.is_group && conv.group_name) return conv.group_name;
+    if (conv.is_group) {
+      const others = conv.participants.filter(p => p.id !== user?.id);
+      return others.map(p => p.first_name).join(', ');
+    }
     const other = conv.participants.find(p => p.id !== user?.id);
     return other ? `${other.first_name} ${other.last_name}` : 'Unknown';
   }

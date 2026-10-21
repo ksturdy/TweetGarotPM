@@ -128,7 +128,7 @@ const DirectMessage = {
     const conversations = result.rows;
     for (const conv of conversations) {
       const participants = await db.query(`
-        SELECT u.id, u.first_name, u.last_name
+        SELECT u.id, u.first_name, u.last_name, dp.last_read_at
         FROM dm_participants dp
         JOIN users u ON u.id = dp.user_id
         WHERE dp.conversation_id = $1

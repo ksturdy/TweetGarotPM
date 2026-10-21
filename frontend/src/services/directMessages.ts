@@ -18,6 +18,7 @@ export interface DmParticipant {
   id: number;
   first_name: string;
   last_name: string;
+  last_read_at: string | null;
 }
 
 export interface DmMessage {

@@ -1,12 +1,13 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { dmApi, DmMessage } from '../../services/directMessages';
+import { dmApi, DmMessage, DmParticipant } from '../../services/directMessages';
 import { getSocket } from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
 import MessageInput from './MessageInput';
 
 interface MessageThreadProps {
   conversationId: number;
+  participants: DmParticipant[];
 }
 
 function formatTime(dateStr: string): string {
@@ -32,13 +33,31 @@ function shouldShowDateSeparator(current: DmMessage, prev: DmMessage | null): bo
   return d1 !== d2;
 }
 
-const MessageThread: React.FC<MessageThreadProps> = ({ conversationId }) => {
+const MessageThread: React.FC<MessageThreadProps> = ({ conversationId, participants }) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [realtimeMessages, setRealtimeMessages] = useState<DmMessage[]>([]);
   const [typingUsers, setTypingUsers] = useState<Set<number>>(new Set());
+
+  // Read times per participant id, updated in real-time via socket
+  const [readTimes, setReadTimes] = useState<Map<number, string>>(() => {
+    const m = new Map<number, string>();
+    for (const p of participants) {
+      if (p.last_read_at) m.set(p.id, p.last_read_at);
+    }
+    return m;
+  });
+
+  // Reset read times when conversation changes
+  useEffect(() => {
+    const m = new Map<number, string>();
+    for (const p of participants) {
+      if (p.last_read_at) m.set(p.id, p.last_read_at);
+    }
+    setReadTimes(m);
+  }, [conversationId]); // intentionally omit participants from deps
 
   // Fetch initial messages
   const { data: initialMessages, isLoading } = useQuery({
@@ -62,7 +81,7 @@ const MessageThread: React.FC<MessageThreadProps> = ({ conversationId }) => {
     };
   }, [conversationId, queryClient]);
 
-  // Listen for real-time messages
+  // Listen for real-time messages and read receipts
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
@@ -70,7 +89,6 @@ const MessageThread: React.FC<MessageThreadProps> = ({ conversationId }) => {
     const handleReceive = (data: { conversationId: number; message: DmMessage }) => {
       if (data.conversationId === conversationId) {
         setRealtimeMessages(prev => [...prev, data.message]);
-        // Mark as read immediately since we're viewing this conversation
         socket.emit('dm:read', { conversationId });
         queryClient.invalidateQueries({ queryKey: ['dm-unread-count'] });
         queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
@@ -88,12 +106,25 @@ const MessageThread: React.FC<MessageThreadProps> = ({ conversationId }) => {
       }
     };
 
+    const handleReadReceipt = (data: { conversationId: number; userId: number; readAt: string }) => {
+      if (data.conversationId !== conversationId) return;
+      setReadTimes(prev => {
+        const existing = prev.get(data.userId);
+        if (existing && new Date(existing) >= new Date(data.readAt)) return prev;
+        const next = new Map(prev);
+        next.set(data.userId, data.readAt);
+        return next;
+      });
+    };
+
     socket.on('dm:receive', handleReceive);
     socket.on('dm:typing', handleTyping);
+    socket.on('dm:read_receipt', handleReadReceipt);
 
     return () => {
       socket.off('dm:receive', handleReceive);
       socket.off('dm:typing', handleTyping);
+      socket.off('dm:read_receipt', handleReadReceipt);
     };
   }, [conversationId, user?.id, queryClient]);
 
@@ -109,10 +140,30 @@ const MessageThread: React.FC<MessageThreadProps> = ({ conversationId }) => {
   }, [initialMessages, realtimeMessages]);
 
   const allMessages = [...(initialMessages || [])];
-  // Add realtime messages, avoiding duplicates
   for (const rm of realtimeMessages) {
     if (!allMessages.find(m => m.id === rm.id)) {
       allMessages.push(rm);
+    }
+  }
+
+  // Build map: messageId -> first names of participants who last read at that message
+  const seenByMap = new Map<number, string[]>();
+  for (const [pId, readAt] of readTimes) {
+    if (pId === user?.id) continue;
+    const readTime = new Date(readAt);
+    let lastSeenMsgId: number | null = null;
+    for (const msg of allMessages) {
+      if (new Date(msg.created_at) <= readTime) {
+        lastSeenMsgId = msg.id;
+      }
+    }
+    if (lastSeenMsgId !== null) {
+      const p = participants.find(p => p.id === pId);
+      if (p) {
+        const names = seenByMap.get(lastSeenMsgId) || [];
+        names.push(p.first_name);
+        seenByMap.set(lastSeenMsgId, names);
+      }
     }
   }
 
@@ -132,6 +183,7 @@ const MessageThread: React.FC<MessageThreadProps> = ({ conversationId }) => {
           const isMe = msg.sender_id === user?.id;
           const prev = i > 0 ? allMessages[i - 1] : null;
           const showDate = shouldShowDateSeparator(msg, prev);
+          const seenBy = seenByMap.get(msg.id);
 
           return (
             <React.Fragment key={msg.id}>
@@ -151,6 +203,11 @@ const MessageThread: React.FC<MessageThreadProps> = ({ conversationId }) => {
                   <div className="message-time">{formatTime(msg.created_at)}</div>
                 </div>
               </div>
+              {seenBy && seenBy.length > 0 && (
+                <div className="message-seen-by">
+                  Seen by {seenBy.join(', ')}
+                </div>
+              )}
             </React.Fragment>
           );
         })}

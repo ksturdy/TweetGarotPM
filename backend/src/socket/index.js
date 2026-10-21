@@ -98,6 +98,18 @@ function setupSocketIO(io) {
     socket.on('dm:read', async ({ conversationId }) => {
       try {
         await DirectMessage.markRead(conversationId, userId);
+        const readAt = new Date().toISOString();
+        // Broadcast read receipt to other participants so they see "Seen by"
+        const participants = await DirectMessage.getParticipants(conversationId);
+        for (const p of participants) {
+          if (p.user_id === userId) continue;
+          const sockets = userSockets.get(p.user_id);
+          if (sockets) {
+            for (const sid of sockets) {
+              io.to(sid).emit('dm:read_receipt', { conversationId, userId, readAt });
+            }
+          }
+        }
       } catch (err) {
         console.error('[Socket] dm:read error:', err.message);
       }

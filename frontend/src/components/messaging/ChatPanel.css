@@ -360,6 +360,15 @@
   color: #9ca3af;
 }
 
+/* Seen by receipt */
+.message-seen-by {
+  font-size: 10px;
+  color: #9ca3af;
+  text-align: right;
+  padding: 0 4px 6px;
+  margin-top: -4px;
+}
+
 /* Typing indicator */
 .message-typing-indicator {
   display: flex;
@@ -469,64 +478,41 @@
   display: none; /* Header is handled by ChatPanel */
 }
 
-.new-conversation-mode-toggle {
+.selected-chips {
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 6px;
   padding: 8px 16px;
   border-bottom: 1px solid #f3f4f6;
 }
 
-.mode-btn {
-  display: flex;
+.selected-chip {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
+  padding: 3px 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 500;
-  color: #6b7280;
-  cursor: pointer;
-  transition: all 0.15s;
+  color: #1d4ed8;
 }
 
-.mode-btn.active {
-  background: #eff6ff;
-  border-color: #3B7DD8;
-  color: #3B7DD8;
-}
-
-.mode-btn:hover:not(.active) {
-  background: #f9fafb;
-}
-
-.new-conversation-group-name {
+.selected-chip button {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-bottom: 1px solid #f3f4f6;
+  border: none;
+  background: none;
+  color: #93c5fd;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0;
 }
 
-.group-name-input {
-  flex: 1;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 13px;
-  outline: none;
-}
-
-.group-name-input:focus {
-  border-color: #3B7DD8;
-}
-
-.selected-count {
-  font-size: 11px;
-  color: #3B7DD8;
-  font-weight: 600;
-  white-space: nowrap;
+.selected-chip button:hover {
+  color: #1d4ed8;
 }
 
 .new-conversation-search {

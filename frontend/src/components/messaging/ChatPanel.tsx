@@ -122,19 +122,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onClose }) => {
     }
   }, [queryClient]);
 
-  const handleUpdateGroupName = useCallback(async (name: string) => {
-    if (!selectedConversation) return;
-    try {
-      await dmApi.updateGroupName(selectedConversation.id, name);
-      queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
-      setSelectedConversation(prev => prev ? { ...prev, group_name: name } : null);
-    } catch (err) {
-      console.error('[ChatPanel] Update group name failed:', err);
-    }
-  }, [selectedConversation, queryClient]);
-
   function getConversationTitle(conv: DmConversation): string {
     if (conv.is_group && conv.group_name) return conv.group_name;
+    if (conv.is_group) {
+      const others = conv.participants.filter(p => p.id !== user?.id);
+      return others.map(p => p.first_name).join(', ');
+    }
     const other = conv.participants.find(p => p.id !== user?.id);
     return other ? `${other.first_name} ${other.last_name}` : 'Conversation';
   }
@@ -168,11 +161,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onClose }) => {
                   </span>
                 </span>
               )}
-              {selectedConversation.is_group && (
-                <span className="chat-panel-member-count">
-                  {selectedConversation.participants.length} members
-                </span>
-              )}
             </div>
             {selectedConversation.is_group && (
               <button className="chat-panel-info" onClick={() => setView('group-info')}>
@@ -192,7 +180,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onClose }) => {
             <button className="chat-panel-back" onClick={() => setView('thread')}>
               <ArrowBackIcon fontSize="small" />
             </button>
-            <span className="chat-panel-title">Group Info</span>
+            <span className="chat-panel-title">Participants</span>
           </>
         ) : (
           <>
@@ -216,7 +204,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onClose }) => {
         )}
 
         {view === 'thread' && selectedConversation && (
-          <MessageThread conversationId={selectedConversation.id} />
+          <MessageThread
+            conversationId={selectedConversation.id}
+            participants={selectedConversation.participants}
+          />
         )}
 
         {view === 'new' && (
@@ -232,7 +223,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onClose }) => {
           <GroupInfoDialog
             conversation={selectedConversation}
             presenceMap={presenceMap}
-            onUpdateName={handleUpdateGroupName}
             onClose={() => setView('thread')}
           />
         )}
