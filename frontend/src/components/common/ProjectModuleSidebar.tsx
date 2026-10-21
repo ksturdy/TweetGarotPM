@@ -11,6 +11,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import FolderIcon from '@mui/icons-material/Folder';
+import ForumIcon from '@mui/icons-material/Forum';
 import './ProjectModuleSidebar.css';
 
 interface ModuleGroup {
@@ -48,6 +49,13 @@ const MODULE_GROUPS: ModuleGroup[] = [
       { path: 'rfis', label: 'RFIs' },
       { path: 'submittals', label: 'Submittals' },
       { path: 'change-orders', label: 'Change Orders' },
+    ],
+  },
+  {
+    label: 'Correspondence',
+    icon: <ForumIcon />,
+    modules: [
+      { path: 'meetings', label: 'Meetings' },
     ],
   },
   {

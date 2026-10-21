@@ -148,6 +148,7 @@ const preJobChecklistRoutes = require('./routes/preJobChecklist');
 const itemCommentRoutes = require('./routes/itemComments');
 const plumbingDesignRoutes = require('./routes/plumbingDesigns');
 const scopeJobMappingRoutes = require('./routes/scopeJobMappings');
+const meetingRoutes = require('./routes/meetings');
 
 const app = express();
 const server = http.createServer(app);
@@ -233,6 +234,7 @@ app.use('/api/projects', itemCommentRoutes);
 app.use('/api/projects', projectGoalRoutes);
 app.use('/api/rfis', rfiRoutes);
 app.use('/api/rfi-actions', rfiActionRoutes);
+app.use('/api/meetings', meetingRoutes);
 app.use('/api/submittals', submittalRoutes);
 app.use('/api/change-orders', changeOrderRoutes);
 app.use('/api/daily-reports', dailyReportRoutes);

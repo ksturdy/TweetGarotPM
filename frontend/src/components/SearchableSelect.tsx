@@ -34,7 +34,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0, flipUp: false });
   const triggerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -69,14 +69,18 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
   );
   const hasMore = filteredOptions.length > MAX_VISIBLE;
 
-  // Calculate dropdown position when opening
+  // Calculate dropdown position when opening — flip upward when near the bottom of the viewport
   const updatePosition = useCallback(() => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
+      const DROPDOWN_MAX_HEIGHT = 308; // 300 list + 8 search bar
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const flipUp = spaceBelow < DROPDOWN_MAX_HEIGHT && rect.top > spaceBelow;
       setDropdownPos({
-        top: rect.bottom + 4,
+        top: flipUp ? rect.top - DROPDOWN_MAX_HEIGHT - 4 : rect.bottom + 4,
         left: rect.left,
         width: rect.width,
+        flipUp,
       });
     }
   }, []);
@@ -147,13 +151,15 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
       ref={dropdownRef}
       style={{
         position: 'fixed',
-        top: dropdownPos.top,
+        top: Math.max(8, dropdownPos.top),
         left: dropdownPos.left,
         width: dropdownPos.width,
         background: 'white',
         border: '1px solid #e2e8f0',
         borderRadius: '6px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        boxShadow: dropdownPos.flipUp
+          ? '0 -4px 12px rgba(0,0,0,0.15)'
+          : '0 4px 12px rgba(0,0,0,0.15)',
         zIndex: 9999,
         maxHeight: '300px',
         display: 'flex',

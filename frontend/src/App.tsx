@@ -15,6 +15,9 @@ import RFIList from './pages/rfis/RFIList';
 import RFIForm from './pages/rfis/RFIForm';
 import RFIDetail from './pages/rfis/RFIDetail';
 import RFIEdit from './pages/rfis/RFIEdit';
+import MeetingList from './pages/meetings/MeetingList';
+import MeetingForm from './pages/meetings/MeetingForm';
+import MeetingDetail from './pages/meetings/MeetingDetail';
 import SubmittalList from './pages/submittals/SubmittalList';
 import SubmittalForm from './pages/submittals/SubmittalForm';
 import SubmittalDetail from './pages/submittals/SubmittalDetail';
@@ -571,6 +574,10 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/rfis/new" element={<RFIForm />} />
                 <Route path="/projects/:projectId/rfis/:id/edit" element={<RFIEdit />} />
                 <Route path="/projects/:projectId/rfis/:id" element={<RFIDetail />} />
+                <Route path="/projects/:projectId/meetings" element={<MeetingList />} />
+                <Route path="/projects/:projectId/meetings/new" element={<MeetingForm />} />
+                <Route path="/projects/:projectId/meetings/:id/edit" element={<MeetingForm />} />
+                <Route path="/projects/:projectId/meetings/:id" element={<MeetingDetail />} />
                 <Route path="/projects/:projectId/submittals" element={<SubmittalList />} />
                 <Route path="/projects/:projectId/submittals/new" element={<SubmittalForm />} />
                 <Route path="/projects/:projectId/submittals/:id" element={<SubmittalDetail />} />
