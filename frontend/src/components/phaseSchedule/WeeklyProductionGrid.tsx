@@ -133,6 +133,13 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
   const [localQty, setLocalQty] = useState<Record<string, number>>({});
   const savingRef = useRef<Set<string>>(new Set());
 
+  // Resizable frozen column widths (px)
+  const [colWidths, setColWidths] = useState({
+    label: 54, name: 200, start: 80, finish: 80, contour: 60,
+    estQty: 66, uom: 44, hrs: 76, remQty: 62, unalloc: 52,
+  });
+  const resizingRef = useRef<{ col: keyof typeof colWidths; startX: number; startW: number } | null>(null);
+
   const { data, isLoading } = useQuery({
     queryKey: ['weeklyProduction', projectId, from, to],
     queryFn: () => getWeeklyProduction(projectId, from, to),
@@ -154,6 +161,20 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
       gridScrollRef.current.scrollLeft = scrollToIdx * 72; // 72 = WEEK_W
     }
   }, [isLoading, weeks]);
+
+  // Global mouse handlers for column resize drag
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const delta = e.clientX - resizingRef.current.startX;
+      const newW  = Math.max(40, resizingRef.current.startW + delta);
+      setColWidths(prev => ({ ...prev, [resizingRef.current!.col]: newW }));
+    };
+    const onUp = () => { resizingRef.current = null; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, []);
 
   // Use parent-supplied filtered items if provided; fall back to API items.
   // Labor-only filtering is enforced by the backend when externalItems is absent.
@@ -245,6 +266,30 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
       const effEnd     = (edits.end_date     !== undefined ? edits.end_date     : item.end_date)     ?? '';
       const effContour = (edits.contour_type !== undefined ? edits.contour_type : item.contour_type) ?? 'flat';
       map[item.id] = distributeWeekly(parseNum(item.total_est_cost), effStart, effEnd, effContour, weeks);
+    });
+    return map;
+  }, [items, weeks, localItemEdits]);
+
+  // Pre-compute reforecast: spread Rem Qty flat across future weeks within the item's finish date.
+  // This answers "what rate do we need each week to still finish on time?"
+  const reforecastWeeklyByItem = useMemo(() => {
+    const map: Record<number, Record<string, number>> = {};
+    items.forEach(item => {
+      const edits  = localItemEdits[item.id] ?? {};
+      const effEnd = (edits.end_date  !== undefined ? edits.end_date  : item.end_date)  ?? '';
+      const effQty = parseNum(edits.quantity !== undefined ? edits.quantity : item.quantity);
+      const remQty = effQty > 0 ? Math.max(0, effQty - parseNum(item.quantity_installed)) : 0;
+      if (remQty <= 0 || !effEnd) { map[item.id] = {}; return; }
+      const effStart2 = (localItemEdits[item.id]?.start_date !== undefined ? localItemEdits[item.id].start_date : item.start_date) ?? '';
+      const itemStart = effStart2 ? ymd(toSunday(parseISO(effStart2))) : TODAY;
+      const itemEnd   = ymd(toSunday(parseISO(effEnd)));
+      // Only spread across weeks within the item's own scheduled window that are still in the future
+      const futureWeeks = weeks.filter(w => w > TODAY && w >= itemStart && w <= itemEnd);
+      if (!futureWeeks.length) { map[item.id] = {}; return; }
+      const perWeek = remQty / futureWeeks.length;
+      const result: Record<string, number> = {};
+      futureWeeks.forEach(w => { result[w] = perWeek; });
+      map[item.id] = result;
     });
     return map;
   }, [items, weeks, localItemEdits]);
@@ -411,23 +456,20 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
     return { schedQty, actualQty, schedHrs, earnedHrs, burnedHrs, schedCost, earnedCost, burnedCost };
   }, [items, weeks, scheduledQtyByItem, scheduledHrsByItem, scheduledCostByItem, getActualQty, getBurnedHours, getBurnedCost]);
 
-  // ── layout constants ──────────────────────────────────────────────────────
+  // ── layout — derived from resizable colWidths state ──────────────────────
+  const WEEK_W    = 72;
+  const LABEL_W   = colWidths.label;
+  const NAME_W    = colWidths.name;
+  const START_W   = colWidths.start;
+  const FINISH_W  = colWidths.finish;
+  const CONTOUR_W = colWidths.contour;
+  const ESTQTY_W  = colWidths.estQty;
+  const UOM_W     = colWidths.uom;
+  const HRS_W     = colWidths.hrs;
+  const REMQTY_W  = colWidths.remQty;
+  const UNALLOC_W = colWidths.unalloc;
+  const FIXED_W   = LABEL_W + NAME_W + START_W + FINISH_W + CONTOUR_W + ESTQTY_W + UOM_W + HRS_W + REMQTY_W + UNALLOC_W;
 
-  const WEEK_W     = 72;
-  const LABEL_W    = 54;
-  const NAME_W     = 170;
-  const START_W    = 72;
-  const FINISH_W   = 72;
-  const CONTOUR_W  = 56;
-  const ESTQTY_W   = 60;
-  const UOM_W      = 44;
-  const HRS_W      = 56;
-  const REMQTY_W   = 52;
-  const UNALLOC_W  = 52;
-  // Column order: # | Phase Name | Start | Finish | Contour | Est Qty | UOM | Est Hrs | Rem Qty | Unalloc ||
-  const FIXED_W    = LABEL_W + NAME_W + START_W + FINISH_W + CONTOUR_W + ESTQTY_W + UOM_W + HRS_W + REMQTY_W + UNALLOC_W;
-
-  // Left offsets for sticky columns
   const L0 = 0;
   const L1 = LABEL_W;
   const L2 = L1 + NAME_W;
@@ -439,9 +481,14 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
   const L8 = L7 + HRS_W;
   const L9 = L8 + REMQTY_W;
 
-  // Freeze shadow on the right edge of the UOM (last frozen) column.
-  // box-shadow travels with the sticky element; borderRight would be clipped.
   const freezeShadow = '2px 0 0 0 #94a3b8';
+
+  // Resize handle style + starter — shared by all frozen column headers
+  const rhStyle: React.CSSProperties = { position: 'absolute', right: -2, top: 0, bottom: 0, width: 5, cursor: 'col-resize', zIndex: 10 };
+  const startResize = (e: React.MouseEvent, col: keyof typeof colWidths, w: number) => {
+    e.preventDefault();
+    resizingRef.current = { col, startX: e.clientX, startW: w };
+  };
 
   if (isLoading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, color: '#6b7280' }}>
@@ -514,15 +561,15 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
           {/* Sticky header */}
           <thead>
             <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-              <th style={{ ...th(LABEL_W),           position: 'sticky', top: 0, left: L0, zIndex: 41, background: '#1e3a5f' }}>#</th>
-              <th style={{ ...th(NAME_W, 'left'),    position: 'sticky', top: 0, left: L1, zIndex: 41, background: '#1e3a5f' }}>Phase Name</th>
-              <th style={{ ...th(START_W),           position: 'sticky', top: 0, left: L2, zIndex: 41, background: '#1e3a5f' }}>Start</th>
-              <th style={{ ...th(FINISH_W),          position: 'sticky', top: 0, left: L3, zIndex: 41, background: '#1e3a5f' }}>Finish</th>
-              <th style={{ ...th(CONTOUR_W),         position: 'sticky', top: 0, left: L4, zIndex: 41, background: '#1e3a5f' }}>Contour</th>
-              <th style={{ ...th(ESTQTY_W),          position: 'sticky', top: 0, left: L5, zIndex: 41, background: '#1e3a5f' }}>Est Qty</th>
-              <th style={{ ...th(UOM_W),             position: 'sticky', top: 0, left: L6, zIndex: 41, background: '#1e3a5f' }}>UOM</th>
-              <th style={{ ...th(HRS_W),             position: 'sticky', top: 0, left: L7, zIndex: 41, background: '#1e3a5f' }}>Est Hrs</th>
-              <th style={{ ...th(REMQTY_W),          position: 'sticky', top: 0, left: L8, zIndex: 41, background: '#1e3a5f' }}>Rem Qty</th>
+              <th style={{ ...th(LABEL_W),           position: 'sticky', top: 0, left: L0, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>#<div style={rhStyle} onMouseDown={e => startResize(e, 'label',   LABEL_W)}   /></th>
+              <th style={{ ...th(NAME_W, 'left'),    position: 'sticky', top: 0, left: L1, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Phase Name<div style={rhStyle} onMouseDown={e => startResize(e, 'name',    NAME_W)}    /></th>
+              <th style={{ ...th(START_W),           position: 'sticky', top: 0, left: L2, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Start<div style={rhStyle} onMouseDown={e => startResize(e, 'start',   START_W)}   /></th>
+              <th style={{ ...th(FINISH_W),          position: 'sticky', top: 0, left: L3, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Finish<div style={rhStyle} onMouseDown={e => startResize(e, 'finish',  FINISH_W)}  /></th>
+              <th style={{ ...th(CONTOUR_W),         position: 'sticky', top: 0, left: L4, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Contour<div style={rhStyle} onMouseDown={e => startResize(e, 'contour', CONTOUR_W)} /></th>
+              <th style={{ ...th(ESTQTY_W),          position: 'sticky', top: 0, left: L5, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Est Qty<div style={rhStyle} onMouseDown={e => startResize(e, 'estQty',  ESTQTY_W)}  /></th>
+              <th style={{ ...th(UOM_W),             position: 'sticky', top: 0, left: L6, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>UOM<div style={rhStyle} onMouseDown={e => startResize(e, 'uom',     UOM_W)}     /></th>
+              <th style={{ ...th(HRS_W),             position: 'sticky', top: 0, left: L7, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Est Hrs<div style={rhStyle} onMouseDown={e => startResize(e, 'hrs',     HRS_W)}     /></th>
+              <th style={{ ...th(REMQTY_W),          position: 'sticky', top: 0, left: L8, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Rem Qty<div style={rhStyle} onMouseDown={e => startResize(e, 'remQty',  REMQTY_W)}  /></th>
               <th style={{ ...th(UNALLOC_W),         position: 'sticky', top: 0, left: L9, zIndex: 41, background: '#1e3a5f', boxShadow: freezeShadow, borderRight: 'none' }}>Unalloc</th>
               {weeks.map(w => (
                 <th key={w} style={{ ...th(WEEK_W), position: 'sticky', top: 0, zIndex: 30, background: w === TODAY ? '#2d4a6e' : '#1e3a5f' }}>
@@ -559,6 +606,12 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
               // Unallocated: only meaningful in manual mode
               const allocatedQty  = isManual ? Object.values({ ...(item.manual_monthly_qty ?? {}), ...(localManualQty[item.id] ?? {}) }).reduce((s, v) => s + v, 0) : qty;
               const unallocatedQty = isManual ? qty - allocatedQty : null;
+              // Reforecast row: only show in qty mode when there is remaining work and future weeks
+              const reqdMap       = metric === 'qty' && remQty !== null && remQty > 0
+                ? (reforecastWeeklyByItem[item.id] ?? {}) : {};
+              const reqdWeekCount = Object.keys(reqdMap).length;
+              const showReqd      = reqdWeekCount > 0;
+              const reqdBg        = idx % 2 === 0 ? '#fefce8' : '#fffbeb';
 
               return (
                 <React.Fragment key={item.id}>
@@ -622,10 +675,15 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                       {item.quantity_uom || '—'}
                     </td>
                     <td style={{ ...td(HRS_W, 'right'), position: 'sticky', left: L7, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 3px' }}>
-                      <input type="number" min="0" step="any"
-                        defaultValue={estHrs > 0 ? estHrs : ''}
+                      <input type="text"
+                        defaultValue={estHrs > 0 ? estHrs.toLocaleString() : ''}
                         key={`esthrs-${item.id}-${estHrs}`}
-                        onBlur={e => handleItemFieldSave(item, 'total_est_hours', e.target.value)}
+                        onFocus={e => { e.target.value = estHrs > 0 ? String(estHrs) : ''; e.target.select(); }}
+                        onBlur={e => {
+                          handleItemFieldSave(item, 'total_est_hours', e.target.value);
+                          const n = parseFloat(e.target.value);
+                          if (!isNaN(n) && n > 0) e.target.value = n.toLocaleString();
+                        }}
                         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                         style={{ width: '100%', border: 'none', background: 'transparent', textAlign: 'right', fontSize: 12, color: '#374151', outline: 'none', padding: '0 3px' }}
                       />
@@ -751,6 +809,41 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                       );
                     })}
                   </tr>
+
+                  {/* ── Required (reforecast) row — flat spread of Rem Qty across future weeks ── */}
+                  {showReqd && (
+                    <tr>
+                      <td style={{ ...td(LABEL_W, 'center'), position: 'sticky', left: L0, zIndex: 2, background: reqdBg, color: '#d97706', fontSize: 10, fontStyle: 'italic' }}>
+                        reqd
+                      </td>
+                      <td style={{ ...td(NAME_W, 'left'), position: 'sticky', left: L1, zIndex: 2, background: reqdBg, paddingLeft: 16, color: '#92400e', fontSize: 11 }}>
+                        ~{fmt1(remQty! / reqdWeekCount)}/{item.quantity_uom || 'unit'} per wk to finish on time
+                      </td>
+                      <td style={{ ...td(START_W), position: 'sticky', left: L2, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(FINISH_W), position: 'sticky', left: L3, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(CONTOUR_W), position: 'sticky', left: L4, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(ESTQTY_W), position: 'sticky', left: L5, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(UOM_W), position: 'sticky', left: L6, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(HRS_W), position: 'sticky', left: L7, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(REMQTY_W, 'right'), position: 'sticky', left: L8, zIndex: 2, background: reqdBg, color: '#d97706', fontWeight: 600 }}>
+                        {fmt1(remQty!)}
+                      </td>
+                      <td style={{ ...td(UNALLOC_W), position: 'sticky', left: L9, zIndex: 2, background: reqdBg, boxShadow: freezeShadow, borderRight: 'none' }} />
+                      {weeks.map(w => {
+                        const reqd  = reqdMap[w];
+                        const sched = scheduledQtyByItem[item.id]?.[w] || 0;
+                        if (!reqd) return <td key={w} style={{ ...td(WEEK_W), background: reqdBg }} />;
+                        // Amber when required rate exceeds scheduled by >5% (behind); green when on track
+                        const isBehind = sched > 0 && reqd > sched * 1.05;
+                        return (
+                          <td key={w} style={{ ...td(WEEK_W, 'right'), background: reqdBg, paddingRight: 6,
+                            color: isBehind ? '#b45309' : '#16a34a', fontWeight: 600 }}>
+                            {fmt1(reqd)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )}
                 </React.Fragment>
               );
             })}
@@ -759,19 +852,19 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
           {/* Summary footer — rows change with metric toggle */}
           <tfoot>
             {metric === 'qty' && <>
-              <SummaryRow label="Sched Qty"  weeks={weeks} getVal={w => totals.schedQty[w]  || 0} bg="#e0f2fe" color="#0369a1" />
-              <SummaryRow label="Actual Qty" weeks={weeks} getVal={w => totals.actualQty[w] || 0} bg="#dbeafe" color="#1e40af" bold />
+              <SummaryRow label="Sched Qty"  weeks={weeks} getVal={w => totals.schedQty[w]  || 0} bg="#e0f2fe" color="#0369a1" l9={L9} />
+              <SummaryRow label="Actual Qty" weeks={weeks} getVal={w => totals.actualQty[w] || 0} bg="#dbeafe" color="#1e40af" bold l9={L9} />
             </>}
             {metric === 'hours' && <>
-              <SummaryRow label="Sched Hrs"  weeks={weeks} getVal={w => totals.schedHrs[w]  || 0} bg="#ede9fe" color="#6d28d9" />
-              <SummaryRow label="Earned Hrs" weeks={weeks} getVal={w => totals.earnedHrs[w] || 0} bg="#fef3c7" color="#92400e" bold />
-              <SummaryRow label="Burned Hrs" weeks={weeks} getVal={w => totals.burnedHrs[w] || 0} bg="#d1fae5" color="#065f46" />
-              <SummaryRow label="Over/Under" weeks={weeks} getVal={w => (totals.earnedHrs[w] || 0) - (totals.burnedHrs[w] || 0)} bg="#f1f5f9" color="#111" signColored bold />
+              <SummaryRow label="Sched Hrs"  weeks={weeks} getVal={w => totals.schedHrs[w]  || 0} bg="#ede9fe" color="#6d28d9" l9={L9} />
+              <SummaryRow label="Earned Hrs" weeks={weeks} getVal={w => totals.earnedHrs[w] || 0} bg="#fef3c7" color="#92400e" bold l9={L9} />
+              <SummaryRow label="Burned Hrs" weeks={weeks} getVal={w => totals.burnedHrs[w] || 0} bg="#d1fae5" color="#065f46" l9={L9} />
+              <SummaryRow label="Over/Under" weeks={weeks} getVal={w => (totals.earnedHrs[w] || 0) - (totals.burnedHrs[w] || 0)} bg="#f1f5f9" color="#111" signColored bold l9={L9} />
             </>}
             {metric === 'cost' && <>
-              <SummaryRow label="Sched Cost"  weeks={weeks} getVal={w => totals.schedCost[w]  || 0} bg="#fef3c7" color="#92400e" />
-              <SummaryRow label="Earned Cost" weeks={weeks} getVal={w => totals.earnedCost[w] || 0} bg="#fef9c3" color="#b45309" bold />
-              <SummaryRow label="Burned Cost" weeks={weeks} getVal={w => totals.burnedCost[w] || 0} bg="#d1fae5" color="#065f46" />
+              <SummaryRow label="Sched Cost"  weeks={weeks} getVal={w => totals.schedCost[w]  || 0} bg="#fef3c7" color="#92400e" l9={L9} />
+              <SummaryRow label="Earned Cost" weeks={weeks} getVal={w => totals.earnedCost[w] || 0} bg="#fef9c3" color="#b45309" bold l9={L9} />
+              <SummaryRow label="Burned Cost" weeks={weeks} getVal={w => totals.burnedCost[w] || 0} bg="#d1fae5" color="#065f46" l9={L9} />
             </>}
           </tfoot>
         </table>
@@ -782,28 +875,27 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
 
 // ── SummaryRow ────────────────────────────────────────────────────────────────
 
-const FREEZE_L = { L0: 0, L1: 54, L2: 224, L3: 296, L4: 368, L5: 424, L6: 484, L7: 528, L8: 584, L9: 636 };
-
 const FREEZE_SHADOW = '2px 0 0 0 #94a3b8';
 
-function SummaryRow({ label, weeks, getVal, bg, color, signColored, bold }: {
+function SummaryRow({ label, weeks, getVal, bg, color, signColored, bold, l9 }: {
   label: string; weeks: string[];
   getVal: (w: string) => number;
   bg: string; color: string;
   signColored?: boolean; bold?: boolean;
+  l9: number;
 }) {
   return (
     <tr style={{ background: bg, position: 'sticky', bottom: 0 }}>
-      {/* Frozen label cell spans the first 3 columns */}
+      {/* Frozen label cell spans all frozen columns up to the Unalloc shadow */}
       <td colSpan={9} style={{
-        position: 'sticky', left: FREEZE_L.L0, zIndex: 3, background: bg,
+        position: 'sticky', left: 0, zIndex: 3, background: bg,
         padding: '3px 8px 3px 4px', fontSize: 11, color, fontWeight: bold ? 700 : 600,
         textAlign: 'right', borderTop: '1px solid #cbd5e1',
       }}>
         {label}
       </td>
       <td style={{
-        position: 'sticky', left: FREEZE_L.L9, zIndex: 3, background: bg,
+        position: 'sticky', left: l9, zIndex: 3, background: bg,
         boxShadow: FREEZE_SHADOW, borderRight: 'none', borderTop: '1px solid #cbd5e1', padding: 0,
       }} />
       {weeks.map(w => {
