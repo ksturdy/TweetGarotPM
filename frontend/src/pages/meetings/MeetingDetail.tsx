@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { meetingsApi, MEETING_TYPES } from '../../services/meetings';
@@ -15,10 +15,13 @@ import RepeatIcon from '@mui/icons-material/Repeat';
 import NextPlanIcon from '@mui/icons-material/NextPlan';
 import PublishIcon from '@mui/icons-material/Publish';
 import LockIcon from '@mui/icons-material/Lock';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import MeetingAttendeesSection from '../../components/meetings/MeetingAttendeesSection';
 import MeetingAgendaSection from '../../components/meetings/MeetingAgendaSection';
 import MeetingActionItemsSection from '../../components/meetings/MeetingActionItemsSection';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import { useAuth } from '../../context/AuthContext';
+import { generateMeetingMinutesPdf } from '../../utils/meetingMinutesPdf';
 import '../../styles/SalesPipeline.css';
 import './Meetings.css';
 
@@ -60,7 +63,9 @@ const MeetingDetail: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id: string }>();
   const navigate = useNavigate();
   const { toast, confirm } = useTitanFeedback();
+  const { tenant } = useAuth();
   const queryClient = useQueryClient();
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -109,6 +114,25 @@ const MeetingDetail: React.FC = () => {
     },
     onError: () => toast.error('Failed to create follow-up meeting.'),
   });
+
+  const handleExportPdf = async () => {
+    if (!meeting) return;
+    setExportingPdf(true);
+    try {
+      const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
+      const blob = await generateMeetingMinutesPdf(meeting, project?.name || '', logoUrl);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Meeting-Minutes-${meeting.number}-${(meeting.scheduled_date || '').substring(0, 10) || 'draft'}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Failed to generate PDF.');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   if (isLoading) return <div className="loading">Loading…</div>;
   if (!meeting) return <div className="loading">Meeting not found.</div>;
@@ -173,6 +197,15 @@ const MeetingDetail: React.FC = () => {
 
           {/* Actions */}
           <div className="meeting-detail-actions">
+            <button
+              className="sales-btn sales-btn-secondary"
+              style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff' }}
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+            >
+              <PictureAsPdfIcon style={{ fontSize: 15, marginRight: 4 }} />
+              {exportingPdf ? 'Exporting…' : 'Export PDF'}
+            </button>
             {meeting.status !== 'closed' && (
               <Link to={`/projects/${projectId}/meetings/${id}/edit`} className="sales-btn sales-btn-secondary" style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', textDecoration: 'none' }}>
                 <EditIcon style={{ fontSize: 15, marginRight: 4 }} /> Edit
