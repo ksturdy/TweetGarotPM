@@ -9,6 +9,7 @@ import { projectLaborRatesApi, ProjectLaborRate } from '../../services/projectLa
 import { vistaDataService } from '../../services/vistaData';
 import { scheduleSegmentsService, SEGMENT_DEFINITIONS } from '../../services/scheduleSegments';
 import PhaseGCLinkChips, { UnlinkAllButton } from '../../components/phaseSchedule/PhaseGCLinkChips';
+import WeeklyProductionGrid from '../../components/phaseSchedule/WeeklyProductionGrid';
 import { ContourType, contourOptions, getContourMultipliers, ContourVisual } from '../../utils/contours';
 import { format, addMonths, addDays, addWeeks, addQuarters, startOfMonth, startOfWeek, startOfQuarter, getQuarter, differenceInMonths, differenceInCalendarDays, startOfDay, eachDayOfInterval, isWeekend } from 'date-fns';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Filler, Tooltip, Legend } from 'chart.js';
@@ -4320,7 +4321,7 @@ const PhaseSchedule: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const queryClient = useQueryClient();
   const { confirm, toast } = useTitanFeedback();
-  const [viewMode, setViewMode] = useState<'gantt' | 'grid'>('grid');
+  const [viewMode, setViewMode] = useState<'gantt' | 'grid' | 'weekly'>('grid');
   const [gridMode, setGridMode] = useState<GridMode>('cost');
   // Shift settings per trade segment — shared localStorage key with CostTypeSchedule for consistency
   const shiftStorageKey = `costTypeSchedule_shifts_${projectId}`;
@@ -5075,7 +5076,7 @@ const PhaseSchedule: React.FC = () => {
         a.click();
         window.URL.revokeObjectURL(url);
       } else {
-        const view = viewMode;
+        const view = viewMode === 'weekly' ? 'grid' : viewMode;
         const response = await phaseScheduleApi.downloadPdf(
           Number(projectId), view, exportMode, itemIds, exportGroups, exportShift,
         );
@@ -5408,8 +5409,9 @@ const PhaseSchedule: React.FC = () => {
         <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
           <button onClick={() => setViewMode('gantt')} style={{ padding: '0.3rem 0.6rem', border: 'none', backgroundColor: viewMode === 'gantt' ? '#3b82f6' : 'white', color: viewMode === 'gantt' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Gantt</button>
           <button onClick={() => setViewMode('grid')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: viewMode === 'grid' ? '#3b82f6' : 'white', color: viewMode === 'grid' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Grid</button>
+          <button onClick={() => setViewMode('weekly')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: viewMode === 'weekly' ? '#7c3aed' : 'white', color: viewMode === 'weekly' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Weekly Prod</button>
         </div>
-        {viewMode === 'grid' && (
+        {(viewMode === 'grid') && (
           <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
             <button onClick={() => setGridMode('cost')} style={{ padding: '0.3rem 0.6rem', border: 'none', backgroundColor: gridMode === 'cost' ? '#10b981' : 'white', color: gridMode === 'cost' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>$ Cost</button>
             <button onClick={() => setGridMode('qty')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'qty' ? '#10b981' : 'white', color: gridMode === 'qty' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Qty</button>
@@ -5417,7 +5419,7 @@ const PhaseSchedule: React.FC = () => {
             <button onClick={() => setGridMode('billable')} title="Customer billing forecast using labor rates + cost-type markup %" style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'billable' ? '#db2777' : 'white', color: gridMode === 'billable' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>$ Billable</button>
           </div>
         )}
-        {viewMode === 'grid' && (
+        {(viewMode === 'grid') && (
           <div title="Distribution zoom — bucket size for the distribution columns" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
             <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Zoom</span>
             <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
@@ -5569,7 +5571,16 @@ const PhaseSchedule: React.FC = () => {
           )}
         </div>
       ) : (
-        viewMode === 'gantt'
+        viewMode === 'weekly'
+          ? <div style={{ height: 'calc(100vh - 195px)', minHeight: 480, display: 'flex', flexDirection: 'column' }}>
+              <WeeklyProductionGrid
+                projectId={Number(projectId)}
+                projectStartDate={project?.start_date ?? project?.effective_start_date}
+                projectEndDate={project?.end_date ?? project?.effective_end_date}
+                externalItems={filteredItems as any}
+              />
+            </div>
+          : viewMode === 'gantt'
           ? <GanttView items={filteredItems} allItems={scheduleItems} months={months} projectId={Number(projectId)} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
               selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
               filterText={filterText} onFilterChange={setFilterText}

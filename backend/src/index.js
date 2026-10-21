@@ -32,6 +32,7 @@ const { runTradeShowReminders } = require('./jobs/tradeShowReminders');
 const { runTradeShowAutoComplete } = require('./jobs/tradeShowAutoComplete');
 const { runOpportunityReminders } = require('./jobs/opportunityReminders');
 const { runStaleOpportunityStartDate } = require('./jobs/staleOpportunityStartDate');
+const { runPhaseProductionSnapshot } = require('./jobs/phaseProductionSnapshot');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -149,6 +150,7 @@ const itemCommentRoutes = require('./routes/itemComments');
 const plumbingDesignRoutes = require('./routes/plumbingDesigns');
 const scopeJobMappingRoutes = require('./routes/scopeJobMappings');
 const meetingRoutes = require('./routes/meetings');
+const weeklyProductionRoutes = require('./routes/weeklyProduction');
 
 const app = express();
 const server = http.createServer(app);
@@ -241,6 +243,7 @@ app.use('/api/daily-reports', dailyReportRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api', scheduleSegmentRoutes);
 app.use('/api/phase-schedule', phaseScheduleRoutes);
+app.use('/api/weekly-production', weeklyProductionRoutes);
 app.use('/api/phase-schedule-links', phaseScheduleLinkRoutes);
 app.use('/api/project-labor-rates', projectLaborRateRoutes);
 app.use('/api/stratus', stratusRoutes);
@@ -494,6 +497,14 @@ server.listen(config.port, () => {
     });
   }, { timezone: 'America/New_York' });
   console.log(`  ✅ Trade show auto-complete cron scheduled (nightly 1:00 AM ET)`);
+
+  // Phase production hour snapshot - every Sunday at 11:00 PM ET
+  cron.schedule('0 23 * * 0', () => {
+    runPhaseProductionSnapshot().catch(err => {
+      console.error('[Cron] Phase production snapshot failed:', err);
+    });
+  }, { timezone: 'America/New_York' });
+  console.log(`  ✅ Phase production snapshot cron scheduled (Sundays 11:00 PM ET)`);
 
   // Stale presence cleanup - every 2 minutes
   const Presence = require('./models/Presence');
