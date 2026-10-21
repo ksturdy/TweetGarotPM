@@ -11,7 +11,12 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ViewListIcon from '@mui/icons-material/ViewList';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import ViewWeekIcon from '@mui/icons-material/ViewWeek';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import MeetingCalendarMonth from './MeetingCalendarMonth';
+import MeetingCalendarWeek from './MeetingCalendarWeek';
 import '../../styles/SalesPipeline.css';
 import './Meetings.css';
 
@@ -141,6 +146,7 @@ const MeetingList: React.FC = () => {
   const [seriesOpen, setSeriesOpen] = useState(true);
   const [showSeriesDialog, setShowSeriesDialog] = useState(false);
   const [editingSeries, setEditingSeries] = useState<MeetingSeries | undefined>();
+  const [viewMode, setViewMode] = useState<'list' | 'week' | 'month'>('list');
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -203,10 +209,29 @@ const MeetingList: React.FC = () => {
           {project && <div className="sales-subtitle">{project.name}</div>}
         </div>
         <div className="sales-header-actions">
-          <button className="sales-btn sales-btn-secondary" onClick={() => { setEditingSeries(undefined); setShowSeriesDialog(true); }}>
+          {/* View toggle */}
+          <div style={{ display: 'flex', border: '1px solid #d1d5db', borderRadius: 6, overflow: 'hidden', height: 36 }}>
+            {([['list', <ViewListIcon fontSize="small" />, 'List'], ['week', <ViewWeekIcon fontSize="small" />, 'Week'], ['month', <CalendarMonthIcon fontSize="small" />, 'Month']] as const).map(([mode, icon, label]) => (
+              <button
+                key={mode}
+                title={`${label} view`}
+                onClick={() => setViewMode(mode)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  padding: '0 12px', fontSize: 13, fontWeight: 500, border: 'none', cursor: 'pointer',
+                  borderLeft: mode !== 'list' ? '1px solid #d1d5db' : 'none',
+                  background: viewMode === mode ? '#1e3a5f' : '#fff',
+                  color: viewMode === mode ? '#fff' : '#374151',
+                }}
+              >
+                {icon} {label}
+              </button>
+            ))}
+          </div>
+          <button className="sales-btn sales-btn-secondary" style={{ height: 36, boxSizing: 'border-box' }} onClick={() => { setEditingSeries(undefined); setShowSeriesDialog(true); }}>
             <RepeatIcon fontSize="small" /> New Series
           </button>
-          <button className="sales-btn sales-btn-primary" onClick={() => navigate(`/projects/${projectId}/meetings/new`)}>
+          <button className="sales-btn sales-btn-primary" style={{ height: 36, boxSizing: 'border-box' }} onClick={() => navigate(`/projects/${projectId}/meetings/new`)}>
             <AddIcon fontSize="small" /> New Meeting
           </button>
         </div>
@@ -277,7 +302,17 @@ const MeetingList: React.FC = () => {
         </div>
       )}
 
-      {/* Filter tabs */}
+      {/* Calendar views */}
+      {viewMode === 'month' && (
+        <MeetingCalendarMonth meetings={meetings} projectId={projectId!} onNavigate={navigate} />
+      )}
+      {viewMode === 'week' && (
+        <MeetingCalendarWeek meetings={meetings} projectId={projectId!} onNavigate={navigate} />
+      )}
+
+      {/* List view: filter tabs + table */}
+      {viewMode === 'list' && <>
+
       <div className="filter-tabs" style={{ marginBottom: 16 }}>
         {[
           { key: 'all', label: `All (${meetings.length})` },
@@ -383,6 +418,7 @@ const MeetingList: React.FC = () => {
           </div>
         </div>
       )}
+      </>}
 
       {showSeriesDialog && (
         <SeriesDialog

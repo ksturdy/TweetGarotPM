@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { meetingsApi, MeetingSeries, MEETING_TYPES, RECURRENCE_LABELS } from '../../services/meetings';
 import { projectsApi } from '../../services/projects';
@@ -13,6 +13,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 const MeetingForm: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id?: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useTitanFeedback();
   const queryClient = useQueryClient();
   const isEdit = Boolean(id);
@@ -23,8 +24,8 @@ const MeetingForm: React.FC = () => {
     title: '',
     meeting_type: 'project_meeting',
     series_id: '',
-    scheduled_date: '',
-    start_time: '',
+    scheduled_date: searchParams.get('date') || '',
+    start_time: searchParams.get('time') || '',
     end_time: '',
     location: '',
     description: '',
