@@ -100,6 +100,16 @@ const MeetingDetail: React.FC = () => {
     onError: () => toast.error('Failed to schedule next meeting.'),
   });
 
+  const scheduleFollowupMutation = useMutation({
+    mutationFn: () => meetingsApi.scheduleFollowup(Number(id)),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['meetings', Number(projectId)] });
+      toast.success(`Follow-up meeting #${res.data.number} created.`);
+      navigate(`/projects/${projectId}/meetings/${res.data.id}`);
+    },
+    onError: () => toast.error('Failed to create follow-up meeting.'),
+  });
+
   if (isLoading) return <div className="loading">Loading…</div>;
   if (!meeting) return <div className="loading">Meeting not found.</div>;
 
@@ -196,6 +206,18 @@ const MeetingDetail: React.FC = () => {
                 disabled={scheduleNextMutation.isPending}>
                 <NextPlanIcon style={{ fontSize: 15, marginRight: 4 }} />
                 {scheduleNextMutation.isPending ? 'Scheduling…' : 'Schedule Next Meeting'}
+              </button>
+            )}
+            {(meeting.status === 'published' || meeting.status === 'closed') && !meeting.series_id && (
+              <button className="sales-btn sales-btn-primary"
+                style={{ background: '#f97316', border: 'none' }}
+                onClick={async () => {
+                  const ok = await confirm({ title: 'Schedule Follow-up Meeting?', message: 'A new draft meeting will be created for next week. Attendees and open action items will be carried forward.', confirmText: 'Create Follow-up' });
+                  if (ok) scheduleFollowupMutation.mutate();
+                }}
+                disabled={scheduleFollowupMutation.isPending}>
+                <NextPlanIcon style={{ fontSize: 15, marginRight: 4 }} />
+                {scheduleFollowupMutation.isPending ? 'Creating…' : 'Schedule Follow-up'}
               </button>
             )}
           </div>

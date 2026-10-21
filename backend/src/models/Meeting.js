@@ -217,6 +217,66 @@ const Meeting = {
     await db.query('DELETE FROM meetings WHERE id = $1', [id]);
   },
 
+  // Carry-forward: create follow-up for a one-off (non-series) meeting (+1 week)
+  async scheduleFollowup(meetingId, tenantId, userId) {
+    const current = await this.findById(meetingId);
+    if (!current) throw new Error('Meeting not found');
+
+    const currentDate = current.scheduled_date ? new Date(current.scheduled_date) : new Date();
+    const nextDate = new Date(currentDate);
+    nextDate.setDate(nextDate.getDate() + 7);
+    const nextDateStr = nextDate.toISOString().split('T')[0];
+
+    const nextNumber = await this.getNextNumber(current.project_id);
+
+    const newResult = await db.query(
+      `INSERT INTO meetings
+         (tenant_id, project_id, previous_meeting_id, number, title, meeting_type,
+          scheduled_date, start_time, end_time, location, description, created_by, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'draft')
+       RETURNING id`,
+      [tenantId, current.project_id, meetingId, nextNumber,
+       current.title, current.meeting_type, nextDateStr, current.start_time,
+       current.end_time, current.location, null, userId]
+    );
+    const newId = newResult.rows[0].id;
+
+    if (current.attendees.length) {
+      const attendeeValues = current.attendees.map((a, i) => {
+        const base = i * 5;
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`;
+      }).join(', ');
+      const attendeeParams = current.attendees.flatMap(a => [newId, a.user_id, a.contact_id, a.name, a.company]);
+      await db.query(
+        `INSERT INTO meeting_attendees (meeting_id, user_id, contact_id, name, company) VALUES ${attendeeValues}`,
+        attendeeParams
+      );
+    }
+
+    const agendaIdMap = {};
+    for (const item of current.agenda_items) {
+      const agResult = await db.query(
+        `INSERT INTO meeting_agenda_items (meeting_id, order_index, title) VALUES ($1, $2, $3) RETURNING id`,
+        [newId, item.order_index, item.title]
+      );
+      agendaIdMap[item.id] = agResult.rows[0].id;
+    }
+
+    const openItems = current.action_items.filter(ai => ['open', 'in_progress'].includes(ai.status));
+    for (const ai of openItems) {
+      const originatedId = ai.originated_meeting_id || meetingId;
+      const newAgendaItemId = ai.agenda_item_id ? (agendaIdMap[ai.agenda_item_id] || null) : null;
+      await db.query(
+        `INSERT INTO meeting_action_items
+           (meeting_id, agenda_item_id, originated_meeting_id, description, assignee_id, assignee_name, due_date, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [newId, newAgendaItemId, originatedId, ai.description, ai.assignee_id, ai.assignee_name, ai.due_date, ai.status]
+      );
+    }
+
+    return this.findById(newId);
+  },
+
   // Carry-forward: create next occurrence in a series
   async scheduleNext(meetingId, tenantId, userId) {
     const current = await this.findById(meetingId);

@@ -162,6 +162,15 @@ router.post('/:id/schedule-next', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.post('/:id/schedule-followup', async (req, res, next) => {
+  try {
+    const meeting = await Meeting.findById(req.params.id);
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+    const followup = await Meeting.scheduleFollowup(req.params.id, req.tenantId, req.user.id);
+    res.status(201).json(followup);
+  } catch (err) { next(err); }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try {
     await Meeting.delete(req.params.id);

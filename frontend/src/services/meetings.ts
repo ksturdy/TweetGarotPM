@@ -138,6 +138,8 @@ export const meetingsApi = {
     api.post<Meeting>(`/meetings/${id}/close`),
   scheduleNext: (id: number) =>
     api.post<Meeting>(`/meetings/${id}/schedule-next`),
+  scheduleFollowup: (id: number) =>
+    api.post<Meeting>(`/meetings/${id}/schedule-followup`),
   delete: (id: number) =>
     api.delete(`/meetings/${id}`),
 
