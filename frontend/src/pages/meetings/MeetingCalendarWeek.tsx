@@ -54,7 +54,7 @@ const MeetingCalendarWeek: React.FC<Props> = ({ meetings, projectId, onNavigate 
 
   const byDay = (date: Date) => {
     const key = format(date, 'yyyy-MM-dd');
-    return meetings.filter(m => m.scheduled_date === key);
+    return meetings.filter(m => m.scheduled_date?.substring(0, 10) === key);
   };
 
   const handleSlotClick = (date: Date, hour: number) => {

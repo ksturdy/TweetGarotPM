@@ -39,7 +39,7 @@ const MeetingCalendarMonth: React.FC<Props> = ({ meetings, projectId, onNavigate
 
   const byDate = (date: Date) => {
     const key = format(date, 'yyyy-MM-dd');
-    return meetings.filter(m => m.scheduled_date === key)
+    return meetings.filter(m => m.scheduled_date?.substring(0, 10) === key)
       .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
   };
 
