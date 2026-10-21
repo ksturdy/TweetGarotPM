@@ -42,9 +42,15 @@ const RecentActivityWidget: React.FC<WidgetProps> = () => {
               <div className="activity-feed-body">
                 <div className="activity-feed-text">
                   <strong>{item.actorName || 'Someone'}</strong>
-                  {' '}{item.action === 'created' ? 'created' : 'updated'}{' '}
-                  {getActivityLabel(item.type).toLowerCase()}
-                  {' '}<strong>{item.title}</strong>
+                  {item.action === 'status_changed' ? (
+                    <>{' '}changed {getActivityLabel(item.type).toLowerCase()}{' '}
+                    <strong>{item.title}</strong>
+                    {' '}to <strong>{item.newStatus}</strong></>
+                  ) : (
+                    <>{' '}{item.action === 'created' ? 'created' : 'updated'}{' '}
+                    {getActivityLabel(item.type).toLowerCase()}
+                    {' '}<strong>{item.title}</strong></>
+                  )}
                 </div>
                 {item.parentName && (
                   <div className="activity-feed-project">{item.parentName}</div>

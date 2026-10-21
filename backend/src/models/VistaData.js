@@ -2266,6 +2266,16 @@ const VistaData = {
             name: vpContract.description || vpContract.contract_number,
             action: isNew ? 'created' : 'updated'
           });
+
+          try {
+            await client.query(
+              `INSERT INTO project_activity_log (tenant_id, project_id, action, actor_name, source)
+               VALUES ($1, $2, $3, 'Vista Sync', 'vista_sync')`,
+              [tenantId, projectId, isNew ? 'created' : 'updated']
+            );
+          } catch (logError) {
+            console.warn(`[Vista Import] Activity log failed for project ${projectId}: ${logError.message}`);
+          }
         } catch (rowError) {
           // Rollback to savepoint so the transaction stays valid for remaining rows
           await client.query('ROLLBACK TO SAVEPOINT import_contract_row');
@@ -2413,6 +2423,20 @@ const VistaData = {
             fields: changedFields
           });
           console.log(`[Vista Sync] Contract ${row.contract_number}: ${changedFields.join(', ')}`);
+
+          try {
+            const logAction = statusChanged ? 'status_changed' : 'updated';
+            await client.query(
+              `INSERT INTO project_activity_log (tenant_id, project_id, action, old_status, new_status, changed_fields, actor_name, source)
+               VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'Vista Sync', 'vista_sync')`,
+              [tenantId, row.project_id, logAction,
+               statusChanged ? row.titan_status : null,
+               statusChanged ? mappedStatus : null,
+               JSON.stringify(changedFields)]
+            );
+          } catch (logError) {
+            console.warn(`[Vista Sync] Activity log failed for project ${row.project_id}: ${logError.message}`);
+          }
         } catch (rowError) {
           await client.query('ROLLBACK TO SAVEPOINT sync_contract_row');
           console.error(`[Vista Sync] Failed to sync contract ${row.contract_number}: ${rowError.message}`);
@@ -2529,6 +2553,20 @@ const VistaData = {
             fields: changedFields
           });
           console.log(`[Vista Sync] WO ${row.work_order_number}: ${changedFields.join(', ')}`);
+
+          try {
+            const logAction = statusChanged ? 'status_changed' : 'updated';
+            await client.query(
+              `INSERT INTO project_activity_log (tenant_id, project_id, action, old_status, new_status, changed_fields, actor_name, source)
+               VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'Vista Sync', 'vista_sync')`,
+              [tenantId, row.project_id, logAction,
+               statusChanged ? row.titan_status : null,
+               statusChanged ? mappedStatus : null,
+               JSON.stringify(changedFields)]
+            );
+          } catch (logError) {
+            console.warn(`[Vista Sync] Activity log failed for project ${row.project_id}: ${logError.message}`);
+          }
         } catch (rowError) {
           await client.query('ROLLBACK TO SAVEPOINT sync_wo_row');
           console.error(`[Vista Sync] Failed to sync WO ${row.work_order_number}: ${rowError.message}`);
@@ -2660,6 +2698,16 @@ const VistaData = {
             name: vpWorkOrder.description || vpWorkOrder.work_order_number,
             action: isNew ? 'created' : 'updated'
           });
+
+          try {
+            await client.query(
+              `INSERT INTO project_activity_log (tenant_id, project_id, action, actor_name, source)
+               VALUES ($1, $2, $3, 'Vista Sync', 'vista_sync')`,
+              [tenantId, projectId, isNew ? 'created' : 'updated']
+            );
+          } catch (logError) {
+            console.warn(`[Vista Import] Activity log failed for project ${projectId}: ${logError.message}`);
+          }
         } catch (rowError) {
           // Rollback to savepoint so the transaction stays valid for remaining rows
           await client.query('ROLLBACK TO SAVEPOINT import_wo_row');

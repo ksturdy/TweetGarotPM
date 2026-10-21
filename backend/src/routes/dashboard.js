@@ -276,19 +276,19 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             p.name as title,
             NULL::text as parent_name,
             NULL::integer as parent_id,
-            p.status,
-            COALESCE(
-              updater.first_name || ' ' || updater.last_name,
-              e.first_name || ' ' || e.last_name
-            ) as actor_name,
-            p.created_at,
-            p.updated_at,
-            'created' as action
-          FROM projects p
-          LEFT JOIN users updater ON p.updated_by = updater.id
+            COALESCE(pal.new_status, p.status) as status,
+            COALESCE(e.first_name || ' ' || e.last_name, pal.actor_name) as actor_name,
+            pal.created_at,
+            pal.created_at as updated_at,
+            pal.action,
+            pal.old_status,
+            pal.new_status,
+            pal.changed_fields
+          FROM project_activity_log pal
+          JOIN projects p ON pal.project_id = p.id
           LEFT JOIN employees e ON p.manager_id = e.id
-          WHERE p.tenant_id = $1
-          ORDER BY p.created_at DESC
+          WHERE pal.tenant_id = $1
+          ORDER BY pal.created_at DESC
           LIMIT 20
         )
         UNION ALL
@@ -306,7 +306,10 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             ) as actor_name,
             o.created_at,
             o.updated_at,
-            'created' as action
+            'created' as action,
+            NULL::text as old_status,
+            NULL::text as new_status,
+            NULL::jsonb as changed_fields
           FROM opportunities o
           LEFT JOIN users updater ON o.updated_by = updater.id
           LEFT JOIN users creator ON o.created_by = creator.id
@@ -327,7 +330,10 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             u.first_name || ' ' || u.last_name as actor_name,
             est.created_at,
             est.updated_at,
-            'created' as action
+            'created' as action,
+            NULL::text as old_status,
+            NULL::text as new_status,
+            NULL::jsonb as changed_fields
           FROM estimates est
           LEFT JOIN users u ON est.created_by = u.id
           WHERE est.tenant_id = $1
@@ -346,7 +352,10 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             u.first_name || ' ' || u.last_name as actor_name,
             r.created_at,
             r.updated_at,
-            'created' as action
+            'created' as action,
+            NULL::text as old_status,
+            NULL::text as new_status,
+            NULL::jsonb as changed_fields
           FROM rfis r
           JOIN projects p ON r.project_id = p.id
           LEFT JOIN users u ON r.created_by = u.id
@@ -366,7 +375,10 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             u.first_name || ' ' || u.last_name as actor_name,
             s.created_at,
             s.updated_at,
-            'created' as action
+            'created' as action,
+            NULL::text as old_status,
+            NULL::text as new_status,
+            NULL::jsonb as changed_fields
           FROM submittals s
           JOIN projects p ON s.project_id = p.id
           LEFT JOIN users u ON s.created_by = u.id
@@ -386,7 +398,10 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             u.first_name || ' ' || u.last_name as actor_name,
             co.created_at,
             co.updated_at,
-            'created' as action
+            'created' as action,
+            NULL::text as old_status,
+            NULL::text as new_status,
+            NULL::jsonb as changed_fields
           FROM change_orders co
           JOIN projects p ON co.project_id = p.id
           LEFT JOIN users u ON co.created_by = u.id
@@ -406,7 +421,10 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             u.first_name || ' ' || u.last_name as actor_name,
             dr.created_at,
             dr.updated_at,
-            'created' as action
+            'created' as action,
+            NULL::text as old_status,
+            NULL::text as new_status,
+            NULL::jsonb as changed_fields
           FROM daily_reports dr
           JOIN projects p ON dr.project_id = p.id
           LEFT JOIN users u ON dr.created_by = u.id
@@ -430,6 +448,9 @@ router.get('/recent-activity', authenticate, async (req, res) => {
       status: row.status,
       actorName: row.actor_name,
       action: row.action,
+      oldStatus: row.old_status || null,
+      newStatus: row.new_status || null,
+      changedFields: row.changed_fields || [],
       timestamp: row.created_at,
     }));
 

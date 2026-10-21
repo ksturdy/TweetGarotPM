@@ -19,7 +19,10 @@ export interface ActivityItem {
   parentId: number | null;
   status: string | null;
   actorName: string | null;
-  action: 'created' | 'updated' | 'opened';
+  action: 'created' | 'updated' | 'status_changed' | 'opened';
+  oldStatus: string | null;
+  newStatus: string | null;
+  changedFields: string[];
   timestamp: string;
 }
 
