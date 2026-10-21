@@ -73,6 +73,7 @@ const GRID_COLUMN_DEFS: ColumnDef[] = [
   { key: 'remHrs', label: 'Hrs', group: 'Remaining', hideable: true },
   { key: 'remCost', label: 'Cost', group: 'Remaining', hideable: true },
   { key: 'remRate', label: 'Rate', group: 'Remaining', hideable: true },
+  { key: 'unalloc', label: 'Unalloc', group: 'Remaining', hideable: true },
   { key: 'rate', label: 'Rate', group: 'Billing', hideable: true },
   { key: 'start', label: 'Start', group: 'Schedule', hideable: true },
   { key: 'end', label: 'End', group: 'Schedule', hideable: true },
@@ -2491,7 +2492,7 @@ const GRID_COL_DEFAULTS = {
   // Projected group
   projQty: 62, projLf: 62, projHrs: 62, projCostField: 78, projCostVista: 78, projPi: 50,
   // Remaining group
-  remQty: 62, remLf: 62, remHrs: 62, remCost: 78, remRate: 68,
+  remQty: 62, remLf: 62, remHrs: 62, remCost: 78, remRate: 68, unalloc: 72,
   // Billing
   rate: 130, gm: 58,
   // Schedule
@@ -2734,7 +2735,7 @@ const GridView: React.FC<{
   const estCols = ['estQty', 'estLf', 'uom', 'estHrs', 'estCost', 'estRate', 'estPi'];
   const jtdCols = ['pctComp', 'jtdQty', 'jtdLf', 'jtdHrs', 'jtdCost', 'jtdRate', 'jtdPi'];
   const projCols = ['projQty', 'projLf', 'projHrs', 'projCostField', 'projCostVista', 'projPi'];
-  const remCols = ['remQty', 'remLf', 'remHrs', 'remCost', 'remRate'];
+  const remCols = ['remQty', 'remLf', 'remHrs', 'remCost', 'remRate', 'unalloc'];
   const billCols = mode === 'billable' ? ['rate', 'gm'] : ['rate'];
   const schedCols = ['start', 'end', 'dur', 'pred', 'contour'];
   const estGroupW = estCols.reduce((s, c) => s + vw(c), 0);
@@ -2831,6 +2832,7 @@ const GridView: React.FC<{
           {gv('remHrs') && <col style={{ width: colWidths.remHrs }} />}
           {gv('remCost') && <col style={{ width: colWidths.remCost }} />}
           {gv('remRate') && <col style={{ width: colWidths.remRate }} />}
+          {gv('unalloc') && <col style={{ width: colWidths.unalloc }} />}
           {gv('rate') && <col style={{ width: colWidths.rate }} />}
           {mode === 'billable' && <col style={{ width: colWidths.gm }} />}
           {gv('start') && <col style={{ width: colWidths.start }} />}
@@ -2926,8 +2928,9 @@ const GridView: React.FC<{
             {gv('remQty') && <th data-col="remQty" onContextMenu={e => gridHeaderContextMenu(e, 'remQty', 'Rem Qty')} style={thStyle(colWidths.remQty, { background: COL_GROUP.rem.hdr })}>Qty{resizeHandle('remQty')}</th>}
             {gv('remLf') && <th data-col="remLf" onContextMenu={e => gridHeaderContextMenu(e, 'remLf', 'Rem LF')} style={thStyle(colWidths.remLf, { background: COL_GROUP.rem.hdr })}>LF{resizeHandle('remLf')}</th>}
             {gv('remHrs') && <th data-col="remHrs" onContextMenu={e => gridHeaderContextMenu(e, 'remHrs', 'Rem Hrs')} style={thStyle(colWidths.remHrs, { background: COL_GROUP.rem.hdr })}>Hrs{resizeHandle('remHrs')}</th>}
-            {gv('remCost') && <th data-col="remCost" onContextMenu={e => gridHeaderContextMenu(e, 'remCost', 'Rem Cost')} style={thStyle(colWidths.remCost, { background: COL_GROUP.rem.hdr, borderRight: gv('remRate') ? '1px solid #cbd5e1' : '2px solid #94a3b8' })}>Cost{resizeHandle('remCost')}</th>}
-            {gv('remRate') && <th data-col="remRate" onContextMenu={e => gridHeaderContextMenu(e, 'remRate', 'Rem Rate')} style={thStyle(colWidths.remRate, { background: COL_GROUP.rem.hdr, borderRight: '2px solid #94a3b8' })}>Rate{resizeHandle('remRate')}</th>}
+            {gv('remCost') && <th data-col="remCost" onContextMenu={e => gridHeaderContextMenu(e, 'remCost', 'Rem Cost')} style={thStyle(colWidths.remCost, { background: COL_GROUP.rem.hdr, borderRight: gv('remRate') ? '1px solid #cbd5e1' : gv('unalloc') ? '1px solid #cbd5e1' : '2px solid #94a3b8' })}>Cost{resizeHandle('remCost')}</th>}
+            {gv('remRate') && <th data-col="remRate" onContextMenu={e => gridHeaderContextMenu(e, 'remRate', 'Rem Rate')} style={thStyle(colWidths.remRate, { background: COL_GROUP.rem.hdr, borderRight: gv('unalloc') ? '1px solid #cbd5e1' : '2px solid #94a3b8' })}>Rate{resizeHandle('remRate')}</th>}
+            {gv('unalloc') && <th data-col="unalloc" onContextMenu={e => gridHeaderContextMenu(e, 'unalloc', 'Unallocated')} style={thStyle(colWidths.unalloc, { background: COL_GROUP.rem.hdr, borderRight: '2px solid #94a3b8' })}>Unalloc{resizeHandle('unalloc')}</th>}
             {/* Billing group */}
             {gv('rate') && <th data-col="rate" onContextMenu={e => gridHeaderContextMenu(e, 'rate', 'Rate')} style={thStyle(colWidths.rate, { background: COL_GROUP.bill.hdr, borderRight: mode === 'billable' ? '1px solid #e2e8f0' : '2px solid #94a3b8' })}>Rate{resizeHandle('rate')}</th>}
             {mode === 'billable' && <th style={thStyle(colWidths.gm, { background: COL_GROUP.bill.hdr, borderRight: '2px solid #94a3b8', textAlign: 'center' })}>GM%</th>}
@@ -3077,8 +3080,9 @@ const GridView: React.FC<{
                 {gv('remQty') && <td style={{ ...tdTot, width: colWidths.remQty, background: COL_GROUP.rem.cell }}>{totRemQty > 0 ? Math.round(totRemQty).toLocaleString() : ''}</td>}
                 {gv('remLf') && <td style={{ ...tdTot, width: colWidths.remLf, background: COL_GROUP.rem.cell }}>{(() => { const v = items.reduce((s, i) => s + Math.max(0, parseNum(i.stratus_qty_lf) - parseNum(i.stratus_installed_lf)), 0); return v > 0 ? Math.round(v).toLocaleString() : ''; })()}</td>}
                 {gv('remHrs') && <td style={{ ...tdTot, width: colWidths.remHrs, background: COL_GROUP.rem.cell }}>{fmtHrs(totRemHrs)}</td>}
-                {gv('remCost') && <td style={{ ...tdTot, width: colWidths.remCost, borderRight: gv('remRate') ? '1px solid #cbd5e1' : '2px solid #94a3b8', background: COL_GROUP.rem.cell }}>{fmtCompact(totRemCost)}</td>}
-                {gv('remRate') && <td style={{ ...tdTot, width: colWidths.remRate, borderRight: '2px solid #94a3b8', background: COL_GROUP.rem.cell }}>{totRemHrs > 0 ? `$${Math.round(totRemCost / totRemHrs)}/hr` : ''}</td>}
+                {gv('remCost') && <td style={{ ...tdTot, width: colWidths.remCost, borderRight: gv('remRate') ? '1px solid #cbd5e1' : gv('unalloc') ? '1px solid #cbd5e1' : '2px solid #94a3b8', background: COL_GROUP.rem.cell }}>{fmtCompact(totRemCost)}</td>}
+                {gv('remRate') && <td style={{ ...tdTot, width: colWidths.remRate, borderRight: gv('unalloc') ? '1px solid #cbd5e1' : '2px solid #94a3b8', background: COL_GROUP.rem.cell }}>{totRemHrs > 0 ? `$${Math.round(totRemCost / totRemHrs)}/hr` : ''}</td>}
+                {gv('unalloc') && <td style={{ ...tdTot, width: colWidths.unalloc, borderRight: '2px solid #94a3b8', background: COL_GROUP.rem.cell }}></td>}
                 {/* Billing totals */}
                 {gv('rate') && <td style={{ ...tdTot, width: colWidths.rate, borderRight: mode === 'billable' ? '1px solid #e2e8f0' : '2px solid #94a3b8', background: COL_GROUP.bill.cell }}></td>}
                 {mode === 'billable' && (() => {
@@ -3237,8 +3241,9 @@ const CostTypeSummaryRow: React.FC<{
       {sv('remQty') && <td style={{ ...tdS, width: colWidths.remQty, backgroundColor: COL_GROUP.rem.cell }}>{group.remQty > 0 ? Math.round(group.remQty).toLocaleString() : ''}</td>}
       {sv('remLf') && <td style={{ ...tdS, width: colWidths.remLf, backgroundColor: COL_GROUP.rem.cell }}>{group.remLf > 0 ? Math.round(group.remLf).toLocaleString() : ''}</td>}
       {sv('remHrs') && <td style={{ ...tdS, width: colWidths.remHrs, backgroundColor: COL_GROUP.rem.cell }}>{fmtHrs(group.remHrs)}</td>}
-      {sv('remCost') && <td style={{ ...tdS, width: colWidths.remCost, borderRight: sv('remRate') ? '1px solid #cbd5e1' : '2px solid #94a3b8', backgroundColor: COL_GROUP.rem.cell }}>{fmtCompact(group.remCost)}</td>}
-      {sv('remRate') && <td style={{ ...tdS, width: colWidths.remRate, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.rem.cell }}>{group.remHrs > 0 ? `$${Math.round(group.remCost / group.remHrs)}/hr` : ''}</td>}
+      {sv('remCost') && <td style={{ ...tdS, width: colWidths.remCost, borderRight: sv('remRate') ? '1px solid #cbd5e1' : sv('unalloc') ? '1px solid #cbd5e1' : '2px solid #94a3b8', backgroundColor: COL_GROUP.rem.cell }}>{fmtCompact(group.remCost)}</td>}
+      {sv('remRate') && <td style={{ ...tdS, width: colWidths.remRate, borderRight: sv('unalloc') ? '1px solid #cbd5e1' : '2px solid #94a3b8', backgroundColor: COL_GROUP.rem.cell }}>{group.remHrs > 0 ? `$${Math.round(group.remCost / group.remHrs)}/hr` : ''}</td>}
+      {sv('unalloc') && <td style={{ ...tdS, width: colWidths.unalloc, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.rem.cell }}></td>}
       {/* Billing */}
       {sv('rate') && <td style={{ ...tdS, width: colWidths.rate, borderRight: mode === 'billable' ? '1px solid #e2e8f0' : '2px solid #94a3b8', backgroundColor: COL_GROUP.bill.cell }}></td>}
       {mode === 'billable' && (() => {
@@ -3294,6 +3299,7 @@ const GridRow: React.FC<{
   onToggleSelection: (id: number) => void;
   hiddenCols: Set<string>;
 }> = React.memo(({ item, allItems, months, period, mode, monthlyVals, maxVal, colWidths, monthColWidth, projectId, laborRates, markupByCt, shopBurdenBillable, onUpdate, onEdit, isSelected, onToggleSelection, hiddenCols }) => {
+  const { confirm } = useTitanFeedback();
   const rv = (col: string) => !hiddenCols.has(col);
   const dur = getDuration(item.start_date, item.end_date);
   const dateLocked = (item.linked_resolved_count || 0) > 0;
@@ -3381,6 +3387,61 @@ const GridRow: React.FC<{
       onUpdate(item.id, { [field]: value } as any);
     }
   }, [item.id, item.start_date, dur, estQty, allItems, onUpdate]);
+
+  // Inline cell editing state (Cost mode + monthly period only)
+  const [editingCell, setEditingCell] = useState<string | null>(null);
+  const [cellDraft, setCellDraft] = useState('');
+  const skipBlurRef = useRef(false);
+
+  const canEditInline = mode === 'cost' && period === 'month';
+  const isManualMode = item.use_manual_values ?? false;
+  const manualVals: Record<string, number> = (item.manual_monthly_values as Record<string, number>) ?? {};
+  const allocatedManual = isManualMode
+    ? Object.values(manualVals).reduce((a, b) => a + b, 0)
+    : null;
+  const unallocated = allocatedManual !== null ? remCost - allocatedManual : null;
+
+  const handleCellClick = useCallback(async (key: string) => {
+    if (!canEditInline) return;
+    if (!isManualMode) {
+      const ok = await confirm({
+        title: 'Switch to manual entry?',
+        message: 'Titan will stop auto-distributing this row based on dates and contour. You\'ll enter costs month-by-month instead. To revert back to auto, click the Unalloc cell in the Remaining group.',
+        confirmText: 'Switch to Manual',
+      });
+      if (!ok) return;
+    }
+    setEditingCell(key);
+    const existing = manualVals[key];
+    setCellDraft(existing != null ? String(existing) : '');
+  }, [canEditInline, isManualMode, manualVals, confirm]);
+
+  // Commit the current cell value and optionally navigate to an adjacent cell.
+  // direction=null → save and close; 'next'/'prev' → save and move; 'cancel' → discard and close.
+  const commitCell = useCallback((key: string, draft: string, direction: 'next' | 'prev' | null | 'cancel') => {
+    if (direction !== 'cancel') {
+      const hasExistingManual = manualVals[key] != null;
+      if (draft.trim() !== '' || hasExistingManual) {
+        const num = parseFloat(draft.replace(/[^0-9.]/g, '')) || 0;
+        const newManual = { ...manualVals, [key]: num };
+        onUpdate(item.id, { use_manual_values: true, manual_monthly_values: newManual } as any);
+      }
+    }
+
+    if (direction === 'next' || direction === 'prev') {
+      const currentIdx = months.findIndex(m => periodKey(m, period) === key);
+      const nextIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
+      if (currentIdx !== -1 && nextIdx >= 0 && nextIdx < months.length) {
+        const nextKey = periodKey(months[nextIdx], period);
+        setEditingCell(nextKey);
+        setCellDraft(manualVals[nextKey] != null ? String(manualVals[nextKey]) : '');
+        return;
+      }
+    }
+    setEditingCell(null);
+  }, [manualVals, onUpdate, item.id, months, period]);
+
+  const handleCellCancel = useCallback(() => setEditingCell(null), []);
 
   const tdBase: React.CSSProperties = {
     padding: '0.15rem 0.2rem', borderBottom: '1px solid #cbd5e1', borderRight: '1px solid #cbd5e1',
@@ -3590,12 +3651,55 @@ const GridRow: React.FC<{
       {rv('remHrs') && <td style={{ ...tdMuted, width: colWidths.remHrs, background: bg(COL_GROUP.rem.cell) }}>
         {fmtHrs(remHrs)}
       </td>}
-      {rv('remCost') && <td style={{ ...tdData, width: colWidths.remCost, borderRight: rv('remRate') ? '1px solid #cbd5e1' : '2px solid #94a3b8', fontWeight: 500, background: bg(COL_GROUP.rem.cell) }}>
+      {rv('remCost') && <td style={{ ...tdData, width: colWidths.remCost, borderRight: rv('remRate') ? '1px solid #cbd5e1' : rv('unalloc') ? '1px solid #cbd5e1' : '2px solid #94a3b8', fontWeight: 500, background: bg(COL_GROUP.rem.cell) }}>
         {fmtCompact(remCost)}
       </td>}
-      {rv('remRate') && <td style={{ ...tdMuted, width: colWidths.remRate, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.rem.cell) }}>
+      {rv('remRate') && <td style={{ ...tdMuted, width: colWidths.remRate, borderRight: rv('unalloc') ? '1px solid #cbd5e1' : '2px solid #94a3b8', background: bg(COL_GROUP.rem.cell) }}>
         {(item.cost_types?.[0] || 0) === 1 && effLaborRate > 0 ? `$${Math.round(effLaborRate)}/hr` : '—'}
       </td>}
+      {rv('unalloc') && mode === 'cost' && (() => {
+        const over = unallocated !== null && unallocated < -0.005;
+        const done = unallocated !== null && Math.abs(unallocated) < 0.005;
+        const color = unallocated === null ? '#94a3b8'
+          : over ? '#dc2626'
+          : done ? '#059669'
+          : '#d97706';
+        const label = unallocated === null ? 'Auto'
+          : over ? `${fmtCompact(Math.abs(unallocated))} over`
+          : done ? '✓ Manual'
+          : fmtCompact(unallocated);
+        const cellBg = unallocated === null ? undefined
+          : over ? '#fef2f2'
+          : done ? '#f0fdf4'
+          : '#fffbeb';
+        const tip = unallocated === null
+          ? 'Auto-distributed via contour. Click any month cell to switch to manual entry.'
+          : over ? 'Over-allocated: reduce some month values'
+          : done ? 'Manual — fully allocated. Click to revert to auto.'
+          : `${fmtCompact(unallocated)} remaining to allocate`;
+        const isManual = unallocated !== null;
+        const handleRevertToAuto = async () => {
+          const ok = await confirm({
+            title: 'Revert to auto-distribution?',
+            message: 'All manually-entered month values for this row will be cleared. Titan will resume distributing the remaining cost automatically based on the start/end dates and contour.',
+            confirmText: 'Revert to Auto',
+            danger: true,
+          });
+          if (ok) onUpdate(item.id, { use_manual_values: false, manual_monthly_values: null } as any);
+        };
+        return (
+          <td
+            title={isManual ? 'Click to revert to auto-distribution' : tip}
+            onClick={isManual ? handleRevertToAuto : undefined}
+            style={{ ...tdData, width: colWidths.unalloc, borderRight: '2px solid #94a3b8', fontWeight: 600, color, background: cellBg ?? bg(COL_GROUP.rem.cell), fontSize: '0.65rem', cursor: isManual ? 'pointer' : 'default' }}
+          >
+            {label}
+          </td>
+        );
+      })()}
+      {rv('unalloc') && mode !== 'cost' && (
+        <td style={{ ...tdMuted, width: colWidths.unalloc, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.rem.cell) }}></td>
+      )}
 
       {/* === BILLING GROUP (Rate dropdown — labor lines only) === */}
       {rv('rate') && (() => {
@@ -3703,10 +3807,99 @@ const GridRow: React.FC<{
         const key = periodKey(m, period);
         const val = monthlyVals[key] || 0;
         const intensity = maxVal > 0 ? val / maxVal : 0;
-        const bgColor = val > 0 ? `rgba(59, 130, 246, ${0.05 + intensity * 0.25})` : (billableRowBg ?? 'transparent');
+        const isEditing = editingCell === key;
+        const hasManualEntry = isManualMode && manualVals[key] != null;
+        const rowPartiallyAllocated = isManualMode && unallocated !== null && unallocated > 0.005;
+        const bgColor = val > 0
+          ? `rgba(59, 130, 246, ${0.05 + intensity * 0.25})`
+          : rowPartiallyAllocated
+            ? 'rgba(254, 202, 202, 0.35)'
+            : (billableRowBg ?? 'transparent');
+        // Live preview: unallocated remaining as user types into this cell
+        const previewDraftNum = isEditing ? (parseFloat(cellDraft.replace(/[^0-9.]/g, '')) || 0) : 0;
+        const otherAllocated = Object.entries(manualVals).filter(([k]) => k !== key).reduce((s, [, v]) => s + v, 0);
+        const previewUnalloc = remCost - otherAllocated - previewDraftNum;
+        const previewOver = previewUnalloc < -0.005;
+        const previewFull = Math.abs(previewUnalloc) < 0.005;
+        const cellIsEmpty = isEditing && cellDraft.trim() === '';
+        const tooltipColor = previewOver ? '#ef4444' : previewFull ? '#10b981' : '#f8fafc';
+        const tooltipLabel = previewOver
+          ? `${fmtCompact(Math.abs(previewUnalloc))} over budget`
+          : previewFull ? '✓ Fully allocated'
+          : cellIsEmpty && previewUnalloc > 0.005
+          ? `↵ Enter to fill ${fmtCompact(previewUnalloc)}`
+          : `${fmtCompact(previewUnalloc)} remaining`;
+
         return (
-          <td key={key} style={{ padding: '0.15rem 0.2rem', textAlign: 'center', borderBottom: '1px solid #cbd5e1', borderRight: '1px solid #cbd5e1', fontSize: '0.63rem', backgroundColor: bgColor, whiteSpace: 'nowrap', width: monthColWidth, color: val > 0 ? '#1e293b' : '#cbd5e1' }}>
-            {val > 0 ? ((mode === 'cost' || mode === 'billable') ? fmtCompact(val) : mode === 'manpower' ? val.toFixed(1) : val.toFixed(0)) : ''}
+          <td key={key}
+            onClick={() => handleCellClick(key)}
+            style={{
+              padding: '0.15rem 0.2rem', textAlign: 'center',
+              borderBottom: '1px solid #cbd5e1', borderRight: '1px solid #cbd5e1',
+              borderLeft: hasManualEntry ? '2px solid #f59e0b' : undefined,
+              fontSize: '0.63rem', backgroundColor: bgColor,
+              whiteSpace: 'nowrap', width: monthColWidth,
+              color: val > 0 ? '#1e293b' : '#cbd5e1',
+              cursor: canEditInline ? 'text' : 'default',
+              position: isEditing ? 'relative' : undefined,
+              overflow: isEditing ? 'visible' : undefined,
+              zIndex: isEditing ? 10 : undefined,
+            }}
+          >
+            {isEditing && (
+              <div style={{
+                position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+                backgroundColor: '#0f172a', color: tooltipColor,
+                padding: '0.2rem 0.5rem', borderRadius: '4px',
+                fontSize: '0.62rem', fontWeight: 600, whiteSpace: 'nowrap',
+                pointerEvents: 'none', zIndex: 20, marginBottom: '3px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              }}>
+                {tooltipLabel}
+                <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: '4px solid #0f172a' }} />
+              </div>
+            )}
+            {isEditing ? (
+              <input
+                autoFocus
+                type="text"
+                inputMode="decimal"
+                value={cellDraft}
+                onChange={e => setCellDraft(e.target.value)}
+                onBlur={() => {
+                  if (skipBlurRef.current) { skipBlurRef.current = false; return; }
+                  commitCell(key, cellDraft, null);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const fillDraft = cellDraft.trim() === '' && previewUnalloc > 0.005
+                      ? String(Math.round(previewUnalloc * 100) / 100)
+                      : cellDraft;
+                    commitCell(key, fillDraft, null);
+                  }
+                  if (e.key === 'Escape') { e.preventDefault(); handleCellCancel(); }
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    skipBlurRef.current = true;
+                    commitCell(key, cellDraft, e.shiftKey ? 'prev' : 'next');
+                  }
+                  if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    skipBlurRef.current = true;
+                    commitCell(key, cellDraft, 'next');
+                  }
+                  if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    skipBlurRef.current = true;
+                    commitCell(key, cellDraft, 'prev');
+                  }
+                }}
+                style={{ width: '100%', border: 'none', background: 'transparent', textAlign: 'center', fontSize: '0.63rem', outline: 'none', fontFamily: 'inherit' }}
+              />
+            ) : (
+              val > 0 ? ((mode === 'cost' || mode === 'billable') ? fmtCompact(val) : mode === 'manpower' ? val.toFixed(1) : val.toFixed(0)) : ''
+            )}
           </td>
         );
       })}
