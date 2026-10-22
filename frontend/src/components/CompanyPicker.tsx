@@ -40,6 +40,8 @@ const CompanyPicker: React.FC<CompanyPickerProps> = ({
   const [showMatches, setShowMatches] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const matchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  // Only show match suggestions after the user has typed — not on initial load with existing text
+  const hasUserTyped = useRef(false);
 
   // Convert companies to SearchableSelect options (with prospect badge)
   const options = useMemo(() =>
@@ -70,7 +72,7 @@ const CompanyPicker: React.FC<CompanyPickerProps> = ({
 
   // Debounced match check when typing in manual mode
   useEffect(() => {
-    if (mode !== 'manual' || !textValue || textValue.trim().length < 2) {
+    if (mode !== 'manual' || !textValue || textValue.trim().length < 2 || !hasUserTyped.current) {
       setMatches([]);
       setShowMatches(false);
       return;
@@ -101,6 +103,7 @@ const CompanyPicker: React.FC<CompanyPickerProps> = ({
   };
 
   const switchToManual = () => {
+    hasUserTyped.current = true;
     setMode('manual');
     setExistedMsg('');
     // Pre-fill text input with what user was searching for
@@ -110,6 +113,7 @@ const CompanyPicker: React.FC<CompanyPickerProps> = ({
   };
 
   const switchToSelect = () => {
+    hasUserTyped.current = false;
     setMode('select');
     setSearchTerm('');
     setMatches([]);
@@ -273,7 +277,7 @@ const CompanyPicker: React.FC<CompanyPickerProps> = ({
         ref={inputRef}
         type="text"
         value={textValue}
-        onChange={(e) => onManualEntry(e.target.value)}
+        onChange={(e) => { hasUserTyped.current = true; onManualEntry(e.target.value); }}
         placeholder="Enter company name..."
         disabled={disabled}
         style={{ width: '100%' }}

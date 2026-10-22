@@ -282,7 +282,7 @@ const ContactModal: React.FC<ContactModalProps> = ({ customerId, customerName, c
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-container contact-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{isEditMode ? 'Edit Contact' : 'Add Contact'}</h2>
           <button className="modal-close" onClick={onClose}>&times;</button>
@@ -487,20 +487,18 @@ const ContactModal: React.FC<ContactModalProps> = ({ customerId, customerName, c
                 <div
                   style={{
                     position: 'relative',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '8px',
-                    padding: '0.75rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    padding: '6px 8px',
                     cursor: 'pointer',
                     background: 'white',
+                    fontSize: '13px',
                     transition: 'all 0.2s'
                   }}
                   onClick={() => setShowDropdown(!showDropdown)}
                 >
                   {selectedManager ? (
-                    <div>
-                      {selectedManager.first_name} {selectedManager.last_name}
-                      {selectedManager.title && <span style={{ color: '#6b7280', marginLeft: '0.5rem' }}>({selectedManager.title})</span>}
-                    </div>
+                    <div>{selectedManager.first_name} {selectedManager.last_name}</div>
                   ) : (
                     <div style={{ color: '#9ca3af' }}>None (Top Level)</div>
                   )}
@@ -514,8 +512,8 @@ const ContactModal: React.FC<ContactModalProps> = ({ customerId, customerName, c
                       left: 0,
                       right: 0,
                       background: 'white',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '8px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
                       boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
                       zIndex: 1000,
                       maxHeight: '300px',
@@ -531,21 +529,23 @@ const ContactModal: React.FC<ContactModalProps> = ({ customerId, customerName, c
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       style={{
-                        padding: '0.75rem',
+                        padding: '5px 8px',
                         border: 'none',
                         borderBottom: '1px solid #e5e7eb',
                         outline: 'none',
-                        fontSize: '0.95rem'
+                        fontSize: '12px',
+                        width: '100%'
                       }}
                       autoFocus
                     />
-                    <div style={{ overflowY: 'auto', maxHeight: '240px' }}>
+                    <div style={{ overflowY: 'auto', maxHeight: '200px' }}>
                       <div
                         style={{
-                          padding: '0.75rem',
+                          padding: '4px 8px',
                           cursor: 'pointer',
-                          transition: 'background 0.15s',
-                          borderBottom: '1px solid #f3f4f6',
+                          fontSize: '12px',
+                          fontStyle: 'italic',
+                          color: '#9ca3af',
                           background: !formData.reports_to ? '#f3f4f6' : 'transparent'
                         }}
                         onClick={() => {
@@ -553,13 +553,13 @@ const ContactModal: React.FC<ContactModalProps> = ({ customerId, customerName, c
                           setShowDropdown(false);
                           setSearchTerm('');
                         }}
-                        onMouseEnter={(e) => !formData.reports_to && (e.currentTarget.style.background = '#e5e7eb')}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#e5e7eb')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = !formData.reports_to ? '#f3f4f6' : 'transparent')}
                       >
-                        <strong>None (Top Level)</strong>
+                        None (Top Level)
                       </div>
                       {filteredManagers.length === 0 ? (
-                        <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280' }}>
+                        <div style={{ padding: '6px 8px', color: '#9ca3af', fontSize: '12px' }}>
                           No contacts found
                         </div>
                       ) : (
@@ -567,28 +567,21 @@ const ContactModal: React.FC<ContactModalProps> = ({ customerId, customerName, c
                           <div
                             key={mgr.id}
                             style={{
-                              padding: '0.75rem',
+                              padding: '4px 8px',
                               cursor: 'pointer',
-                              transition: 'background 0.15s',
-                              borderBottom: '1px solid #f3f4f6',
-                              background: formData.reports_to === mgr.id ? '#f3f4f6' : 'transparent'
+                              fontSize: '12px',
+                              background: formData.reports_to === mgr.id ? '#eff6ff' : 'transparent',
+                              color: formData.reports_to === mgr.id ? '#1d4ed8' : '#1f2937'
                             }}
                             onClick={() => {
                               setFormData({ ...formData, reports_to: mgr.id });
                               setShowDropdown(false);
                               setSearchTerm('');
                             }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = '#e5e7eb')}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = formData.reports_to === mgr.id ? '#f3f4f6' : 'transparent')}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = '#f3f4f6')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = formData.reports_to === mgr.id ? '#eff6ff' : 'transparent')}
                           >
-                            <div style={{ fontWeight: 600 }}>
-                              {mgr.first_name} {mgr.last_name}
-                            </div>
-                            {mgr.title && (
-                              <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '0.25rem' }}>
-                                {mgr.title}
-                              </div>
-                            )}
+                            {mgr.first_name} {mgr.last_name}
                           </div>
                         ))
                       )}

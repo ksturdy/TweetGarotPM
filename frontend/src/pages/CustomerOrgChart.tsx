@@ -5,6 +5,7 @@ import { getCustomer, getCustomerContactsHierarchy, CustomerContact } from '../s
 import ContactOrgChart, { OrgChartPerson, ContactOrgChartHandle } from '../components/customers/ContactOrgChart';
 import ContactModal from '../components/modals/ContactModal';
 import './CustomerDetail.css';
+import '../styles/SalesPipeline.css';
 
 const CustomerOrgChartPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -59,165 +60,104 @@ const CustomerOrgChartPage: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: '1.5rem', maxWidth: '100%', height: '100vh', overflow: 'auto' }}>
+    <div className="customer-detail-page">
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '1.5rem',
-        paddingBottom: '1rem',
-        borderBottom: '2px solid #e5e7eb'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button
-            onClick={() => navigate(`/customers/${id}`)}
-            style={{
-              padding: '0.5rem 1rem',
-              background: '#f3f4f6',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            ← Back
-          </button>
-          <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>
-              {customer.name} - Organizational Chart
-            </h1>
-            <p style={{ fontSize: '0.875rem', color: '#6b7280', margin: '0.25rem 0 0 0' }}>
-              {contacts.length} {contacts.length === 1 ? 'contact' : 'contacts'}
-            </p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          {/* Layout Selector */}
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>Layout:</span>
-            <div style={{ display: 'flex', gap: '4px', background: '#f3f4f6', padding: '4px', borderRadius: '6px' }}>
+      <div className="cd-header" style={{ padding: '12px 20px 0' }}>
+        <div className="sales-page-header">
+          <div className="sales-page-title">
+            <div>
               <button
-                onClick={() => setLayout('vertical')}
+                onClick={() => navigate(`/customers/${id}`)}
                 style={{
-                  padding: '0.375rem 0.75rem',
-                  background: layout === 'vertical' ? 'white' : 'transparent',
-                  color: layout === 'vertical' ? '#3b82f6' : '#6b7280',
+                  background: 'none',
                   border: 'none',
-                  borderRadius: '4px',
+                  padding: 0,
+                  color: 'var(--text-muted)',
+                  fontSize: '10px',
                   cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  boxShadow: layout === 'vertical' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                  marginBottom: '2px',
+                  display: 'block'
                 }}
               >
-                ↓ Vertical
+                ← Back to Customer
               </button>
-              <button
-                onClick={() => setLayout('horizontal')}
-                style={{
-                  padding: '0.375rem 0.75rem',
-                  background: layout === 'horizontal' ? 'white' : 'transparent',
-                  color: layout === 'horizontal' ? '#3b82f6' : '#6b7280',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  boxShadow: layout === 'horizontal' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                }}
-              >
-                → Horizontal
-              </button>
-              <button
-                onClick={() => setLayout('compact')}
-                style={{
-                  padding: '0.375rem 0.75rem',
-                  background: layout === 'compact' ? 'white' : 'transparent',
-                  color: layout === 'compact' ? '#3b82f6' : '#6b7280',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  boxShadow: layout === 'compact' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                }}
-              >
-                ⊞ Compact
-              </button>
+              <h1>🏢 {customer.name} — Org Chart</h1>
+              <div className="sales-subtitle">
+                {contacts.length} {contacts.length === 1 ? 'contact' : 'contacts'}
+              </div>
             </div>
           </div>
+          <div className="cd-header-right">
+            {/* Layout Selector */}
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>Layout:</span>
+            <div style={{ display: 'flex', gap: '3px', background: '#f0f1f3', padding: '3px', borderRadius: '6px' }}>
+              {(['vertical', 'horizontal', 'compact'] as const).map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setLayout(l)}
+                  style={{
+                    padding: '6px 10px',
+                    background: layout === l ? 'white' : 'transparent',
+                    color: layout === l ? '#3b82f6' : 'var(--text-secondary)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    boxShadow: layout === l ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                  }}
+                >
+                  {l === 'vertical' ? '↓ Vertical' : l === 'horizontal' ? '— Horizontal' : '⊞ Compact'}
+                </button>
+              ))}
+            </div>
 
-          <button
-            onClick={handleExportPdf}
-            disabled={pdfLoading || contacts.length === 0}
-            style={{
-              padding: '0.5rem 1rem',
-              background: 'white',
-              color: pdfLoading || contacts.length === 0 ? '#9ca3af' : '#1f2937',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              cursor: pdfLoading || contacts.length === 0 ? 'default' : 'pointer',
-              fontSize: '14px',
-              fontWeight: 600
-            }}
-          >
-            {pdfLoading ? 'Generating...' : 'Export PDF'}
-          </button>
-          <button
-            onClick={() => setEditingContact({} as CustomerContact)}
-            style={{
-              padding: '0.5rem 1rem',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 600
-            }}
-          >
-            + Add Contact
-          </button>
+            <button
+              onClick={handleExportPdf}
+              disabled={pdfLoading || contacts.length === 0}
+              className="sales-btn sales-btn-secondary"
+              style={pdfLoading || contacts.length === 0 ? { opacity: 0.5, cursor: 'default' } : undefined}
+            >
+              {pdfLoading ? 'Generating...' : 'Export PDF'}
+            </button>
+            <button
+              onClick={() => setEditingContact({} as CustomerContact)}
+              className="sales-btn sales-btn-primary"
+            >
+              + Add Contact
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Org Chart */}
       <div style={{
+        flex: 1,
+        minHeight: 0,
+        margin: '0 20px 20px',
         background: 'white',
         borderRadius: '8px',
-        padding: '2rem',
         boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        minHeight: 'calc(100vh - 200px)'
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
       }}>
         {contacts.length === 0 ? (
           <div style={{
             textAlign: 'center',
             padding: '4rem',
-            color: '#6b7280'
+            color: 'var(--text-secondary)',
           }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>👥</div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
               No contacts yet
             </h3>
-            <p style={{ marginBottom: '1.5rem' }}>
+            <p style={{ marginBottom: '1.5rem', fontSize: '13px' }}>
               Add contacts to visualize your organizational structure
             </p>
             <button
               onClick={() => setEditingContact({} as CustomerContact)}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: 600
-              }}
+              className="sales-btn sales-btn-primary"
             >
               Add Your First Contact
             </button>

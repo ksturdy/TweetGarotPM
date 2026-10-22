@@ -101,7 +101,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     formHydrated.current = true;
     // Sync the prevCustomerId ref BEFORE setFormData so the customer-change
     // effect doesn't wipe the facility fields we're about to restore.
-    prevCustomerId.current = fullOpportunity.customer_id || '';
+    prevCustomerId.current = formData.customer_id || fullOpportunity.customer_id?.toString() || '';
 
     // If end date is missing but start+duration are present, recover it
     let recoveredEndDate = fullOpportunity.estimated_end_date ? String(fullOpportunity.estimated_end_date).substring(0, 10) : '';
@@ -115,7 +115,10 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
       }
     }
 
-    setFormData({
+    // Use functional update so we can preserve any customer_id/gc_customer_id the user
+    // already selected while this network request was in-flight (race condition: user
+    // clicks a company match before fullOpportunity arrives, then hydration overwrites it).
+    setFormData(prev => ({
       title: fullOpportunity.title || '',
       description: fullOpportunity.description || '',
       estimated_value: fullOpportunity.estimated_value ? Math.round(Number(fullOpportunity.estimated_value)).toString() : '',
@@ -131,17 +134,17 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
       assigned_to: fullOpportunity.assigned_to || '',
       source: fullOpportunity.source || '',
       market: fullOpportunity.market || '',
-      owner: fullOpportunity.owner || '',
-      general_contractor: fullOpportunity.general_contractor || '',
+      owner: prev.owner || fullOpportunity.owner || '',
+      general_contractor: prev.general_contractor || fullOpportunity.general_contractor || '',
       architect: fullOpportunity.architect || '',
       engineer: fullOpportunity.engineer || '',
       campaign_id: fullOpportunity.campaign_id || defaultCampaignId || '',
-      customer_id: fullOpportunity.customer_id || '',
-      gc_customer_id: fullOpportunity.gc_customer_id || '',
+      customer_id: prev.customer_id || fullOpportunity.customer_id?.toString() || '',
+      gc_customer_id: prev.gc_customer_id || fullOpportunity.gc_customer_id?.toString() || '',
       facility_name: fullOpportunity.facility_name || '',
       facility_location_id: fullOpportunity.facility_location_id || '',
       awarded_status: fullOpportunity.awarded_status || '',
-    });
+    }));
   }, [fullOpportunity]);
 
   // Linked formal estimates

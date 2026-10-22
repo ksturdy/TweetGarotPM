@@ -215,6 +215,29 @@
   font-size: 0.9rem;
 }
 
+/* Contact modal — compact inputs */
+.contact-modal .form-group input,
+.contact-modal .form-group select,
+.contact-modal .form-group textarea {
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.contact-modal .form-group label {
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.contact-modal .form-group {
+  margin-bottom: 0.6rem;
+}
+
+.contact-modal .form-row {
+  margin-bottom: 0.6rem;
+}
+
 @media (max-width: 640px) {
   .form-row {
     grid-template-columns: 1fr;
