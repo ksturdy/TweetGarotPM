@@ -3300,7 +3300,7 @@ const GridRow: React.FC<{
   onToggleSelection: (id: number) => void;
   hiddenCols: Set<string>;
 }> = React.memo(({ item, allItems, months, period, mode, monthlyVals, maxVal, colWidths, monthColWidth, projectId, laborRates, markupByCt, shopBurdenBillable, onUpdate, onEdit, isSelected, onToggleSelection, hiddenCols }) => {
-  const { confirm } = useTitanFeedback();
+  const { confirm, toast } = useTitanFeedback();
   const rv = (col: string) => !hiddenCols.has(col);
   const dur = getDuration(item.start_date, item.end_date);
   const dateLocked = (item.linked_resolved_count || 0) > 0;
@@ -3403,7 +3403,10 @@ const GridRow: React.FC<{
   const unallocated = allocatedManual !== null ? remCost - allocatedManual : null;
 
   const handleCellClick = useCallback(async (key: string) => {
-    if (!canEditInline) return;
+    if (!canEditInline) {
+      if (mode === 'cost') toast.warning('Switch to Monthly view to enter costs manually month-by-month.');
+      return;
+    }
     if (!isManualMode) {
       const ok = await confirm({
         title: 'Switch to manual entry?',
@@ -3415,7 +3418,7 @@ const GridRow: React.FC<{
     setEditingCell(key);
     const existing = manualVals[key];
     setCellDraft(existing != null ? String(existing) : '');
-  }, [canEditInline, isManualMode, manualVals, confirm]);
+  }, [canEditInline, mode, isManualMode, manualVals, confirm, toast]);
 
   // Commit the current cell value and optionally navigate to an adjacent cell.
   // direction=null → save and close; 'next'/'prev' → save and move; 'cancel' → discard and close.

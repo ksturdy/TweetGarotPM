@@ -268,12 +268,16 @@ const ContactModal: React.FC<ContactModalProps> = ({ customerId, customerName, c
   const availableManagers = allContacts.filter((c: CustomerContact) => c.id !== contact?.id);
 
   // Filter managers based on search term
-  const filteredManagers = availableManagers.filter((mgr: CustomerContact) => {
-    const searchLower = searchTerm.toLowerCase();
-    const fullName = `${mgr.first_name} ${mgr.last_name}`.toLowerCase();
-    const title = (mgr.title || '').toLowerCase();
-    return fullName.includes(searchLower) || title.includes(searchLower);
-  });
+  const filteredManagers = availableManagers
+    .filter((mgr: CustomerContact) => {
+      const searchLower = searchTerm.toLowerCase();
+      const fullName = `${mgr.first_name} ${mgr.last_name}`.toLowerCase();
+      const title = (mgr.title || '').toLowerCase();
+      return fullName.includes(searchLower) || title.includes(searchLower);
+    })
+    .sort((a: CustomerContact, b: CustomerContact) =>
+      `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)
+    );
 
   // Get selected manager for display
   const selectedManager = formData.reports_to
