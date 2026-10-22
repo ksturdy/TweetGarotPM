@@ -83,6 +83,9 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
   const [snapshotting, setSnapshotting] = useState(false);
   const [hideNoQty, setHideNoQty] = useState(false);
   const [metric, setMetric]       = useState<'qty' | 'hours' | 'cost'>('qty');
+  const [filterText, setFilterText] = useState('');
+  const [sortDir, setSortDir]       = useState<'none' | 'asc' | 'desc'>('none');
+  const [ctFilter, setCtFilter]     = useState<Set<number>>(new Set());
 
   // Optimistic overrides for item-level fields
   type ItemEdits = { quantity?: number | null; total_est_hours?: number; start_date?: string | null; end_date?: string | null; contour_type?: string; use_manual_qty_values?: boolean };
@@ -135,8 +138,8 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
 
   // Resizable frozen column widths (px)
   const [colWidths, setColWidths] = useState({
-    label: 54, name: 200, start: 80, finish: 80, contour: 60,
-    estQty: 66, uom: 44, hrs: 76, remQty: 62, unalloc: 52,
+    label: 54, name: 220, ct: 32, estQty: 58, uom: 40, hrs: 64,
+    start: 76, finish: 76, contour: 60, remQty: 56, unalloc: 50,
   });
   const resizingRef = useRef<{ col: keyof typeof colWidths; startX: number; startW: number } | null>(null);
 
@@ -183,8 +186,30 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
       ? externalItems.filter(item => item.cost_types?.includes(1))
       : (data?.items ?? []);
     if (hideNoQty) base = base.filter(item => parseNum(item.quantity) > 0);
+    if (ctFilter.size > 0) {
+      base = base.filter(item => item.cost_types?.some(ct => ctFilter.has(ct)));
+    }
+    if (filterText.trim()) {
+      const raw = filterText.trim().toLowerCase();
+      if (raw.includes('*')) {
+        const escaped = raw.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+        const regex = new RegExp('^' + escaped + '$', 'i');
+        base = base.filter(i => regex.test(i.name) || (i.phase_code_display != null && regex.test(i.phase_code_display)));
+      } else {
+        base = base.filter(i =>
+          i.name.toLowerCase().startsWith(raw) ||
+          (i.phase_code_display != null && i.phase_code_display.toLowerCase().startsWith(raw))
+        );
+      }
+    }
+    if (sortDir !== 'none') {
+      base = [...base].sort((a, b) => {
+        const cmp = a.name.localeCompare(b.name);
+        return sortDir === 'asc' ? cmp : -cmp;
+      });
+    }
     return base;
-  }, [externalItems, data, hideNoQty]);
+  }, [externalItems, data, hideNoQty, ctFilter, filterText, sortDir]);
 
   // ── derived data ─────────────────────────────────────────────────────────
 
@@ -456,30 +481,39 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
     return { schedQty, actualQty, schedHrs, earnedHrs, burnedHrs, schedCost, earnedCost, burnedCost };
   }, [items, weeks, scheduledQtyByItem, scheduledHrsByItem, scheduledCostByItem, getActualQty, getBurnedHours, getBurnedCost]);
 
+  // ── CT badge helpers ──────────────────────────────────────────────────────
+  const CT_BADGE_COLOR: Record<number, string> = {
+    1: '#3b82f6', 2: '#10b981', 3: '#f59e0b', 4: '#8b5cf6', 5: '#ef4444', 6: '#64748b',
+  };
+  const CT_BADGE_LABEL: Record<number, string> = {
+    1: 'L', 2: 'M', 3: 'S', 4: 'R', 5: 'E', 6: 'G',
+  };
+
   // ── layout — derived from resizable colWidths state ──────────────────────
   const WEEK_W    = 72;
   const LABEL_W   = colWidths.label;
   const NAME_W    = colWidths.name;
-  const START_W   = colWidths.start;
-  const FINISH_W  = colWidths.finish;
-  const CONTOUR_W = colWidths.contour;
+  const CT_W      = colWidths.ct;
   const ESTQTY_W  = colWidths.estQty;
   const UOM_W     = colWidths.uom;
   const HRS_W     = colWidths.hrs;
+  const START_W   = colWidths.start;
+  const FINISH_W  = colWidths.finish;
+  const CONTOUR_W = colWidths.contour;
   const REMQTY_W  = colWidths.remQty;
   const UNALLOC_W = colWidths.unalloc;
-  const FIXED_W   = LABEL_W + NAME_W + START_W + FINISH_W + CONTOUR_W + ESTQTY_W + UOM_W + HRS_W + REMQTY_W + UNALLOC_W;
-
-  const L0 = 0;
-  const L1 = LABEL_W;
-  const L2 = L1 + NAME_W;
-  const L3 = L2 + START_W;
-  const L4 = L3 + FINISH_W;
-  const L5 = L4 + CONTOUR_W;
-  const L6 = L5 + ESTQTY_W;
-  const L7 = L6 + UOM_W;
-  const L8 = L7 + HRS_W;
-  const L9 = L8 + REMQTY_W;
+  const L0  = 0;
+  const L1  = LABEL_W;
+  const L2  = L1 + NAME_W;
+  const L3  = L2 + CT_W;
+  const L4  = L3 + ESTQTY_W;
+  const L5  = L4 + UOM_W;
+  const L6  = L5 + HRS_W;
+  const L7  = L6 + START_W;
+  const L8  = L7 + FINISH_W;
+  const L9  = L8 + CONTOUR_W;
+  const L10 = L9 + REMQTY_W;
+  const FIXED_W = L10 + UNALLOC_W;
 
   const freezeShadow = '2px 0 0 0 #94a3b8';
 
@@ -525,6 +559,21 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
           <input type="checkbox" checked={hideNoQty} onChange={e => setHideNoQty(e.target.checked)} style={{ cursor: 'pointer' }} />
           Hide no-qty items
         </label>
+        {/* CT filter */}
+        <select
+          value={ctFilter.size === 1 ? [...ctFilter][0] : ''}
+          onChange={e => setCtFilter(e.target.value ? new Set([Number(e.target.value)]) : new Set())}
+          title="Filter by cost type"
+          style={{ fontSize: 11, border: '1px solid #cbd5e1', borderRadius: 4, padding: '3px 6px', background: ctFilter.size > 0 ? '#fffbeb' : '#fff', color: '#374151', cursor: 'pointer' }}
+        >
+          <option value="">All CTs</option>
+          <option value="1">Labor</option>
+          <option value="2">Material</option>
+          <option value="3">Subcontracts</option>
+          <option value="4">Rentals</option>
+          <option value="5">MEP Equip.</option>
+          <option value="6">Gen. Cond.</option>
+        </select>
         <div style={{ marginLeft: 'auto' }}>
           <button onClick={handleSnapshot} disabled={snapshotting} style={{
             fontSize: 11, padding: '3px 10px', borderRadius: 4, border: '1px solid #cbd5e1',
@@ -547,12 +596,13 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
           <colgroup>
             <col style={{ width: LABEL_W }} />
             <col style={{ width: NAME_W }} />
-            <col style={{ width: START_W }} />
-            <col style={{ width: FINISH_W }} />
-            <col style={{ width: CONTOUR_W }} />
+            <col style={{ width: CT_W }} />
             <col style={{ width: ESTQTY_W }} />
             <col style={{ width: UOM_W }} />
             <col style={{ width: HRS_W }} />
+            <col style={{ width: START_W }} />
+            <col style={{ width: FINISH_W }} />
+            <col style={{ width: CONTOUR_W }} />
             <col style={{ width: REMQTY_W }} />
             <col style={{ width: UNALLOC_W }} />
             {weeks.map(w => <col key={w} style={{ width: WEEK_W }} />)}
@@ -560,19 +610,42 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
 
           {/* Sticky header */}
           <thead>
-            <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-              <th style={{ ...th(LABEL_W),           position: 'sticky', top: 0, left: L0, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>#<div style={rhStyle} onMouseDown={e => startResize(e, 'label',   LABEL_W)}   /></th>
-              <th style={{ ...th(NAME_W, 'left'),    position: 'sticky', top: 0, left: L1, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Phase Name<div style={rhStyle} onMouseDown={e => startResize(e, 'name',    NAME_W)}    /></th>
-              <th style={{ ...th(START_W),           position: 'sticky', top: 0, left: L2, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Start<div style={rhStyle} onMouseDown={e => startResize(e, 'start',   START_W)}   /></th>
-              <th style={{ ...th(FINISH_W),          position: 'sticky', top: 0, left: L3, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Finish<div style={rhStyle} onMouseDown={e => startResize(e, 'finish',  FINISH_W)}  /></th>
-              <th style={{ ...th(CONTOUR_W),         position: 'sticky', top: 0, left: L4, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Contour<div style={rhStyle} onMouseDown={e => startResize(e, 'contour', CONTOUR_W)} /></th>
-              <th style={{ ...th(ESTQTY_W),          position: 'sticky', top: 0, left: L5, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Est Qty<div style={rhStyle} onMouseDown={e => startResize(e, 'estQty',  ESTQTY_W)}  /></th>
-              <th style={{ ...th(UOM_W),             position: 'sticky', top: 0, left: L6, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>UOM<div style={rhStyle} onMouseDown={e => startResize(e, 'uom',     UOM_W)}     /></th>
-              <th style={{ ...th(HRS_W),             position: 'sticky', top: 0, left: L7, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Est Hrs<div style={rhStyle} onMouseDown={e => startResize(e, 'hrs',     HRS_W)}     /></th>
-              <th style={{ ...th(REMQTY_W),          position: 'sticky', top: 0, left: L8, zIndex: 41, background: '#1e3a5f', overflow: 'visible' }}>Rem Qty<div style={rhStyle} onMouseDown={e => startResize(e, 'remQty',  REMQTY_W)}  /></th>
-              <th style={{ ...th(UNALLOC_W),         position: 'sticky', top: 0, left: L9, zIndex: 41, background: '#1e3a5f', boxShadow: freezeShadow, borderRight: 'none' }}>Unalloc</th>
+            <tr>
+              <th style={{ ...th(LABEL_W),           position: 'sticky', top: 0, left: L0,  zIndex: 41, overflow: 'visible' }}>#<div style={rhStyle} onMouseDown={e => startResize(e, 'label',   LABEL_W)}   /></th>
+              <th style={{ ...th(NAME_W, 'left'),    position: 'sticky', top: 0, left: L1,  zIndex: 41, overflow: 'visible' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, width: '100%' }}>
+                  <input
+                    type="text"
+                    value={filterText}
+                    onChange={e => setFilterText(e.target.value)}
+                    placeholder="Filter prefix (* = wildcard)"
+                    title="Type a phase prefix or use * as wildcard (e.g. 30*, *labor*)"
+                    style={{ flex: 1, padding: '0.15rem 0.3rem', fontSize: '0.65rem', border: '1px solid #e2e8f0', borderRadius: 3, background: filterText ? '#fffbeb' : '#fff', color: '#1e293b', outline: 'none', minWidth: 0, fontWeight: 400 }}
+                  />
+                  {filterText && (
+                    <button onClick={() => setFilterText('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.65rem', color: '#94a3b8', lineHeight: 1, flexShrink: 0 }}>✕</button>
+                  )}
+                  <button
+                    onClick={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
+                    title={sortDir === 'none' ? 'Sort A→Z' : sortDir === 'asc' ? 'Sort Z→A' : 'Clear sort'}
+                    style={{ background: sortDir !== 'none' ? '#fffbeb' : '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 3, cursor: 'pointer', padding: '0.1rem 0.3rem', fontSize: '0.65rem', color: '#475569', lineHeight: 1, flexShrink: 0 }}
+                  >
+                    {sortDir === 'asc' ? '↑' : sortDir === 'desc' ? '↓' : '↕'}
+                  </button>
+                </div>
+                <div style={rhStyle} onMouseDown={e => startResize(e, 'name', NAME_W)} />
+              </th>
+              <th style={{ ...th(CT_W),              position: 'sticky', top: 0, left: L2,  zIndex: 41 }}>CT</th>
+              <th style={{ ...th(ESTQTY_W),          position: 'sticky', top: 0, left: L3,  zIndex: 41, overflow: 'visible' }}>Est Qty<div style={rhStyle} onMouseDown={e => startResize(e, 'estQty',  ESTQTY_W)}  /></th>
+              <th style={{ ...th(UOM_W),             position: 'sticky', top: 0, left: L4,  zIndex: 41, overflow: 'visible' }}>UOM<div style={rhStyle} onMouseDown={e => startResize(e, 'uom',     UOM_W)}     /></th>
+              <th style={{ ...th(HRS_W),             position: 'sticky', top: 0, left: L5,  zIndex: 41, overflow: 'visible' }}>Est Hrs<div style={rhStyle} onMouseDown={e => startResize(e, 'hrs',     HRS_W)}     /></th>
+              <th style={{ ...th(START_W),           position: 'sticky', top: 0, left: L6,  zIndex: 41, overflow: 'visible' }}>Start<div style={rhStyle} onMouseDown={e => startResize(e, 'start',   START_W)}   /></th>
+              <th style={{ ...th(FINISH_W),          position: 'sticky', top: 0, left: L7,  zIndex: 41, overflow: 'visible' }}>Finish<div style={rhStyle} onMouseDown={e => startResize(e, 'finish',  FINISH_W)}  /></th>
+              <th style={{ ...th(CONTOUR_W),         position: 'sticky', top: 0, left: L8,  zIndex: 41, overflow: 'visible' }}>Contour<div style={rhStyle} onMouseDown={e => startResize(e, 'contour', CONTOUR_W)} /></th>
+              <th style={{ ...th(REMQTY_W),          position: 'sticky', top: 0, left: L9,  zIndex: 41, overflow: 'visible' }}>Rem Qty<div style={rhStyle} onMouseDown={e => startResize(e, 'remQty',  REMQTY_W)}  /></th>
+              <th style={{ ...th(UNALLOC_W),         position: 'sticky', top: 0, left: L10, zIndex: 41, boxShadow: freezeShadow, borderRight: 'none' }}>Unalloc</th>
               {weeks.map(w => (
-                <th key={w} style={{ ...th(WEEK_W), position: 'sticky', top: 0, zIndex: 30, background: w === TODAY ? '#2d4a6e' : '#1e3a5f' }}>
+                <th key={w} style={{ ...th(WEEK_W), position: 'sticky', top: 0, zIndex: 30, background: w === TODAY ? '#dbeafe' : '#eef2f7' }}>
                   {format(parseISO(w), 'M/d')}
                 </th>
               ))}
@@ -581,7 +654,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
 
           <tbody>
             {items.length === 0 && (
-              <tr><td colSpan={10 + weeks.length} style={{ textAlign: 'center', padding: 32, color: '#9ca3af' }}>
+              <tr><td colSpan={11 + weeks.length} style={{ textAlign: 'center', padding: 32, color: '#9ca3af' }}>
                 No labor phase schedule items found.
               </td></tr>
             )}
@@ -631,38 +704,29 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                         >{isManual ? 'M' : 'A'}</button>
                       </div>
                     </td>
-                    <td style={{ ...td(NAME_W, 'left'), position: 'sticky', left: L1, zIndex: 2, background: schedBg, paddingLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: '#1e3a5f', borderTop: '2px solid #cbd5e1' }}
-                      title={item.name}>
-                      {item.name}
+                    <td style={{ ...td(NAME_W, 'left'), position: 'sticky', left: L1, zIndex: 2, background: schedBg,
+                                 paddingLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                 borderTop: '2px solid #cbd5e1' }}
+                      title={item.phase_code_display ? `${item.phase_code_display} — ${item.name}` : item.name}>
+                      {item.phase_code_display && (
+                        <span style={{ color: '#64748b', fontSize: 10, marginRight: 5, fontWeight: 400 }}>
+                          {item.phase_code_display}
+                        </span>
+                      )}
+                      <span style={{ fontWeight: 600, color: '#1e3a5f' }}>{item.name}</span>
                     </td>
-                    <td style={{ ...td(START_W, 'center'), position: 'sticky', left: L2, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 2px' }}>
-                      <input type="date"
-                        defaultValue={effStart?.slice(0, 10) ?? ''}
-                        key={`start-${item.id}-${effStart}`}
-                        onBlur={e => handleItemFieldSave(item, 'start_date', e.target.value)}
-                        style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 10, color: '#374151', outline: 'none', textAlign: 'center' }}
-                      />
+                    <td style={{ ...td(CT_W, 'center'), position: 'sticky', left: L2, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1' }}>
+                      {item.cost_types?.map(ct => (
+                        <span key={ct} style={{
+                          display: 'inline-block', width: 16, height: 16, borderRadius: 3, lineHeight: '16px',
+                          textAlign: 'center', fontSize: 9, fontWeight: 700, color: '#fff',
+                          backgroundColor: CT_BADGE_COLOR[ct] || '#64748b', marginRight: 1,
+                        }}>
+                          {CT_BADGE_LABEL[ct] || ct}
+                        </span>
+                      ))}
                     </td>
-                    <td style={{ ...td(FINISH_W, 'center'), position: 'sticky', left: L3, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 2px' }}>
-                      <input type="date"
-                        defaultValue={effEnd?.slice(0, 10) ?? ''}
-                        key={`end-${item.id}-${effEnd}`}
-                        onBlur={e => handleItemFieldSave(item, 'end_date', e.target.value)}
-                        style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 10, color: '#374151', outline: 'none', textAlign: 'center' }}
-                      />
-                    </td>
-                    <td style={{ ...td(CONTOUR_W, 'center'), position: 'sticky', left: L4, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 2px' }}>
-                      <select
-                        value={effContour || 'flat'}
-                        onChange={e => handleItemFieldSave(item, 'contour_type', e.target.value)}
-                        style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 10, color: '#374151', outline: 'none', cursor: 'pointer' }}
-                      >
-                        {contourOptions.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td style={{ ...td(ESTQTY_W, 'right'), position: 'sticky', left: L5, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 3px' }}>
+                    <td style={{ ...td(ESTQTY_W, 'right'), position: 'sticky', left: L3, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 3px' }}>
                       <input type="number" min="0" step="any"
                         defaultValue={qty > 0 ? qty : ''}
                         key={`estqty-${item.id}-${qty}`}
@@ -671,10 +735,10 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                         style={{ width: '100%', border: 'none', background: 'transparent', textAlign: 'right', fontSize: 12, color: '#374151', outline: 'none', padding: '0 3px' }}
                       />
                     </td>
-                    <td style={{ ...td(UOM_W, 'center'), position: 'sticky', left: L6, zIndex: 2, background: schedBg, color: '#64748b', borderTop: '2px solid #cbd5e1' }}>
+                    <td style={{ ...td(UOM_W, 'center'), position: 'sticky', left: L4, zIndex: 2, background: schedBg, color: '#64748b', borderTop: '2px solid #cbd5e1' }}>
                       {item.quantity_uom || '—'}
                     </td>
-                    <td style={{ ...td(HRS_W, 'right'), position: 'sticky', left: L7, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 3px' }}>
+                    <td style={{ ...td(HRS_W, 'right'), position: 'sticky', left: L5, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 3px' }}>
                       <input type="text"
                         defaultValue={estHrs > 0 ? estHrs.toLocaleString() : ''}
                         key={`esthrs-${item.id}-${estHrs}`}
@@ -688,10 +752,37 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                         style={{ width: '100%', border: 'none', background: 'transparent', textAlign: 'right', fontSize: 12, color: '#374151', outline: 'none', padding: '0 3px' }}
                       />
                     </td>
-                    <td style={{ ...td(REMQTY_W, 'right'), position: 'sticky', left: L8, zIndex: 2, background: schedBg, color: remQty === 0 ? '#16a34a' : '#475569', fontWeight: remQty === 0 ? 600 : 400, borderTop: '2px solid #cbd5e1' }}>
+                    <td style={{ ...td(START_W, 'center'), position: 'sticky', left: L6, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 2px' }}>
+                      <input type="date"
+                        defaultValue={effStart?.slice(0, 10) ?? ''}
+                        key={`start-${item.id}-${effStart}`}
+                        onBlur={e => handleItemFieldSave(item, 'start_date', e.target.value)}
+                        style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 10, color: '#374151', outline: 'none', textAlign: 'center' }}
+                      />
+                    </td>
+                    <td style={{ ...td(FINISH_W, 'center'), position: 'sticky', left: L7, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 2px' }}>
+                      <input type="date"
+                        defaultValue={effEnd?.slice(0, 10) ?? ''}
+                        key={`end-${item.id}-${effEnd}`}
+                        onBlur={e => handleItemFieldSave(item, 'end_date', e.target.value)}
+                        style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 10, color: '#374151', outline: 'none', textAlign: 'center' }}
+                      />
+                    </td>
+                    <td style={{ ...td(CONTOUR_W, 'center'), position: 'sticky', left: L8, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 2px' }}>
+                      <select
+                        value={effContour || 'flat'}
+                        onChange={e => handleItemFieldSave(item, 'contour_type', e.target.value)}
+                        style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 10, color: '#374151', outline: 'none', cursor: 'pointer' }}
+                      >
+                        {contourOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td style={{ ...td(REMQTY_W, 'right'), position: 'sticky', left: L9, zIndex: 2, background: schedBg, color: remQty === 0 ? '#16a34a' : '#475569', fontWeight: remQty === 0 ? 600 : 400, borderTop: '2px solid #cbd5e1' }}>
                       {remQty !== null ? fmt1(remQty) : '—'}
                     </td>
-                    <td style={{ ...td(UNALLOC_W, 'right'), position: 'sticky', left: L9, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', boxShadow: freezeShadow, borderRight: 'none',
+                    <td style={{ ...td(UNALLOC_W, 'right'), position: 'sticky', left: L10, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', boxShadow: freezeShadow, borderRight: 'none',
                       color: unallocatedQty === null ? '#c7d2fe' : unallocatedQty === 0 ? '#16a34a' : unallocatedQty < 0 ? '#dc2626' : '#d97706',
                       fontWeight: unallocatedQty !== null && unallocatedQty !== 0 ? 600 : 400 }}>
                       {unallocatedQty !== null ? fmt1(unallocatedQty) : '—'}
@@ -734,10 +825,8 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                     <td style={{ ...td(NAME_W, 'left'), position: 'sticky', left: L1, zIndex: 2, background: actualBg, paddingLeft: 16, color: '#94a3b8', fontSize: 11 }}>
                       {hrsRate > 0 && <>{hrsRate.toFixed(3)} hrs/{item.quantity_uom || 'unit'}</>}
                     </td>
-                    <td style={{ ...td(START_W), position: 'sticky', left: L2, zIndex: 2, background: actualBg }} />
-                    <td style={{ ...td(FINISH_W), position: 'sticky', left: L3, zIndex: 2, background: actualBg }} />
-                    <td style={{ ...td(CONTOUR_W), position: 'sticky', left: L4, zIndex: 2, background: actualBg }} />
-                    <td style={{ ...td(ESTQTY_W, 'right'), position: 'sticky', left: L5, zIndex: 2, background: actualBg }}>
+                    <td style={{ ...td(CT_W), position: 'sticky', left: L2, zIndex: 2, background: actualBg }} />
+                    <td style={{ ...td(ESTQTY_W, 'right'), position: 'sticky', left: L3, zIndex: 2, background: actualBg }}>
                       {(() => {
                         const totalQty = weeks.reduce((s, w) => s + (getActualQty(item.id, w) ?? 0), 0);
                         if (metric === 'hours') {
@@ -751,10 +840,13 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                         return totalQty > 0 ? <span style={{ color: '#1e40af', fontSize: 11, fontWeight: 600 }}>{fmt1(totalQty)}</span> : null;
                       })()}
                     </td>
-                    <td style={{ ...td(UOM_W), position: 'sticky', left: L6, zIndex: 2, background: actualBg }} />
-                    <td style={{ ...td(HRS_W), position: 'sticky', left: L7, zIndex: 2, background: actualBg }} />
-                    <td style={{ ...td(REMQTY_W), position: 'sticky', left: L8, zIndex: 2, background: actualBg }} />
-                    <td style={{ ...td(UNALLOC_W), position: 'sticky', left: L9, zIndex: 2, background: actualBg, boxShadow: freezeShadow, borderRight: 'none' }} />
+                    <td style={{ ...td(UOM_W), position: 'sticky', left: L4, zIndex: 2, background: actualBg }} />
+                    <td style={{ ...td(HRS_W), position: 'sticky', left: L5, zIndex: 2, background: actualBg }} />
+                    <td style={{ ...td(START_W), position: 'sticky', left: L6, zIndex: 2, background: actualBg }} />
+                    <td style={{ ...td(FINISH_W), position: 'sticky', left: L7, zIndex: 2, background: actualBg }} />
+                    <td style={{ ...td(CONTOUR_W), position: 'sticky', left: L8, zIndex: 2, background: actualBg }} />
+                    <td style={{ ...td(REMQTY_W), position: 'sticky', left: L9, zIndex: 2, background: actualBg }} />
+                    <td style={{ ...td(UNALLOC_W), position: 'sticky', left: L10, zIndex: 2, background: actualBg, boxShadow: freezeShadow, borderRight: 'none' }} />
                     {weeks.map(w => {
                       const actual     = getActualQty(item.id, w);
                       const schedQtyW  = scheduledQtyByItem[item.id]?.[w]  || 0;
@@ -819,16 +911,17 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                       <td style={{ ...td(NAME_W, 'left'), position: 'sticky', left: L1, zIndex: 2, background: reqdBg, paddingLeft: 16, color: '#92400e', fontSize: 11 }}>
                         ~{fmt1(remQty! / reqdWeekCount)}/{item.quantity_uom || 'unit'} per wk to finish on time
                       </td>
-                      <td style={{ ...td(START_W), position: 'sticky', left: L2, zIndex: 2, background: reqdBg }} />
-                      <td style={{ ...td(FINISH_W), position: 'sticky', left: L3, zIndex: 2, background: reqdBg }} />
-                      <td style={{ ...td(CONTOUR_W), position: 'sticky', left: L4, zIndex: 2, background: reqdBg }} />
-                      <td style={{ ...td(ESTQTY_W), position: 'sticky', left: L5, zIndex: 2, background: reqdBg }} />
-                      <td style={{ ...td(UOM_W), position: 'sticky', left: L6, zIndex: 2, background: reqdBg }} />
-                      <td style={{ ...td(HRS_W), position: 'sticky', left: L7, zIndex: 2, background: reqdBg }} />
-                      <td style={{ ...td(REMQTY_W, 'right'), position: 'sticky', left: L8, zIndex: 2, background: reqdBg, color: '#d97706', fontWeight: 600 }}>
+                      <td style={{ ...td(CT_W), position: 'sticky', left: L2, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(ESTQTY_W), position: 'sticky', left: L3, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(UOM_W), position: 'sticky', left: L4, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(HRS_W), position: 'sticky', left: L5, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(START_W), position: 'sticky', left: L6, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(FINISH_W), position: 'sticky', left: L7, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(CONTOUR_W), position: 'sticky', left: L8, zIndex: 2, background: reqdBg }} />
+                      <td style={{ ...td(REMQTY_W, 'right'), position: 'sticky', left: L9, zIndex: 2, background: reqdBg, color: '#d97706', fontWeight: 600 }}>
                         {fmt1(remQty!)}
                       </td>
-                      <td style={{ ...td(UNALLOC_W), position: 'sticky', left: L9, zIndex: 2, background: reqdBg, boxShadow: freezeShadow, borderRight: 'none' }} />
+                      <td style={{ ...td(UNALLOC_W), position: 'sticky', left: L10, zIndex: 2, background: reqdBg, boxShadow: freezeShadow, borderRight: 'none' }} />
                       {weeks.map(w => {
                         const reqd  = reqdMap[w];
                         const sched = scheduledQtyByItem[item.id]?.[w] || 0;
@@ -852,19 +945,19 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
           {/* Summary footer — rows change with metric toggle */}
           <tfoot>
             {metric === 'qty' && <>
-              <SummaryRow label="Sched Qty"  weeks={weeks} getVal={w => totals.schedQty[w]  || 0} bg="#e0f2fe" color="#0369a1" l9={L9} />
-              <SummaryRow label="Actual Qty" weeks={weeks} getVal={w => totals.actualQty[w] || 0} bg="#dbeafe" color="#1e40af" bold l9={L9} />
+              <SummaryRow label="Sched Qty"  weeks={weeks} getVal={w => totals.schedQty[w]  || 0} bg="#e0f2fe" color="#0369a1" l10={L10} />
+              <SummaryRow label="Actual Qty" weeks={weeks} getVal={w => totals.actualQty[w] || 0} bg="#dbeafe" color="#1e40af" bold l10={L10} />
             </>}
             {metric === 'hours' && <>
-              <SummaryRow label="Sched Hrs"  weeks={weeks} getVal={w => totals.schedHrs[w]  || 0} bg="#ede9fe" color="#6d28d9" l9={L9} />
-              <SummaryRow label="Earned Hrs" weeks={weeks} getVal={w => totals.earnedHrs[w] || 0} bg="#fef3c7" color="#92400e" bold l9={L9} />
-              <SummaryRow label="Burned Hrs" weeks={weeks} getVal={w => totals.burnedHrs[w] || 0} bg="#d1fae5" color="#065f46" l9={L9} />
-              <SummaryRow label="Over/Under" weeks={weeks} getVal={w => (totals.earnedHrs[w] || 0) - (totals.burnedHrs[w] || 0)} bg="#f1f5f9" color="#111" signColored bold l9={L9} />
+              <SummaryRow label="Sched Hrs"  weeks={weeks} getVal={w => totals.schedHrs[w]  || 0} bg="#ede9fe" color="#6d28d9" l10={L10} />
+              <SummaryRow label="Earned Hrs" weeks={weeks} getVal={w => totals.earnedHrs[w] || 0} bg="#fef3c7" color="#92400e" bold l10={L10} />
+              <SummaryRow label="Burned Hrs" weeks={weeks} getVal={w => totals.burnedHrs[w] || 0} bg="#d1fae5" color="#065f46" l10={L10} />
+              <SummaryRow label="Over/Under" weeks={weeks} getVal={w => (totals.earnedHrs[w] || 0) - (totals.burnedHrs[w] || 0)} bg="#f1f5f9" color="#111" signColored bold l10={L10} />
             </>}
             {metric === 'cost' && <>
-              <SummaryRow label="Sched Cost"  weeks={weeks} getVal={w => totals.schedCost[w]  || 0} bg="#fef3c7" color="#92400e" l9={L9} />
-              <SummaryRow label="Earned Cost" weeks={weeks} getVal={w => totals.earnedCost[w] || 0} bg="#fef9c3" color="#b45309" bold l9={L9} />
-              <SummaryRow label="Burned Cost" weeks={weeks} getVal={w => totals.burnedCost[w] || 0} bg="#d1fae5" color="#065f46" l9={L9} />
+              <SummaryRow label="Sched Cost"  weeks={weeks} getVal={w => totals.schedCost[w]  || 0} bg="#fef3c7" color="#92400e" l10={L10} />
+              <SummaryRow label="Earned Cost" weeks={weeks} getVal={w => totals.earnedCost[w] || 0} bg="#fef9c3" color="#b45309" bold l10={L10} />
+              <SummaryRow label="Burned Cost" weeks={weeks} getVal={w => totals.burnedCost[w] || 0} bg="#d1fae5" color="#065f46" l10={L10} />
             </>}
           </tfoot>
         </table>
@@ -877,17 +970,17 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
 
 const FREEZE_SHADOW = '2px 0 0 0 #94a3b8';
 
-function SummaryRow({ label, weeks, getVal, bg, color, signColored, bold, l9 }: {
+function SummaryRow({ label, weeks, getVal, bg, color, signColored, bold, l10 }: {
   label: string; weeks: string[];
   getVal: (w: string) => number;
   bg: string; color: string;
   signColored?: boolean; bold?: boolean;
-  l9: number;
+  l10: number;
 }) {
   return (
     <tr style={{ background: bg, position: 'sticky', bottom: 0 }}>
       {/* Frozen label cell spans all frozen columns up to the Unalloc shadow */}
-      <td colSpan={9} style={{
+      <td colSpan={10} style={{
         position: 'sticky', left: 0, zIndex: 3, background: bg,
         padding: '3px 8px 3px 4px', fontSize: 11, color, fontWeight: bold ? 700 : 600,
         textAlign: 'right', borderTop: '1px solid #cbd5e1',
@@ -895,7 +988,7 @@ function SummaryRow({ label, weeks, getVal, bg, color, signColored, bold, l9 }: 
         {label}
       </td>
       <td style={{
-        position: 'sticky', left: l9, zIndex: 3, background: bg,
+        position: 'sticky', left: l10, zIndex: 3, background: bg,
         boxShadow: FREEZE_SHADOW, borderRight: 'none', borderTop: '1px solid #cbd5e1', padding: 0,
       }} />
       {weeks.map(w => {
@@ -915,8 +1008,8 @@ function SummaryRow({ label, weeks, getVal, bg, color, signColored, bold, l9 }: 
 // ── style helpers ─────────────────────────────────────────────────────────────
 
 function th(width: number, align: 'left' | 'center' | 'right' = 'center'): React.CSSProperties {
-  return { width, minWidth: width, maxWidth: width, padding: '5px 4px', textAlign: align, fontSize: 11, fontWeight: 600, borderRight: '1px solid #2d4a6e', whiteSpace: 'nowrap', overflow: 'hidden' };
+  return { width, minWidth: width, maxWidth: width, padding: '0.35rem 0.4rem', textAlign: align, fontSize: '0.72rem', fontWeight: 600, borderRight: '1px solid #cbd5e1', borderBottom: '2px solid #94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', color: '#1e293b', background: '#eef2f7' };
 }
 function td(width: number, align: 'left' | 'center' | 'right' = 'center'): React.CSSProperties {
-  return { width, minWidth: width, maxWidth: width, padding: '3px 4px', textAlign: align, fontSize: 12, borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #f1f5f9' };
+  return { width, minWidth: width, maxWidth: width, padding: '0.25rem 0.4rem', textAlign: align, fontSize: '0.75rem', borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #f1f5f9' };
 }

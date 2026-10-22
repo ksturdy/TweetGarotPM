@@ -22,7 +22,9 @@ const WeeklyProduction = {
            psi.total_jtd_hours, psi.total_jtd_cost,
            psi.percent_complete, psi.contour_type,
            psi.cost_types, psi.phase_code_ids,
-           psi.use_manual_qty_values, psi.manual_monthly_qty
+           psi.use_manual_qty_values, psi.manual_monthly_qty,
+           (SELECT string_agg(DISTINCT rtrim(trim(pc.phase), '- '), ', ' ORDER BY rtrim(trim(pc.phase), '- '))
+            FROM vp_phase_codes pc WHERE pc.id = ANY(psi.phase_code_ids)) AS phase_code_display
          FROM phase_schedule_items psi
          WHERE psi.project_id = $1 AND psi.tenant_id = $2
            AND 1 = ANY(psi.cost_types)

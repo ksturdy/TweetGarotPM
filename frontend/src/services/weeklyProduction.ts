@@ -20,6 +20,7 @@ export interface WeeklyProductionItem {
   phase_code_ids: number[];
   use_manual_qty_values: boolean;
   manual_monthly_qty: Record<string, number> | null;
+  phase_code_display?: string | null;
 }
 
 export interface WeeklyEntry {
