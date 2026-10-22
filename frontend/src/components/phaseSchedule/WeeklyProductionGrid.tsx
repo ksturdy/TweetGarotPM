@@ -124,6 +124,7 @@ function toSunday(d: Date): Date {
 function ymd(d: Date): string { return format(d, 'yyyy-MM-dd'); }
 function parseNum(v: unknown): number { const n = Number(v); return isFinite(n) ? n : 0; }
 function fmt1(n: number): string { return n === 0 ? '—' : n % 1 === 0 ? n.toLocaleString() : n.toFixed(1); }
+function fmtCost(n: number): string { return n === 0 ? '—' : '$' + Math.round(n).toLocaleString(); }
 
 function buildWeeks(from: string, to: string): string[] {
   const weeks: string[] = [];
@@ -893,7 +894,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                       }
                       return (
                         <td key={w} style={{ ...td(WEEK_W, 'right'), background: isCurrentWeek ? '#dbeafe' : schedBg, color: '#475569', paddingRight: 6, borderTop: isCurrentWeek ? '2px solid #3b82f6' : '2px solid #cbd5e1' }}>
-                          {s > 0 ? fmt1(s) : <span style={{ color: '#c7d2fe' }}>—</span>}
+                          {s > 0 ? (metric === 'cost' ? fmtCost(s) : fmt1(s)) : <span style={{ color: '#c7d2fe' }}>—</span>}
                         </td>
                       );
                     })}
@@ -917,7 +918,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                         }
                         if (metric === 'cost') {
                           const v = totalQty * costRate;
-                          return v > 0 ? <span style={{ color: '#0369a1', fontSize: 11, fontWeight: 600 }}>${fmt1(v)}</span> : null;
+                          return v > 0 ? <span style={{ color: '#0369a1', fontSize: 11, fontWeight: 600 }}>{fmtCost(v)}</span> : null;
                         }
                         return totalQty > 0 ? <span style={{ color: '#1e40af', fontSize: 11, fontWeight: 600 }}>{fmt1(totalQty)}</span> : null;
                       })()}
@@ -974,7 +975,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                       }
                       const displayVal  = metric === 'hours' ? earnedHrsW : earnedCostW;
                       const displayText = displayVal > 0
-                        ? (metric === 'cost' ? `$${fmt1(displayVal)}` : fmt1(displayVal))
+                        ? (metric === 'cost' ? fmtCost(displayVal) : fmt1(displayVal))
                         : '';
                       return (
                         <td key={w} style={{ ...td(WEEK_W, 'right'), background: cellBg, paddingRight: 6, borderTop: isCurrentWeek ? '2px solid #3b82f6' : undefined, color: '#1e40af', fontSize: 11 }}>
@@ -994,7 +995,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                         {metric === 'qty' && `~${fmt1(remQty! / reqdWeekCount)}/${item.quantity_uom || 'unit'} per wk to finish on time`}
                         {metric === 'hours' && hrsRate > 0 && `~${fmt1((remQty! / reqdWeekCount) * hrsRate)} hrs per wk to finish on time`}
                         {metric === 'hours' && hrsRate === 0 && 'No productivity rate — cannot compute required hrs'}
-                        {metric === 'cost' && costRate > 0 && `~$${fmt1((remQty! / reqdWeekCount) * costRate)} per wk to finish on time`}
+                        {metric === 'cost' && costRate > 0 && `~${fmtCost((remQty! / reqdWeekCount) * costRate)} per wk to finish on time`}
                         {metric === 'cost' && costRate === 0 && 'No cost rate — cannot compute required cost'}
                       </td>
                       <td style={{ ...td(CT_W), position: 'sticky', left: L2, zIndex: 2, background: reqdBg }} />
@@ -1007,7 +1008,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                       <td style={{ ...td(REMQTY_W, 'right'), position: 'sticky', left: L9, zIndex: 2, background: reqdBg, color: '#d97706', fontWeight: 600 }}>
                         {metric === 'qty'   && fmt1(remQty!)}
                         {metric === 'hours' && hrsRate > 0  && fmt1(remQty! * hrsRate)}
-                        {metric === 'cost'  && costRate > 0 && `$${fmt1(remQty! * costRate)}`}
+                        {metric === 'cost'  && costRate > 0 && fmtCost(remQty! * costRate)}
                       </td>
                       <td style={{ ...td(UNALLOC_W), position: 'sticky', left: L10, zIndex: 2, background: reqdBg, boxShadow: freezeShadow, borderRight: 'none' }} />
                       {weeks.map(w => {
@@ -1022,7 +1023,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                         if (reqdVal === 0) return <td key={w} style={{ ...td(WEEK_W), background: reqdBg }} />;
                         // Amber when required rate exceeds scheduled by >5% (behind); green when on track
                         const isBehind = schedVal > 0 && reqdVal > schedVal * 1.05;
-                        const display  = metric === 'cost' ? `$${fmt1(reqdVal)}` : fmt1(reqdVal);
+                        const display  = metric === 'cost' ? fmtCost(reqdVal) : fmt1(reqdVal);
                         return (
                           <td key={w} style={{ ...td(WEEK_W, 'right'), background: reqdBg, paddingRight: 6,
                             color: isBehind ? '#b45309' : '#16a34a', fontWeight: 600 }}>
@@ -1050,9 +1051,9 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
               <SummaryRow label="Over/Under" weeks={weeks} getVal={w => (totals.earnedHrs[w] || 0) - (totals.burnedHrs[w] || 0)} bg="#f1f5f9" color="#111" signColored bold l10={L10} />
             </>}
             {metric === 'cost' && <>
-              <SummaryRow label="Sched Cost"  weeks={weeks} getVal={w => totals.schedCost[w]  || 0} bg="#fef3c7" color="#92400e" l10={L10} />
-              <SummaryRow label="Earned Cost" weeks={weeks} getVal={w => totals.earnedCost[w] || 0} bg="#fef9c3" color="#b45309" bold l10={L10} />
-              <SummaryRow label="Burned Cost" weeks={weeks} getVal={w => totals.burnedCost[w] || 0} bg="#d1fae5" color="#065f46" l10={L10} />
+              <SummaryRow label="Sched Cost"  weeks={weeks} getVal={w => totals.schedCost[w]  || 0} bg="#fef3c7" color="#92400e" dollar l10={L10} />
+              <SummaryRow label="Earned Cost" weeks={weeks} getVal={w => totals.earnedCost[w] || 0} bg="#fef9c3" color="#b45309" bold dollar l10={L10} />
+              <SummaryRow label="Burned Cost" weeks={weeks} getVal={w => totals.burnedCost[w] || 0} bg="#d1fae5" color="#065f46" dollar l10={L10} />
             </>}
           </tfoot>
         </table>
@@ -1065,11 +1066,11 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
 
 const FREEZE_SHADOW = '2px 0 0 0 #94a3b8';
 
-function SummaryRow({ label, weeks, getVal, bg, color, signColored, bold, l10 }: {
+function SummaryRow({ label, weeks, getVal, bg, color, signColored, bold, dollar, l10 }: {
   label: string; weeks: string[];
   getVal: (w: string) => number;
   bg: string; color: string;
-  signColored?: boolean; bold?: boolean;
+  signColored?: boolean; bold?: boolean; dollar?: boolean;
   l10: number;
 }) {
   return (
@@ -1088,7 +1089,9 @@ function SummaryRow({ label, weeks, getVal, bg, color, signColored, bold, l10 }:
       }} />
       {weeks.map(w => {
         const v = getVal(w);
-        const display = v === 0 ? '—' : (signColored && v > 0 ? '+' : '') + fmt1(v);
+        const display = v === 0 ? '—'
+          : dollar ? (signColored && v > 0 ? '+' : '') + '$' + Math.round(Math.abs(v)).toLocaleString()
+          : (signColored && v > 0 ? '+' : '') + fmt1(v);
         const cellColor = signColored ? (v > 0 ? '#16a34a' : v < 0 ? '#dc2626' : '#9ca3af') : color;
         return (
           <td key={w} style={{ padding: '3px 6px 3px 0', fontSize: 11, textAlign: 'right', color: cellColor, fontWeight: bold ? 700 : 400, borderTop: '1px solid #cbd5e1' }}>
