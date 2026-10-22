@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, addWeeks, parseISO } from 'date-fns';
 import {
@@ -15,6 +16,103 @@ import { getContourMultipliers, ContourType, contourOptions } from '../../utils/
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
+
+// ── CT constants ──────────────────────────────────────────────────────────────
+
+const CT_BADGE_COLOR: Record<number, string> = {
+  1: '#3b82f6', 2: '#10b981', 3: '#f59e0b', 4: '#8b5cf6', 5: '#ef4444', 6: '#64748b',
+};
+const CT_BADGE_LABEL: Record<number, string> = {
+  1: 'L', 2: 'M', 3: 'S', 4: 'R', 5: 'E', 6: 'G',
+};
+const CT_NAMES: Record<number, string> = {
+  1: 'Labor', 2: 'Material', 3: 'Subcontracts', 4: 'Rentals', 5: 'MEP Equipment', 6: 'General Conditions',
+};
+
+// ── CT filter dropdown (mirrors the Phase Schedule CTFilterDropdown) ───────────
+
+const CTFilterDropdown: React.FC<{
+  selected: Set<number>;
+  onToggle: (ct: number) => void;
+  onClear: () => void;
+}> = ({ selected, onToggle, onClear }) => {
+  const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const updatePos = () => {
+      if (!triggerRef.current) return;
+      const r = triggerRef.current.getBoundingClientRect();
+      setMenuPos({ top: r.bottom + 2, left: r.left + r.width / 2 });
+    };
+    updatePos();
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', esc);
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', esc);
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [open]);
+
+  const active = selected.size > 0;
+  const label = active
+    ? [...selected].sort().map(ct => CT_NAMES[ct]?.charAt(0)).join('')
+    : 'CT ▾';
+
+  return (
+    <div ref={triggerRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div onClick={() => setOpen(p => !p)} style={{
+        width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer', fontSize: '0.65rem', fontWeight: 700,
+        color: active ? '#3b82f6' : 'inherit', userSelect: 'none',
+      }}>
+        {label}
+      </div>
+      {open && menuPos && createPortal(
+        <div ref={menuRef} style={{
+          position: 'fixed', top: menuPos.top, left: menuPos.left, transform: 'translateX(-50%)',
+          zIndex: 9999, background: 'white', border: '1px solid #e2e8f0', borderRadius: 6,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 160, padding: '4px 0', fontSize: '0.75rem', whiteSpace: 'nowrap',
+        }}>
+          {active && (
+            <>
+              <div onClick={() => { onClear(); setOpen(false); }}
+                style={{ padding: '4px 10px', cursor: 'pointer', color: '#ef4444', fontSize: '0.7rem' }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fef2f2'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = ''; }}>
+                Clear filter
+              </div>
+              <div style={{ borderTop: '1px solid #e2e8f0', margin: '2px 0' }} />
+            </>
+          )}
+          {[1, 2, 3, 4, 5, 6].map(ct => (
+            <label key={ct} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', cursor: 'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = ''; }}>
+              <input type="checkbox" checked={selected.has(ct)} onChange={() => onToggle(ct)} style={{ cursor: 'pointer' }} />
+              <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: CT_BADGE_COLOR[ct], flexShrink: 0 }} />
+              <span style={{ color: '#1e293b' }}>{CT_NAMES[ct]}</span>
+            </label>
+          ))}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -481,13 +579,10 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
     return { schedQty, actualQty, schedHrs, earnedHrs, burnedHrs, schedCost, earnedCost, burnedCost };
   }, [items, weeks, scheduledQtyByItem, scheduledHrsByItem, scheduledCostByItem, getActualQty, getBurnedHours, getBurnedCost]);
 
-  // ── CT badge helpers ──────────────────────────────────────────────────────
-  const CT_BADGE_COLOR: Record<number, string> = {
-    1: '#3b82f6', 2: '#10b981', 3: '#f59e0b', 4: '#8b5cf6', 5: '#ef4444', 6: '#64748b',
-  };
-  const CT_BADGE_LABEL: Record<number, string> = {
-    1: 'L', 2: 'M', 3: 'S', 4: 'R', 5: 'E', 6: 'G',
-  };
+  const handleCtToggle = useCallback((ct: number) => {
+    setCtFilter(prev => { const n = new Set(prev); n.has(ct) ? n.delete(ct) : n.add(ct); return n; });
+  }, []);
+  const handleCtClear = useCallback(() => setCtFilter(new Set()), []);
 
   // ── layout — derived from resizable colWidths state ──────────────────────
   const WEEK_W    = 72;
@@ -559,21 +654,6 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
           <input type="checkbox" checked={hideNoQty} onChange={e => setHideNoQty(e.target.checked)} style={{ cursor: 'pointer' }} />
           Hide no-qty items
         </label>
-        {/* CT filter */}
-        <select
-          value={ctFilter.size === 1 ? [...ctFilter][0] : ''}
-          onChange={e => setCtFilter(e.target.value ? new Set([Number(e.target.value)]) : new Set())}
-          title="Filter by cost type"
-          style={{ fontSize: 11, border: '1px solid #cbd5e1', borderRadius: 4, padding: '3px 6px', background: ctFilter.size > 0 ? '#fffbeb' : '#fff', color: '#374151', cursor: 'pointer' }}
-        >
-          <option value="">All CTs</option>
-          <option value="1">Labor</option>
-          <option value="2">Material</option>
-          <option value="3">Subcontracts</option>
-          <option value="4">Rentals</option>
-          <option value="5">MEP Equip.</option>
-          <option value="6">Gen. Cond.</option>
-        </select>
         <div style={{ marginLeft: 'auto' }}>
           <button onClick={handleSnapshot} disabled={snapshotting} style={{
             fontSize: 11, padding: '3px 10px', borderRadius: 4, border: '1px solid #cbd5e1',
@@ -635,7 +715,9 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                 </div>
                 <div style={rhStyle} onMouseDown={e => startResize(e, 'name', NAME_W)} />
               </th>
-              <th style={{ ...th(CT_W),              position: 'sticky', top: 0, left: L2,  zIndex: 41 }}>CT</th>
+              <th style={{ ...th(CT_W),              position: 'sticky', top: 0, left: L2,  zIndex: 41, padding: 0, overflow: 'visible' }}>
+                <CTFilterDropdown selected={ctFilter} onToggle={handleCtToggle} onClear={handleCtClear} />
+              </th>
               <th style={{ ...th(ESTQTY_W),          position: 'sticky', top: 0, left: L3,  zIndex: 41, overflow: 'visible' }}>Est Qty<div style={rhStyle} onMouseDown={e => startResize(e, 'estQty',  ESTQTY_W)}  /></th>
               <th style={{ ...th(UOM_W),             position: 'sticky', top: 0, left: L4,  zIndex: 41, overflow: 'visible' }}>UOM<div style={rhStyle} onMouseDown={e => startResize(e, 'uom',     UOM_W)}     /></th>
               <th style={{ ...th(HRS_W),             position: 'sticky', top: 0, left: L5,  zIndex: 41, overflow: 'visible' }}>Est Hrs<div style={rhStyle} onMouseDown={e => startResize(e, 'hrs',     HRS_W)}     /></th>
@@ -740,13 +822,13 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                     </td>
                     <td style={{ ...td(HRS_W, 'right'), position: 'sticky', left: L5, zIndex: 2, background: schedBg, borderTop: '2px solid #cbd5e1', padding: '1px 3px' }}>
                       <input type="text"
-                        defaultValue={estHrs > 0 ? estHrs.toLocaleString() : ''}
+                        defaultValue={estHrs > 0 ? Math.round(estHrs).toLocaleString() : ''}
                         key={`esthrs-${item.id}-${estHrs}`}
                         onFocus={e => { e.target.value = estHrs > 0 ? String(estHrs) : ''; e.target.select(); }}
                         onBlur={e => {
                           handleItemFieldSave(item, 'total_est_hours', e.target.value);
                           const n = parseFloat(e.target.value);
-                          if (!isNaN(n) && n > 0) e.target.value = n.toLocaleString();
+                          if (!isNaN(n) && n > 0) e.target.value = Math.round(n).toLocaleString();
                         }}
                         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                         style={{ width: '100%', border: 'none', background: 'transparent', textAlign: 'right', fontSize: 12, color: '#374151', outline: 'none', padding: '0 3px' }}
