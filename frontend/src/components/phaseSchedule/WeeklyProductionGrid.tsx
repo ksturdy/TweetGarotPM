@@ -761,8 +761,8 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
               // Unallocated: only meaningful in manual mode
               const allocatedQty  = isManual ? Object.values({ ...(item.manual_monthly_qty ?? {}), ...(localManualQty[item.id] ?? {}) }).reduce((s, v) => s + v, 0) : qty;
               const unallocatedQty = isManual ? qty - allocatedQty : null;
-              // Reforecast row: only show in qty mode when there is remaining work and future weeks
-              const reqdMap       = metric === 'qty' && remQty !== null && remQty > 0
+              // Reforecast row: show in all metric modes when there is remaining work and future weeks
+              const reqdMap       = remQty !== null && remQty > 0
                 ? (reforecastWeeklyByItem[item.id] ?? {}) : {};
               const reqdWeekCount = Object.keys(reqdMap).length;
               const showReqd      = reqdWeekCount > 0;
@@ -991,7 +991,11 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                         reqd
                       </td>
                       <td style={{ ...td(NAME_W, 'left'), position: 'sticky', left: L1, zIndex: 2, background: reqdBg, paddingLeft: 16, color: '#92400e', fontSize: 11 }}>
-                        ~{fmt1(remQty! / reqdWeekCount)}/{item.quantity_uom || 'unit'} per wk to finish on time
+                        {metric === 'qty' && `~${fmt1(remQty! / reqdWeekCount)}/${item.quantity_uom || 'unit'} per wk to finish on time`}
+                        {metric === 'hours' && hrsRate > 0 && `~${fmt1((remQty! / reqdWeekCount) * hrsRate)} hrs per wk to finish on time`}
+                        {metric === 'hours' && hrsRate === 0 && 'No productivity rate — cannot compute required hrs'}
+                        {metric === 'cost' && costRate > 0 && `~$${fmt1((remQty! / reqdWeekCount) * costRate)} per wk to finish on time`}
+                        {metric === 'cost' && costRate === 0 && 'No cost rate — cannot compute required cost'}
                       </td>
                       <td style={{ ...td(CT_W), position: 'sticky', left: L2, zIndex: 2, background: reqdBg }} />
                       <td style={{ ...td(ESTQTY_W), position: 'sticky', left: L3, zIndex: 2, background: reqdBg }} />
@@ -1001,19 +1005,28 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                       <td style={{ ...td(FINISH_W), position: 'sticky', left: L7, zIndex: 2, background: reqdBg }} />
                       <td style={{ ...td(CONTOUR_W), position: 'sticky', left: L8, zIndex: 2, background: reqdBg }} />
                       <td style={{ ...td(REMQTY_W, 'right'), position: 'sticky', left: L9, zIndex: 2, background: reqdBg, color: '#d97706', fontWeight: 600 }}>
-                        {fmt1(remQty!)}
+                        {metric === 'qty'   && fmt1(remQty!)}
+                        {metric === 'hours' && hrsRate > 0  && fmt1(remQty! * hrsRate)}
+                        {metric === 'cost'  && costRate > 0 && `$${fmt1(remQty! * costRate)}`}
                       </td>
                       <td style={{ ...td(UNALLOC_W), position: 'sticky', left: L10, zIndex: 2, background: reqdBg, boxShadow: freezeShadow, borderRight: 'none' }} />
                       {weeks.map(w => {
-                        const reqd  = reqdMap[w];
-                        const sched = scheduledQtyByItem[item.id]?.[w] || 0;
-                        if (!reqd) return <td key={w} style={{ ...td(WEEK_W), background: reqdBg }} />;
+                        const reqdQty = reqdMap[w];
+                        if (!reqdQty) return <td key={w} style={{ ...td(WEEK_W), background: reqdBg }} />;
+                        const reqdVal = metric === 'qty'   ? reqdQty
+                                      : metric === 'hours' ? reqdQty * hrsRate
+                                      : reqdQty * costRate;
+                        const schedVal = metric === 'qty'   ? (scheduledQtyByItem[item.id]?.[w]  || 0)
+                                       : metric === 'hours' ? (scheduledHrsByItem[item.id]?.[w]  || 0)
+                                       : (scheduledCostByItem[item.id]?.[w] || 0);
+                        if (reqdVal === 0) return <td key={w} style={{ ...td(WEEK_W), background: reqdBg }} />;
                         // Amber when required rate exceeds scheduled by >5% (behind); green when on track
-                        const isBehind = sched > 0 && reqd > sched * 1.05;
+                        const isBehind = schedVal > 0 && reqdVal > schedVal * 1.05;
+                        const display  = metric === 'cost' ? `$${fmt1(reqdVal)}` : fmt1(reqdVal);
                         return (
                           <td key={w} style={{ ...td(WEEK_W, 'right'), background: reqdBg, paddingRight: 6,
                             color: isBehind ? '#b45309' : '#16a34a', fontWeight: 600 }}>
-                            {fmt1(reqd)}
+                            {display}
                           </td>
                         );
                       })}
