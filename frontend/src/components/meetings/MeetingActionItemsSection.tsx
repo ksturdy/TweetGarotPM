@@ -6,7 +6,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import SearchableSelect from '../SearchableSelect';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 
 interface Props {
   meetingId: number;
@@ -28,7 +28,10 @@ const statusLabel = (s: string) => s === 'in_progress' ? 'In Progress' : s.charA
 
 const formatDate = (d: string | null) => {
   if (!d) return '—';
-  try { return format(parseISO(d), 'MMM d, yyyy'); } catch { return d; }
+  try {
+    const s = d.includes('T') ? d.split('T')[0] : d;
+    return format(new Date(s + 'T00:00:00'), 'MMM d, yyyy');
+  } catch { return d; }
 };
 
 interface ItemForm {

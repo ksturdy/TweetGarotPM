@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { meetingsApi, MEETING_TYPES } from '../../services/meetings';
 import { projectsApi } from '../../services/projects';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import ForumIcon from '@mui/icons-material/Forum';
 import EditIcon from '@mui/icons-material/Edit';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -48,7 +48,10 @@ const statusBadge = (status: string) => {
 
 const formatDate = (d: string | null) => {
   if (!d) return null;
-  try { return format(parseISO(d), 'EEEE, MMMM d, yyyy'); } catch { return d; }
+  try {
+    const s = d.includes('T') ? d.split('T')[0] : d;
+    return format(new Date(s + 'T00:00:00'), 'EEEE, MMMM d, yyyy');
+  } catch { return d; }
 };
 
 const formatTime = (t: string | null) => {

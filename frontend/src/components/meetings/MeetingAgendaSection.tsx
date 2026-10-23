@@ -8,7 +8,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 
 interface Props {
   meetingId: number;
@@ -32,7 +32,10 @@ const getStatusConfig = (status: string) =>
 
 const formatShortDate = (d: string | null) => {
   if (!d) return null;
-  try { return format(parseISO(d), 'MMM d'); } catch { return null; }
+  try {
+    const s = d.includes('T') ? d.split('T')[0] : d;
+    return format(new Date(s + 'T00:00:00'), 'MMM d');
+  } catch { return null; }
 };
 
 const StatusDropdown: React.FC<{
@@ -427,14 +430,34 @@ const MeetingAgendaSection: React.FC<Props> = ({ meetingId, agendaItems, actionI
                       <span style={{ color: '#9ca3af', fontSize: 13, width: 22, flexShrink: 0, textAlign: 'right' }}>
                         {aiIdx + 1}.
                       </span>
-                      <span style={{ flex: 1, fontSize: 13, color: '#374151' }}>
-                        {ai.description}
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        {!readonly ? (
+                          <input
+                            key={`desc-${ai.id}`}
+                            style={{
+                              flex: 1, fontSize: 13, padding: '2px 4px', minWidth: 0,
+                              border: '1px solid transparent', borderRadius: 4,
+                              color: '#374151', background: 'transparent',
+                            }}
+                            defaultValue={ai.description}
+                            onFocus={e => { (e.currentTarget as HTMLInputElement).style.borderColor = '#e5e7eb'; }}
+                            onBlur={e => {
+                              (e.currentTarget as HTMLInputElement).style.borderColor = 'transparent';
+                              const val = e.target.value.trim();
+                              if (val && val !== ai.description) {
+                                updateActionMutation.mutate({ id: ai.id, data: { description: val } });
+                              }
+                            }}
+                          />
+                        ) : (
+                          <span style={{ flex: 1, fontSize: 13, color: '#374151' }}>{ai.description}</span>
+                        )}
                         {ai.originated_meeting_id && ai.originated_meeting_id !== meetingId && (
-                          <span className="carried-badge" style={{ marginLeft: 6 }}>
+                          <span className="carried-badge" style={{ flexShrink: 0 }}>
                             From #{ai.originated_meeting_number}
                           </span>
                         )}
-                      </span>
+                      </div>
 
                       {!readonly ? (
                         <>

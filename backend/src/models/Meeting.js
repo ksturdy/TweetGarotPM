@@ -9,7 +9,7 @@ const Meeting = {
          (tenant_id, project_id, title, meeting_type, recurrence_type, day_of_week, start_time, end_time, location, description, created_by, carry_over_statuses)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
-      [tenantId, projectId, title, meetingType || 'project_meeting', recurrenceType || 'weekly', dayOfWeek, startTime, endTime, location, description, createdBy, carryOverStatuses || ['open', 'in_progress']]
+      [tenantId, projectId, title, meetingType || 'project_meeting', recurrenceType || 'weekly', dayOfWeek, startTime, endTime, location, description, createdBy, carryOverStatuses || ['open', 'in_progress', 'ongoing', 'on_hold', 'information']]
     );
     return result.rows[0];
   },
@@ -263,7 +263,7 @@ const Meeting = {
       agendaIdMap[item.id] = agResult.rows[0].id;
     }
 
-    const openItems = current.action_items.filter(ai => ['open', 'in_progress'].includes(ai.status));
+    const openItems = current.action_items.filter(ai => ai.status !== 'closed');
     for (let i = 0; i < openItems.length; i++) {
       const ai = openItems[i];
       const originatedId = ai.originated_meeting_id || meetingId;
