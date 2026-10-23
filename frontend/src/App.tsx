@@ -154,6 +154,7 @@ import PMWorkloadReport from './pages/reports/PMWorkloadReport';
 import PMReport from './pages/reports/PMReport';
 import ProjectionsReport from './pages/reports/ProjectionsReport';
 import Rolling12Report from './pages/reports/Rolling12Report';
+import Budget2027Report from './pages/reports/Budget2027Report';
 import HistoricalRevenueReport from './pages/reports/HistoricalRevenueReport';
 import PhaseReport from './pages/reports/PhaseReport';
 import ProjectHealthReport from './pages/projects/reports/ProjectHealthReport';
@@ -552,6 +553,7 @@ const App: React.FC = () => {
                 <Route path="/reports/pm-report" element={<PMReport />} />
                 <Route path="/reports/projections-report" element={<ProjectionsReport />} />
                 <Route path="/reports/rolling-12" element={<Rolling12Report />} />
+                <Route path="/reports/budget-2027" element={<Budget2027Report />} />
                 <Route path="/reports/historical-revenue" element={<HistoricalRevenueReport />} />
                 <Route path="/reports/phase-report" element={<PhaseReport />} />
                 <Route path="/executive-report" element={<Navigate to="/reports/executive-report" />} />

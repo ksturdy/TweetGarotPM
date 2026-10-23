@@ -123,6 +123,14 @@ const reports = [
     bg: '#eff6ff',
   },
   {
+    name: '2027 Budget Forecast',
+    Icon: BarChartIcon,
+    path: '/reports/budget-2027',
+    desc: 'Fixed Jan–Dec 2027 revenue forecast with SG&A and scenario analysis for budget planning',
+    color: '#7c3aed',
+    bg: '#f5f3ff',
+  },
+  {
     name: 'Historical Revenue',
     Icon: BarChartIcon,
     path: '/reports/historical-revenue',
