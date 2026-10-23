@@ -1192,12 +1192,9 @@ const CostTypeSchedule: React.FC<Props> = ({
       }, 0)
   );
 
-  const projRev = project?.projected_revenue ?? 0;
-
-  // Revenue chart: same shape as the TOTAL row, scaled by revenue/cost ratio.
-  // Use segment-derived projected cost so the ratio aligns with the grid numbers.
-  const projCostFromSegs = totalJtd + totalRem; // sum of all segment projected_cost values
-  const revMultiplier = projRev > 0 && projCostFromSegs > 0 ? projRev / projCostFromSegs : 0;
+  // Revenue chart: monthly grid total cost ÷ (1 − GM%) = monthly revenue at current margin
+  const gmPct = safeN(project?.gross_margin_percent); // stored as decimal, e.g. 0.158 = 15.8%
+  const revMultiplier = gmPct > 0 && gmPct < 1 ? 1 / (1 - gmPct) : 0;
   const monthlyRevenue = monthlyTotalCost.map(c => c * revMultiplier);
   const hasCharts = allMonths.length > 0 && (laborDatasets.length > 0 || monthlyRevenue.some(v => v > 0));
 
@@ -1373,9 +1370,9 @@ const CostTypeSchedule: React.FC<Props> = ({
             <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
               <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 Revenue by Month
-                {projRev === 0 && (
+                {gmPct === 0 && (
                   <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-                    (set Project Revenue to enable)
+                    (set GM% on project to enable)
                   </span>
                 )}
               </div>
@@ -1384,7 +1381,7 @@ const CostTypeSchedule: React.FC<Props> = ({
                   data={{
                     labels: chartLabels,
                     datasets: [{
-                      label: projRev > 0 ? 'Revenue' : 'Projected Cost',
+                      label: 'Revenue',
                       data: monthlyRevenue,
                       backgroundColor: '#10b981' + '70',
                       borderColor: '#10b981',
@@ -1398,7 +1395,18 @@ const CostTypeSchedule: React.FC<Props> = ({
                     plugins: {
                       legend: { display: false },
                       tooltip: {
-                        callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtCompact(ctx.parsed.y)}` },
+                        callbacks: {
+                          label: ctx => {
+                            const rev  = ctx.parsed.y ?? 0;
+                            const cost = monthlyTotalCost[ctx.dataIndex] ?? 0;
+                            const gm   = rev - cost;
+                            return [
+                              `Revenue: ${fmtCompact(rev)}`,
+                              `Cost:    ${fmtCompact(cost)}`,
+                              `GM$:     ${fmtCompact(gm)}`,
+                            ];
+                          },
+                        },
                       },
                     },
                     scales: {
