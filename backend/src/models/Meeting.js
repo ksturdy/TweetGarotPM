@@ -270,9 +270,9 @@ const Meeting = {
       const newAgendaItemId = ai.agenda_item_id ? (agendaIdMap[ai.agenda_item_id] || null) : null;
       await db.query(
         `INSERT INTO meeting_action_items
-           (meeting_id, agenda_item_id, order_index, originated_meeting_id, description, assignee_id, assignee_name, due_date, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [newId, newAgendaItemId, i, originatedId, ai.description, ai.assignee_id, ai.assignee_name, ai.due_date, ai.status]
+           (meeting_id, agenda_item_id, order_index, originated_meeting_id, description, assignee_id, assignee_name, due_date, status, url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [newId, newAgendaItemId, i, originatedId, ai.description, ai.assignee_id, ai.assignee_name, ai.due_date, ai.status, ai.url || null]
       );
     }
 
@@ -348,9 +348,9 @@ const Meeting = {
       const newAgendaItemId = ai.agenda_item_id ? (agendaIdMap[ai.agenda_item_id] || null) : null;
       await db.query(
         `INSERT INTO meeting_action_items
-           (meeting_id, agenda_item_id, order_index, originated_meeting_id, description, assignee_id, assignee_name, due_date, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [newId, newAgendaItemId, i, originatedId, ai.description, ai.assignee_id, ai.assignee_name, ai.due_date, ai.status]
+           (meeting_id, agenda_item_id, order_index, originated_meeting_id, description, assignee_id, assignee_name, due_date, status, url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [newId, newAgendaItemId, i, originatedId, ai.description, ai.assignee_id, ai.assignee_name, ai.due_date, ai.status, ai.url || null]
       );
     }
 
@@ -388,30 +388,31 @@ const Meeting = {
 
   // ─── Agenda Items ─────────────────────────────────────────────────────────
 
-  async addAgendaItem(meetingId, { title, notes, orderIndex }) {
+  async addAgendaItem(meetingId, { title, notes, url, orderIndex }) {
     const maxResult = await db.query(
       'SELECT COALESCE(MAX(order_index), -1) + 1 AS next_index FROM meeting_agenda_items WHERE meeting_id = $1',
       [meetingId]
     );
     const idx = orderIndex !== undefined ? orderIndex : maxResult.rows[0].next_index;
     const result = await db.query(
-      `INSERT INTO meeting_agenda_items (meeting_id, order_index, title, notes)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO meeting_agenda_items (meeting_id, order_index, title, notes, url)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [meetingId, idx, title, notes || null]
+      [meetingId, idx, title, notes || null, url || null]
     );
     return result.rows[0];
   },
 
-  async updateAgendaItem(id, { title, notes }) {
+  async updateAgendaItem(id, { title, notes, url }) {
     const result = await db.query(
       `UPDATE meeting_agenda_items SET
          title = COALESCE($1, title),
          notes = $2,
+         url = $3,
          updated_at = NOW()
-       WHERE id = $3
+       WHERE id = $4
        RETURNING *`,
-      [title, notes !== undefined ? notes : null, id]
+      [title, notes !== undefined ? notes : null, url !== undefined ? url : null, id]
     );
     return result.rows[0];
   },
@@ -431,7 +432,7 @@ const Meeting = {
 
   // ─── Action Items ─────────────────────────────────────────────────────────
 
-  async addActionItem(meetingId, { agenda_item_id, description, assignee_id, assignee_name, due_date, status }) {
+  async addActionItem(meetingId, { agenda_item_id, description, assignee_id, assignee_name, due_date, status, url }) {
     const maxResult = await db.query(
       'SELECT COALESCE(MAX(order_index), -1) + 1 AS next_index FROM meeting_action_items WHERE meeting_id = $1',
       [meetingId]
@@ -439,10 +440,10 @@ const Meeting = {
     const orderIdx = maxResult.rows[0].next_index;
     const result = await db.query(
       `INSERT INTO meeting_action_items
-         (meeting_id, agenda_item_id, order_index, description, assignee_id, assignee_name, due_date, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         (meeting_id, agenda_item_id, order_index, description, assignee_id, assignee_name, due_date, status, url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [meetingId, agenda_item_id || null, orderIdx, description, assignee_id || null, assignee_name || null, due_date || null, status || 'open']
+      [meetingId, agenda_item_id || null, orderIdx, description, assignee_id || null, assignee_name || null, due_date || null, status || 'open', url || null]
     );
     return result.rows[0];
   },
@@ -476,6 +477,7 @@ const Meeting = {
       addField('status', updates.status);
       if (updates.status === 'closed') setClauses.push('closed_at = NOW()');
     }
+    if ('url' in updates) addField('url', updates.url ?? null);
 
     params.push(id);
     const result = await db.query(

@@ -39,11 +39,12 @@ interface ItemForm {
   agenda_item_id: string;
   assignee_value: string;  // "u:123" for user, "n:Name" for freetext
   due_date: string;
+  url: string;
   status: string;
 }
 
 const emptyForm = (): ItemForm => ({
-  description: '', agenda_item_id: '', assignee_value: '', due_date: '', status: 'open',
+  description: '', agenda_item_id: '', assignee_value: '', due_date: '', url: '', status: 'open',
 });
 
 const decodeAssignee = (val: string) => {
@@ -88,6 +89,7 @@ const MeetingActionItemsSection: React.FC<Props> = ({ meetingId, actionItems, ag
         assignee_id,
         assignee_name,
         due_date: form.due_date || undefined,
+        url: form.url || undefined,
         status: form.status as any,
       });
     },
@@ -128,6 +130,7 @@ const MeetingActionItemsSection: React.FC<Props> = ({ meetingId, actionItems, ag
       agenda_item_id: item.agenda_item_id ? String(item.agenda_item_id) : '',
       assignee_value: encodeAssignee(item.assignee_id, item.assignee_name),
       due_date: item.due_date || '',
+      url: item.url || '',
       status: item.status,
     });
     setFormMode('edit');
@@ -148,6 +151,7 @@ const MeetingActionItemsSection: React.FC<Props> = ({ meetingId, actionItems, ag
       assignee_id,
       assignee_name,
       due_date: form.due_date || undefined,
+      url: form.url || undefined,
       status: form.status as any,
     };
     if (formMode === 'edit' && editingId) {
@@ -242,7 +246,7 @@ const MeetingActionItemsSection: React.FC<Props> = ({ meetingId, actionItems, ag
               autoFocus
             />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 160px 140px', gap: 12, marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 160px 140px 140px', gap: 12, marginBottom: 12 }}>
             <div className="form-group">
               <label className="form-label">Agenda Item</label>
               <SearchableSelect
@@ -268,6 +272,16 @@ const MeetingActionItemsSection: React.FC<Props> = ({ meetingId, actionItems, ag
                 type="date"
                 value={form.due_date}
                 onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Link (optional)</label>
+              <input
+                className="form-input"
+                type="url"
+                placeholder="https://…"
+                value={form.url}
+                onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
               />
             </div>
             <div className="form-group">

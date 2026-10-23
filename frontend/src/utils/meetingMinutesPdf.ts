@@ -77,13 +77,18 @@ function renderActionItemsTable(
     margin: { left: left + indent, right: right - left - contentW + (right - left - contentW) },
     tableWidth: contentW - indent,
     head: [['', 'Description', 'Assignee', 'Due Date', 'Status']],
-    body: items.map((ai, i) => [
-      String(i + 1),
-      ai.description + (ai.originated_meeting_number && ai.originated_meeting_id ? ` (From #${ai.originated_meeting_number})` : ''),
-      ai.assignee_user_name || ai.assignee_name || '—',
-      formatDueDate(ai.due_date) || '—',
-      STATUS_LABELS[ai.status] || ai.status,
-    ]),
+    body: items.map((ai, i) => {
+      const desc = ai.description
+        + (ai.originated_meeting_number && ai.originated_meeting_id ? ` (From #${ai.originated_meeting_number})` : '')
+        + ((ai as any).url ? ` [↗]` : '');
+      return [
+        String(i + 1),
+        desc,
+        ai.assignee_user_name || ai.assignee_name || '—',
+        formatDueDate(ai.due_date) || '—',
+        STATUS_LABELS[ai.status] || ai.status,
+      ];
+    }),
     styles: { fontSize: 8, cellPadding: 3 },
     headStyles: { fillColor: [50, 95, 150], textColor: 255, fontStyle: 'bold', fontSize: 8 },
     columnStyles: {
@@ -255,17 +260,35 @@ export async function generateMeetingMinutesPdf(
       doc.text(item.title, left + 22, y + 12);
       y += 22;
 
-      // Notes
+      // Notes (with bullet support for lines starting with "- " or "* ")
       if (item.notes) {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         doc.setTextColor(60, 60, 60);
-        const lines = doc.splitTextToSize(item.notes, contentW - 20);
-        lines.forEach((line: string) => {
-          if (y > 720) { doc.addPage(); y = margin; }
-          doc.text(line, left + 14, y + 9);
-          y += 13;
+        item.notes.split('\n').forEach(rawLine => {
+          const isBullet = rawLine.startsWith('- ') || rawLine.startsWith('* ');
+          const text = isBullet ? rawLine.slice(2) : rawLine;
+          const indentX = left + (isBullet ? 22 : 14);
+          const wrapW = contentW - (isBullet ? 28 : 20);
+          const wrapped = doc.splitTextToSize(text, wrapW);
+          wrapped.forEach((line: string, li: number) => {
+            if (y > 720) { doc.addPage(); y = margin; }
+            if (isBullet && li === 0) doc.text('•', left + 14, y + 9);
+            doc.text(line, indentX, y + 9);
+            y += 13;
+          });
         });
+      }
+
+      // Agenda item URL
+      if ((item as any).url) {
+        if (y > 720) { doc.addPage(); y = margin; }
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(59, 130, 246);
+        doc.text('External link: ' + (item as any).url, left + 14, y + 8);
+        y += 12;
+        doc.setTextColor(60, 60, 60);
       }
 
       // Nested action items

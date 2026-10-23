@@ -44,6 +44,7 @@ export interface MeetingAgendaItem {
   order_index: number;
   title: string;
   notes: string | null;
+  url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +63,7 @@ export interface MeetingActionItem {
   assignee_name: string | null;
   assignee_user_name: string | null;
   due_date: string | null;
+  url: string | null;
   status: ActionItemStatus;
   closed_at: string | null;
   created_at: string;

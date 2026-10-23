@@ -7,6 +7,8 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import LinkIcon from '@mui/icons-material/Link';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import { format } from 'date-fns';
 
@@ -115,6 +117,7 @@ const MeetingAgendaSection: React.FC<Props> = ({ meetingId, agendaItems, actionI
   const [newTitle, setNewTitle] = useState('');
   const [addingItemFor, setAddingItemFor] = useState<number | null>(null);
   const [newActionDesc, setNewActionDesc] = useState('');
+  const [openUrlFor, setOpenUrlFor] = useState<Set<number>>(new Set());
 
   // Drag state — agenda items
   const [dragAgendaFromIdx, setDragAgendaFromIdx] = useState<number | null>(null);
@@ -177,6 +180,25 @@ const MeetingAgendaSection: React.FC<Props> = ({ meetingId, agendaItems, actionI
     onSuccess: invalidate,
     onError: () => toast.error('Failed to delete action item.'),
   });
+
+  const toggleUrlFor = (id: number) => setOpenUrlFor(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const renderNotes = (notes: string) =>
+    notes.split('\n').map((line, i) => {
+      const isBullet = line.startsWith('- ') || line.startsWith('* ');
+      return isBullet ? (
+        <div key={i} style={{ display: 'flex', gap: 6, fontSize: 13, color: '#374151', lineHeight: 1.5 }}>
+          <span style={{ flexShrink: 0, color: '#6b7280' }}>•</span>
+          <span>{line.slice(2)}</span>
+        </div>
+      ) : (
+        <p key={i} style={{ fontSize: 13, color: '#374151', margin: '1px 0', lineHeight: 1.5 }}>{line || ' '}</p>
+      );
+    });
 
   const debounceUpdate = (id: number, data: Partial<MeetingAgendaItem>) => {
     if (saveTimers.current[id]) clearTimeout(saveTimers.current[id]);
@@ -349,12 +371,47 @@ const MeetingAgendaSection: React.FC<Props> = ({ meetingId, agendaItems, actionI
                     className="agenda-item-notes"
                     defaultValue={item.notes || ''}
                     rows={2}
-                    placeholder="Notes / discussion…"
+                    placeholder="Notes / discussion… (start a line with - for bullets)"
                     onBlur={e => debounceUpdate(item.id, { notes: e.target.value || null })}
-                    style={{ marginBottom: itemActions.length > 0 ? 12 : 4 }}
+                    style={{ marginBottom: 8 }}
                   />
                 ) : item.notes ? (
-                  <p style={{ fontSize: 13, color: '#374151', margin: '0 0 12px', whiteSpace: 'pre-wrap' }}>{item.notes}</p>
+                  <div style={{ marginBottom: 8 }}>{renderNotes(item.notes)}</div>
+                ) : null}
+
+                {/* Agenda item URL */}
+                {!readonly ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: itemActions.length > 0 ? 12 : 4 }}>
+                    <LinkIcon style={{ fontSize: 14, color: '#9ca3af', flexShrink: 0 }} />
+                    <input
+                      className="form-input"
+                      type="url"
+                      key={`agenda-url-${item.id}`}
+                      defaultValue={item.url || ''}
+                      placeholder="External link (optional)"
+                      style={{ fontSize: 12, padding: '4px 8px', flex: 1 }}
+                      onBlur={e => {
+                        const val = e.target.value.trim() || null;
+                        if (val !== (item.url || null)) debounceUpdate(item.id, { url: val });
+                      }}
+                    />
+                    {item.url && (
+                      <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                        <OpenInNewIcon style={{ fontSize: 14 }} />
+                      </a>
+                    )}
+                  </div>
+                ) : item.url ? (
+                  <div style={{ marginBottom: 8 }}>
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#3b82f6', textDecoration: 'none' }}
+                    >
+                      <LinkIcon style={{ fontSize: 13 }} /> External link <OpenInNewIcon style={{ fontSize: 11 }} />
+                    </a>
+                  </div>
                 ) : null}
 
                 {/* Action items header */}
@@ -391,8 +448,8 @@ const MeetingAgendaSection: React.FC<Props> = ({ meetingId, agendaItems, actionI
                     dragAction?.fromIdx !== aiIdx;
 
                   return (
+                    <React.Fragment key={ai.id}>
                     <div
-                      key={ai.id}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0',
                         borderTop: isActionTarget ? '2px solid #1e3a5f' : '2px solid transparent',
@@ -520,6 +577,21 @@ const MeetingAgendaSection: React.FC<Props> = ({ meetingId, agendaItems, actionI
                         disabled={readonly}
                       />
                       {!readonly && (
+                        <button
+                          className="btn-icon"
+                          title={ai.url ? 'Edit link' : 'Add link'}
+                          onClick={() => toggleUrlFor(ai.id)}
+                          style={{ color: ai.url ? '#3b82f6' : '#d1d5db' }}
+                        >
+                          <LinkIcon style={{ fontSize: 14 }} />
+                        </button>
+                      )}
+                      {readonly && ai.url && (
+                        <a href={ai.url} target="_blank" rel="noopener noreferrer" title="Open link" style={{ display: 'flex', alignItems: 'center', color: '#3b82f6' }}>
+                          <OpenInNewIcon style={{ fontSize: 14 }} />
+                        </a>
+                      )}
+                      {!readonly && (
                         <button className="btn-icon btn-icon-danger" title="Delete"
                           onClick={async () => {
                             const ok = await confirm({ title: 'Delete Action Item?', message: 'This cannot be undone.', confirmText: 'Delete', danger: true });
@@ -529,6 +601,35 @@ const MeetingAgendaSection: React.FC<Props> = ({ meetingId, agendaItems, actionI
                         </button>
                       )}
                     </div>
+
+                    {/* URL sub-row */}
+                    {!readonly && openUrlFor.has(ai.id) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 0 6px', paddingLeft: 60 }}>
+                        <LinkIcon style={{ fontSize: 13, color: '#9ca3af', flexShrink: 0 }} />
+                        <input
+                          key={`url-${ai.id}`}
+                          type="url"
+                          style={{
+                            flex: 1, fontSize: 12, padding: '3px 8px',
+                            border: '1px solid #e5e7eb', borderRadius: 4, color: '#374151',
+                          }}
+                          placeholder="https://…"
+                          defaultValue={ai.url || ''}
+                          onBlur={e => {
+                            const val = e.target.value.trim() || null;
+                            if (val !== (ai.url || null)) {
+                              updateActionMutation.mutate({ id: ai.id, data: { url: val } });
+                            }
+                          }}
+                        />
+                        {ai.url && (
+                          <a href={ai.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#3b82f6', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 2 }}>
+                            Open <OpenInNewIcon style={{ fontSize: 12 }} />
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    </React.Fragment>
                   );
                 })}
 
