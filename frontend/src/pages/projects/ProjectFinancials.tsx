@@ -354,14 +354,9 @@ const ProjectFinancials: React.FC = () => {
       const noSplit = estH > 0 && estHField === 0 && estHShop === 0;
       const fieldFrac = estH > 0 ? (noSplit ? 1 : estHField / estH) : 1;
       const shopFrac  = estH > 0 ? (noSplit ? 0 : estHShop  / estH) : 0;
-      // estHoursField/Shop: use est_hours per location for cost_type headcount distribution,
-      // matching CostTypeSchedule which also uses est_hours (not remaining) for the profile.
-      // Summary mode still uses remaining × fraction (no per-location est available).
       return {
         key, remaining,
         remainingField: remaining * fieldFrac, remainingShop: remaining * shopFrac,
-        estHoursField: noSplit ? estH : estHField,
-        estHoursShop:  noSplit ? 0   : estHShop,
         rate,
       };
     });
@@ -462,9 +457,8 @@ const ProjectFinancials: React.FC = () => {
       } catch { return 0; }
     };
 
-    // Distribute field and shop hours for each trade into their respective segment windows.
-    // In cost_type mode use est_hours per location (same source as CostTypeSchedule) so
-    // headcount profiles align. Summary mode uses remaining × fraction (no location split).
+    // Distribute remaining projected hours for each trade into their segment windows,
+    // split by field/shop proportion derived from estimated hours.
     TRADE_META.forEach(({ key }, idx) => {
       const t = tradeHours[idx];
       const fSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_FIELD_SEG[key]);
@@ -474,10 +468,8 @@ const ProjectFinancials: React.FC = () => {
                || (typeof fSeg?.weekly_hours === 'number' && fSeg.weekly_hours > 0 ? fSeg.weekly_hours : 40);
       const sWH = getLocalShiftWeeklyHours(TRADE_SHOP_SEG[key])
                || (typeof sSeg?.weekly_hours === 'number' && sSeg.weekly_hours > 0 ? sSeg.weekly_hours : 40);
-      const fieldH = schedulingMode === 'cost_type' ? (t.estHoursField ?? t.remainingField) : t.remainingField;
-      const shopH  = schedulingMode === 'cost_type' ? (t.estHoursShop  ?? t.remainingShop)  : t.remainingShop;
-      distributeHours(key, fieldH, t.rate, TRADE_FIELD_SEG[key], fWH, monthlyHours, monthlyCosts, now);
-      distributeHours(key, shopH,  t.rate, TRADE_SHOP_SEG[key],  sWH, monthlyHours, monthlyCosts, now);
+      distributeHours(key, t.remainingField, t.rate, TRADE_FIELD_SEG[key], fWH, monthlyHours, monthlyCosts, now);
+      distributeHours(key, t.remainingShop,  t.rate, TRADE_SHOP_SEG[key],  sWH, monthlyHours, monthlyCosts, now);
     });
 
     const prevWeekCost = costSummary.labor_totals?.prior_week_cost ?? 0;
