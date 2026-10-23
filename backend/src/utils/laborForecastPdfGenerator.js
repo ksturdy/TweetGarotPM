@@ -261,9 +261,13 @@ function buildProjectDetailTable(projections, columns, tf, activeTrades) {
     `<th style="${thStyle}width:${mPct}%;font-size:6pt;">${escapeHtml(fmtMonthKey(c.key))}</th>`
   ).join('');
 
+  const now = startOfMonth(new Date());
+
   const rows = projections.map((p, i) => {
     const c = p.contract;
     const bg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
+    const startLabel = addMonths(now, p.startOffset).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    const endLabel   = addMonths(now, p.startOffset + p.remainingMonths).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 
     const tradeTds = activeTrades.map(k => {
       const t = p.tradeHours.find(t => t.key === k);
@@ -288,8 +292,8 @@ function buildProjectDetailTable(projections, columns, tf, activeTrades) {
       <td style="padding:3px 5px;font-size:6.5pt;text-align:right;font-weight:700;color:#002356;">${fmtHours(filteredTotal)}</td>
       ${tradeTds}
       <td style="padding:3px 5px;font-size:6.5pt;text-align:right;">${(p.pctComplete || 0).toFixed(0)}%</td>
-      <td style="padding:3px 5px;font-size:6pt;text-align:center;white-space:nowrap;">${fmtDate(c.user_adjusted_start_date)}</td>
-      <td style="padding:3px 5px;font-size:6pt;text-align:center;white-space:nowrap;">${fmtDate(c.user_adjusted_end_date)}</td>
+      <td style="padding:3px 5px;font-size:6pt;text-align:center;white-space:nowrap;">${escapeHtml(startLabel)}</td>
+      <td style="padding:3px 5px;font-size:6pt;text-align:center;white-space:nowrap;">${escapeHtml(endLabel)}</td>
       ${monthTds}
     </tr>`;
   }).join('');
