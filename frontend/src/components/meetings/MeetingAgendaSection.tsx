@@ -118,6 +118,7 @@ const MeetingAgendaSection: React.FC<Props> = ({ meetingId, agendaItems, actionI
   const [addingItemFor, setAddingItemFor] = useState<number | null>(null);
   const [newActionDesc, setNewActionDesc] = useState('');
   const [openUrlFor, setOpenUrlFor] = useState<Set<number>>(new Set());
+  const [editingNotesFor, setEditingNotesFor] = useState<Set<number>>(new Set());
 
   // Drag state — agenda items
   const [dragAgendaFromIdx, setDragAgendaFromIdx] = useState<number | null>(null);
@@ -365,19 +366,31 @@ const MeetingAgendaSection: React.FC<Props> = ({ meetingId, agendaItems, actionI
             {/* Expanded body */}
             {!isCollapsed && (
               <div style={{ paddingLeft: 56, paddingBottom: 16 }}>
-                {/* Notes */}
-                {!readonly ? (
+                {/* Notes — click-to-edit so bullets always render in view mode */}
+                {!readonly && editingNotesFor.has(item.id) ? (
                   <textarea
                     className="agenda-item-notes"
                     defaultValue={item.notes || ''}
-                    rows={2}
+                    rows={3}
                     placeholder="Notes / discussion… (start a line with - for bullets)"
-                    onBlur={e => debounceUpdate(item.id, { notes: e.target.value || null })}
+                    autoFocus
+                    onBlur={e => {
+                      debounceUpdate(item.id, { notes: e.target.value || null });
+                      setEditingNotesFor(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+                    }}
                     style={{ marginBottom: 8 }}
                   />
-                ) : item.notes ? (
-                  <div style={{ marginBottom: 8 }}>{renderNotes(item.notes)}</div>
-                ) : null}
+                ) : (
+                  <div
+                    style={{ marginBottom: 8, cursor: readonly ? 'default' : 'text' }}
+                    onClick={() => { if (!readonly) setEditingNotesFor(prev => new Set([...prev, item.id])); }}
+                  >
+                    {item.notes
+                      ? renderNotes(item.notes)
+                      : !readonly && <span style={{ fontSize: 12, color: '#c0c7d0' }}>Click to add notes… (- for bullets)</span>
+                    }
+                  </div>
+                )}
 
                 {/* Agenda item URL */}
                 {!readonly ? (
