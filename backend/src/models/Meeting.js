@@ -3,13 +3,13 @@ const db = require('../config/database');
 const Meeting = {
   // ─── Series ──────────────────────────────────────────────────────────────
 
-  async createSeries({ tenantId, projectId, title, meetingType, recurrenceType, dayOfWeek, startTime, endTime, location, description, createdBy }) {
+  async createSeries({ tenantId, projectId, title, meetingType, recurrenceType, dayOfWeek, startTime, endTime, location, description, createdBy, carryOverStatuses }) {
     const result = await db.query(
       `INSERT INTO meeting_series
-         (tenant_id, project_id, title, meeting_type, recurrence_type, day_of_week, start_time, end_time, location, description, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         (tenant_id, project_id, title, meeting_type, recurrence_type, day_of_week, start_time, end_time, location, description, created_by, carry_over_statuses)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
-      [tenantId, projectId, title, meetingType || 'project_meeting', recurrenceType || 'weekly', dayOfWeek, startTime, endTime, location, description, createdBy]
+      [tenantId, projectId, title, meetingType || 'project_meeting', recurrenceType || 'weekly', dayOfWeek, startTime, endTime, location, description, createdBy, carryOverStatuses || ['open', 'in_progress']]
     );
     return result.rows[0];
   },
@@ -22,7 +22,7 @@ const Meeting = {
               (SELECT MAX(m.scheduled_date) FROM meetings m WHERE m.series_id = s.id) AS last_meeting_date,
               (SELECT COUNT(*) FROM meeting_action_items ai
                JOIN meetings m ON ai.meeting_id = m.id
-               WHERE m.series_id = s.id AND ai.status IN ('open','in_progress')) AS open_action_count
+               WHERE m.series_id = s.id AND ai.status != 'closed') AS open_action_count
        FROM meeting_series s
        LEFT JOIN users u ON s.created_by = u.id
        WHERE s.project_id = $1
@@ -44,7 +44,8 @@ const Meeting = {
     const map = {
       title: 'title', meetingType: 'meeting_type', recurrenceType: 'recurrence_type',
       dayOfWeek: 'day_of_week', startTime: 'start_time', endTime: 'end_time',
-      location: 'location', description: 'description', isActive: 'is_active'
+      location: 'location', description: 'description', isActive: 'is_active',
+      carry_over_statuses: 'carry_over_statuses', carryOverStatuses: 'carry_over_statuses',
     };
     Object.entries(updates).forEach(([k, v]) => {
       if (v !== undefined && map[k]) {
@@ -93,7 +94,7 @@ const Meeting = {
              s.recurrence_type AS series_recurrence,
              u.first_name || ' ' || u.last_name AS created_by_name,
              (SELECT COUNT(*) FROM meeting_action_items ai
-              WHERE ai.meeting_id = m.id AND ai.status IN ('open','in_progress')) AS open_action_count,
+              WHERE ai.meeting_id = m.id AND ai.status != 'closed') AS open_action_count,
              (SELECT COUNT(*) FROM meeting_attendees ma WHERE ma.meeting_id = m.id) AS attendee_count
       FROM meetings m
       LEFT JOIN meeting_series s ON m.series_id = s.id
@@ -162,7 +163,7 @@ const Meeting = {
          LEFT JOIN meeting_agenda_items ag ON ai.agenda_item_id = ag.id
          LEFT JOIN meetings om ON ai.originated_meeting_id = om.id
          WHERE ai.meeting_id = $1
-         ORDER BY ai.created_at`,
+         ORDER BY ai.order_index, ai.created_at`,
         [id]
       ),
     ]);
@@ -244,11 +245,11 @@ const Meeting = {
     if (current.attendees.length) {
       const attendeeValues = current.attendees.map((a, i) => {
         const base = i * 5;
-        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`;
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, false)`;
       }).join(', ');
       const attendeeParams = current.attendees.flatMap(a => [newId, a.user_id, a.contact_id, a.name, a.company]);
       await db.query(
-        `INSERT INTO meeting_attendees (meeting_id, user_id, contact_id, name, company) VALUES ${attendeeValues}`,
+        `INSERT INTO meeting_attendees (meeting_id, user_id, contact_id, name, company, attended) VALUES ${attendeeValues}`,
         attendeeParams
       );
     }
@@ -263,14 +264,15 @@ const Meeting = {
     }
 
     const openItems = current.action_items.filter(ai => ['open', 'in_progress'].includes(ai.status));
-    for (const ai of openItems) {
+    for (let i = 0; i < openItems.length; i++) {
+      const ai = openItems[i];
       const originatedId = ai.originated_meeting_id || meetingId;
       const newAgendaItemId = ai.agenda_item_id ? (agendaIdMap[ai.agenda_item_id] || null) : null;
       await db.query(
         `INSERT INTO meeting_action_items
-           (meeting_id, agenda_item_id, originated_meeting_id, description, assignee_id, assignee_name, due_date, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [newId, newAgendaItemId, originatedId, ai.description, ai.assignee_id, ai.assignee_name, ai.due_date, ai.status]
+           (meeting_id, agenda_item_id, order_index, originated_meeting_id, description, assignee_id, assignee_name, due_date, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [newId, newAgendaItemId, i, originatedId, ai.description, ai.assignee_id, ai.assignee_name, ai.due_date, ai.status]
       );
     }
 
@@ -281,6 +283,11 @@ const Meeting = {
   async scheduleNext(meetingId, tenantId, userId) {
     const current = await this.findById(meetingId);
     if (!current || !current.series_id) throw new Error('Meeting has no series');
+
+    const seriesRow = await this.findSeriesById(current.series_id);
+    const carryOverStatuses = (seriesRow && seriesRow.carry_over_statuses && seriesRow.carry_over_statuses.length)
+      ? seriesRow.carry_over_statuses
+      : ['open', 'in_progress'];
 
     // Calculate next date
     const currentDate = current.scheduled_date ? new Date(current.scheduled_date) : new Date();
@@ -314,11 +321,11 @@ const Meeting = {
     if (current.attendees.length) {
       const attendeeValues = current.attendees.map((a, i) => {
         const base = i * 5;
-        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`;
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, false)`;
       }).join(', ');
       const attendeeParams = current.attendees.flatMap(a => [newId, a.user_id, a.contact_id, a.name, a.company]);
       await db.query(
-        `INSERT INTO meeting_attendees (meeting_id, user_id, contact_id, name, company) VALUES ${attendeeValues}`,
+        `INSERT INTO meeting_attendees (meeting_id, user_id, contact_id, name, company, attended) VALUES ${attendeeValues}`,
         attendeeParams
       );
     }
@@ -333,16 +340,17 @@ const Meeting = {
       agendaIdMap[item.id] = agResult.rows[0].id;
     }
 
-    // Carry forward open/in_progress action items
-    const openItems = current.action_items.filter(ai => ['open', 'in_progress'].includes(ai.status));
-    for (const ai of openItems) {
+    // Carry forward action items whose status matches the series carry_over_statuses setting
+    const openItems = current.action_items.filter(ai => carryOverStatuses.includes(ai.status));
+    for (let i = 0; i < openItems.length; i++) {
+      const ai = openItems[i];
       const originatedId = ai.originated_meeting_id || meetingId;
       const newAgendaItemId = ai.agenda_item_id ? (agendaIdMap[ai.agenda_item_id] || null) : null;
       await db.query(
         `INSERT INTO meeting_action_items
-           (meeting_id, agenda_item_id, originated_meeting_id, description, assignee_id, assignee_name, due_date, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [newId, newAgendaItemId, originatedId, ai.description, ai.assignee_id, ai.assignee_name, ai.due_date, ai.status]
+           (meeting_id, agenda_item_id, order_index, originated_meeting_id, description, assignee_id, assignee_name, due_date, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [newId, newAgendaItemId, i, originatedId, ai.description, ai.assignee_id, ai.assignee_name, ai.due_date, ai.status]
       );
     }
 
@@ -356,7 +364,7 @@ const Meeting = {
       `INSERT INTO meeting_attendees (meeting_id, user_id, contact_id, name, company, attended)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [meetingId, userId || null, contactId || null, name, company, attended !== false]
+      [meetingId, userId || null, contactId || null, name, company, attended === true]
     );
     return result.rows[0];
   },
@@ -424,38 +432,105 @@ const Meeting = {
   // ─── Action Items ─────────────────────────────────────────────────────────
 
   async addActionItem(meetingId, { agenda_item_id, description, assignee_id, assignee_name, due_date, status }) {
+    const maxResult = await db.query(
+      'SELECT COALESCE(MAX(order_index), -1) + 1 AS next_index FROM meeting_action_items WHERE meeting_id = $1',
+      [meetingId]
+    );
+    const orderIdx = maxResult.rows[0].next_index;
     const result = await db.query(
       `INSERT INTO meeting_action_items
-         (meeting_id, agenda_item_id, description, assignee_id, assignee_name, due_date, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (meeting_id, agenda_item_id, order_index, description, assignee_id, assignee_name, due_date, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [meetingId, agenda_item_id || null, description, assignee_id || null, assignee_name || null, due_date || null, status || 'open']
+      [meetingId, agenda_item_id || null, orderIdx, description, assignee_id || null, assignee_name || null, due_date || null, status || 'open']
     );
     return result.rows[0];
   },
 
-  async updateActionItem(id, { agenda_item_id, description, assignee_id, assignee_name, due_date, status }) {
+  async reorderActionItems(meetingId, orderedIds) {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.query(
+        'UPDATE meeting_action_items SET order_index = $1 WHERE id = $2 AND meeting_id = $3',
+        [i, orderedIds[i], meetingId]
+      );
+    }
+  },
+
+  async updateActionItem(id, updates) {
+    const setClauses = ['updated_at = NOW()'];
+    const params = [];
+    let idx = 1;
+
+    const addField = (col, val) => {
+      setClauses.push(`${col} = $${idx}`);
+      params.push(val);
+      idx++;
+    };
+
+    if ('agenda_item_id' in updates) addField('agenda_item_id', updates.agenda_item_id || null);
+    if ('description' in updates) addField('description', updates.description);
+    if ('assignee_id' in updates) addField('assignee_id', updates.assignee_id ?? null);
+    if ('assignee_name' in updates) addField('assignee_name', updates.assignee_name ?? null);
+    if ('due_date' in updates) addField('due_date', updates.due_date || null);
+    if ('status' in updates) {
+      addField('status', updates.status);
+      if (updates.status === 'closed') setClauses.push('closed_at = NOW()');
+    }
+
+    params.push(id);
     const result = await db.query(
-      `UPDATE meeting_action_items SET
-         agenda_item_id = COALESCE($1, agenda_item_id),
-         description = COALESCE($2, description),
-         assignee_id = $3,
-         assignee_name = $4,
-         due_date = $5,
-         status = COALESCE($6, status),
-         closed_at = CASE WHEN $6 = 'closed' THEN NOW() ELSE closed_at END,
-         updated_at = NOW()
-       WHERE id = $7
-       RETURNING *`,
-      [agenda_item_id || null, description, assignee_id !== undefined ? assignee_id : null,
-       assignee_name !== undefined ? assignee_name : null, due_date !== undefined ? due_date : null,
-       status, id]
+      `UPDATE meeting_action_items SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *`,
+      params
     );
     return result.rows[0];
   },
 
   async deleteActionItem(id) {
     await db.query('DELETE FROM meeting_action_items WHERE id = $1', [id]);
+  },
+
+  async findActionItemsByProject(projectId) {
+    const result = await db.query(
+      `WITH ranked AS (
+         SELECT ai.id,
+                ai.meeting_id,
+                ai.agenda_item_id,
+                ai.order_index,
+                ai.originated_meeting_id,
+                ai.description,
+                ai.assignee_id,
+                ai.assignee_name,
+                ai.due_date,
+                ai.status,
+                ai.closed_at,
+                ai.created_at,
+                ai.updated_at,
+                m.number AS meeting_number,
+                m.title AS meeting_title,
+                m.scheduled_date AS meeting_date,
+                COALESCE(u.first_name || ' ' || u.last_name, ai.assignee_name) AS assignee_display,
+                ag.title AS agenda_item_title,
+                om.number AS originated_meeting_number,
+                ROW_NUMBER() OVER (
+                  PARTITION BY COALESCE(ai.originated_meeting_id, ai.meeting_id), ai.description
+                  ORDER BY m.scheduled_date DESC NULLS LAST, ai.meeting_id DESC
+                ) AS rn
+         FROM meeting_action_items ai
+         JOIN meetings m ON ai.meeting_id = m.id
+         LEFT JOIN users u ON ai.assignee_id = u.id
+         LEFT JOIN meeting_agenda_items ag ON ai.agenda_item_id = ag.id
+         LEFT JOIN meetings om ON ai.originated_meeting_id = om.id
+         WHERE m.project_id = $1
+       )
+       SELECT * FROM ranked
+       WHERE rn = 1
+       ORDER BY
+         CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
+         due_date ASC,
+         meeting_date DESC NULLS LAST`,
+      [projectId]
+    );
+    return result.rows;
   },
 };
 

@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Meeting, MEETING_TYPES } from '../services/meetings';
+import { Meeting, MeetingActionItem, MEETING_TYPES } from '../services/meetings';
 
 function loadImageAsDataUrl(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -45,7 +45,68 @@ function formatDueDate(d: string | null | undefined): string {
   return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-const STATUS_LABELS: Record<string, string> = { open: 'Open', in_progress: 'In Progress', closed: 'Closed' };
+const STATUS_LABELS: Record<string, string> = {
+  open: 'Open',
+  in_progress: 'In Progress',
+  ongoing: 'Ongoing',
+  on_hold: 'On Hold',
+  closed: 'Closed',
+  information: 'Information',
+};
+
+const STATUS_COLORS: Record<string, [number, number, number]> = {
+  open: [249, 115, 22],
+  in_progress: [59, 130, 246],
+  ongoing: [59, 130, 246],
+  on_hold: [236, 72, 153],
+  closed: [107, 114, 128],
+  information: [14, 165, 233],
+};
+
+function renderActionItemsTable(
+  doc: jsPDF,
+  items: MeetingActionItem[],
+  startY: number,
+  left: number,
+  right: number,
+  contentW: number,
+  indent: number = 0,
+): number {
+  autoTable(doc, {
+    startY,
+    margin: { left: left + indent, right: right - left - contentW + (right - left - contentW) },
+    tableWidth: contentW - indent,
+    head: [['', 'Description', 'Assignee', 'Due Date', 'Status']],
+    body: items.map((ai, i) => [
+      String(i + 1),
+      ai.description + (ai.originated_meeting_number && ai.originated_meeting_id ? ` (From #${ai.originated_meeting_number})` : ''),
+      ai.assignee_user_name || ai.assignee_name || '—',
+      formatDueDate(ai.due_date) || '—',
+      STATUS_LABELS[ai.status] || ai.status,
+    ]),
+    styles: { fontSize: 8, cellPadding: 3 },
+    headStyles: { fillColor: [50, 95, 150], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+    columnStyles: {
+      0: { cellWidth: 18 },
+      1: { cellWidth: (contentW - indent) * 0.4 },
+      2: { cellWidth: (contentW - indent) * 0.22 },
+      3: { cellWidth: (contentW - indent) * 0.18 },
+      4: { cellWidth: (contentW - indent) * 0.14 },
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    didParseCell: (data) => {
+      if (data.column.index === 4 && data.section === 'body') {
+        const label = data.cell.raw as string;
+        const colorEntry = Object.entries(STATUS_LABELS).find(([, v]) => v === label);
+        if (colorEntry) {
+          const col = STATUS_COLORS[colorEntry[0]];
+          if (col) data.cell.styles.textColor = col;
+        }
+      }
+    },
+  });
+  return (doc as any).lastAutoTable.finalY + 8;
+}
 
 export async function generateMeetingMinutesPdf(
   meeting: Meeting,
@@ -152,15 +213,32 @@ export async function generateMeetingMinutesPdf(
     y = (doc as any).lastAutoTable.finalY + 14;
   }
 
-  // ── Agenda ────────────────────────────────────────────────────────────────
+  // ── Agenda with nested action items ───────────────────────────────────────
   const agendaItems = meeting.agenda_items || [];
+  const actionItems = meeting.action_items || [];
+
+  // Group action items by agenda_item_id
+  const actionsByAgendaId = new Map<number | null, MeetingActionItem[]>();
+  actionItems.forEach(ai => {
+    const key = ai.agenda_item_id ?? null;
+    if (!actionsByAgendaId.has(key)) actionsByAgendaId.set(key, []);
+    actionsByAgendaId.get(key)!.push(ai);
+  });
+
+  const unlinkedActions = actionsByAgendaId.get(null) || [];
+  const linkedActionCount = actionItems.length - unlinkedActions.length;
+
   if (agendaItems.length > 0) {
     if (y > 680) { doc.addPage(); y = margin; }
+
+    const agendaLabel = linkedActionCount > 0
+      ? `AGENDA (${agendaItems.length} ITEMS · ${linkedActionCount} ACTION ITEMS)`
+      : `AGENDA (${agendaItems.length} ITEMS)`;
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(30, 58, 95);
-    doc.text(`AGENDA (${agendaItems.length} ITEMS)`, left, y + 10);
+    doc.text(agendaLabel, left, y + 10);
     y += 18;
 
     agendaItems.forEach((item, idx) => {
@@ -189,59 +267,44 @@ export async function generateMeetingMinutesPdf(
           y += 13;
         });
       }
-      y += 6;
+
+      // Nested action items
+      const itemActions = actionsByAgendaId.get(item.id) || [];
+      if (itemActions.length > 0) {
+        if (y > 680) { doc.addPage(); y = margin; }
+
+        // Small "Action Items" label
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(120, 120, 120);
+        doc.text('ACTION ITEMS', left + 14, y + 8);
+        y += 10;
+
+        y = renderActionItemsTable(doc, itemActions, y, left + 14, right, contentW - 14, 0);
+      } else {
+        y += 6;
+      }
     });
     y += 4;
   }
 
-  // ── Action Items ──────────────────────────────────────────────────────────
-  const actionItems = meeting.action_items || [];
-  if (actionItems.length > 0) {
+  // ── Unlinked Action Items ─────────────────────────────────────────────────
+  if (unlinkedActions.length > 0) {
     if (y > 640) { doc.addPage(); y = margin; }
 
-    const openCount = actionItems.filter(a => a.status !== 'closed').length;
+    const openCount = unlinkedActions.filter(a => a.status !== 'closed').length;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(30, 58, 95);
-    doc.text(`ACTION ITEMS (${actionItems.length})`, left, y + 10);
+    doc.text(`UNLINKED ACTION ITEMS (${unlinkedActions.length})`, left, y + 10);
     if (openCount > 0) {
       doc.setFontSize(9);
       doc.setTextColor(245, 158, 11);
-      doc.text(`${openCount} open`, left + 130, y + 10);
+      doc.text(`${openCount} open`, left + 200, y + 10);
     }
     y += 16;
 
-    autoTable(doc, {
-      startY: y,
-      margin: { left, right: margin },
-      head: [['#', 'Description', 'Assignee', 'Due Date', 'Status']],
-      body: actionItems.map((ai, i) => [
-        String(i + 1),
-        ai.description,
-        ai.assignee_user_name || ai.assignee_name || '—',
-        formatDueDate(ai.due_date) || '—',
-        STATUS_LABELS[ai.status] || ai.status,
-      ]),
-      styles: { fontSize: 9, cellPadding: 4 },
-      headStyles: { fillColor: [30, 58, 95], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-      columnStyles: {
-        0: { cellWidth: 22 },
-        1: { cellWidth: contentW * 0.38 },
-        2: { cellWidth: contentW * 0.22 },
-        3: { cellWidth: contentW * 0.18 },
-        4: { cellWidth: contentW * 0.15 },
-      },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      didParseCell: (data) => {
-        if (data.column.index === 4 && data.section === 'body') {
-          const status = data.cell.raw as string;
-          if (status === 'Open') data.cell.styles.textColor = [245, 158, 11];
-          else if (status === 'In Progress') data.cell.styles.textColor = [59, 130, 246];
-          else if (status === 'Closed') data.cell.styles.textColor = [107, 114, 128];
-        }
-      },
-    });
-    y = (doc as any).lastAutoTable.finalY + 14;
+    y = renderActionItemsTable(doc, unlinkedActions, y, left, right, contentW, 0);
   }
 
   // ── Footer on every page ──────────────────────────────────────────────────

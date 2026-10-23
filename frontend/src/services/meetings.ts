@@ -14,6 +14,7 @@ export interface MeetingSeries {
   is_active: boolean;
   created_by: number;
   created_by_name: string | null;
+  carry_over_statuses: string[];
   meeting_count: number;
   last_meeting_date: string | null;
   open_action_count: number;
@@ -47,6 +48,8 @@ export interface MeetingAgendaItem {
   updated_at: string;
 }
 
+export type ActionItemStatus = 'open' | 'in_progress' | 'ongoing' | 'on_hold' | 'information' | 'closed';
+
 export interface MeetingActionItem {
   id: number;
   meeting_id: number;
@@ -59,10 +62,18 @@ export interface MeetingActionItem {
   assignee_name: string | null;
   assignee_user_name: string | null;
   due_date: string | null;
-  status: 'open' | 'in_progress' | 'closed';
+  status: ActionItemStatus;
   closed_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectActionItem extends MeetingActionItem {
+  meeting_number: number;
+  meeting_title: string;
+  meeting_date: string | null;
+  assignee_display: string | null;
+  agenda_item_title: string | null;
 }
 
 export interface Meeting {
@@ -161,6 +172,10 @@ export const meetingsApi = {
   reorderAgendaItems: (meetingId: number, orderedIds: number[]) =>
     api.put(`/meetings/${meetingId}/agenda-items/reorder`, { orderedIds }),
 
+  // Project-level action items
+  getActionItemsByProject: (projectId: number) =>
+    api.get<ProjectActionItem[]>(`/meetings/action-items/project/${projectId}`),
+
   // Action items
   addActionItem: (meetingId: number, data: Partial<MeetingActionItem>) =>
     api.post<MeetingActionItem>(`/meetings/${meetingId}/action-items`, data),
@@ -168,4 +183,6 @@ export const meetingsApi = {
     api.put<MeetingActionItem>(`/meetings/${meetingId}/action-items/${itemId}`, data),
   deleteActionItem: (meetingId: number, itemId: number) =>
     api.delete(`/meetings/${meetingId}/action-items/${itemId}`),
+  reorderActionItems: (meetingId: number, orderedIds: number[]) =>
+    api.put(`/meetings/${meetingId}/action-items/reorder`, { orderedIds }),
 };

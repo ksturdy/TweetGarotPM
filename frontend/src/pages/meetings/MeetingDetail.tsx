@@ -18,7 +18,6 @@ import LockIcon from '@mui/icons-material/Lock';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import MeetingAttendeesSection from '../../components/meetings/MeetingAttendeesSection';
 import MeetingAgendaSection from '../../components/meetings/MeetingAgendaSection';
-import MeetingActionItemsSection from '../../components/meetings/MeetingActionItemsSection';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import { useAuth } from '../../context/AuthContext';
 import { generateMeetingMinutesPdf } from '../../utils/meetingMinutesPdf';
@@ -320,39 +319,23 @@ const MeetingDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Agenda */}
+      {/* Agenda + nested action items */}
       <div className="meeting-section-card">
         <div className="meeting-section-header">
           <span className="meeting-section-title">
             Agenda ({(meeting.agenda_items || []).length} items)
           </span>
+          {(meeting.action_items || []).filter(ai => ai.status !== 'closed').length > 0 && (
+            <span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 10px', borderRadius: 10, fontSize: 12, fontWeight: 600 }}>
+              {(meeting.action_items || []).filter(ai => ai.status !== 'closed').length} open actions
+            </span>
+          )}
         </div>
         <div className="meeting-section-body">
           <MeetingAgendaSection
             meetingId={meeting.id}
             agendaItems={meeting.agenda_items || []}
-            readonly={isReadonly}
-          />
-        </div>
-      </div>
-
-      {/* Action Items */}
-      <div className="meeting-section-card">
-        <div className="meeting-section-header">
-          <span className="meeting-section-title">
-            Action Items ({(meeting.action_items || []).length})
-          </span>
-          {(meeting.action_items || []).filter(ai => ai.status !== 'closed').length > 0 && (
-            <span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 10px', borderRadius: 10, fontSize: 12, fontWeight: 600 }}>
-              {(meeting.action_items || []).filter(ai => ai.status !== 'closed').length} open
-            </span>
-          )}
-        </div>
-        <div className="meeting-section-body" style={{ padding: '0' }}>
-          <MeetingActionItemsSection
-            meetingId={meeting.id}
             actionItems={meeting.action_items || []}
-            agendaItems={meeting.agenda_items || []}
             attendees={meeting.attendees || []}
             readonly={isReadonly}
           />

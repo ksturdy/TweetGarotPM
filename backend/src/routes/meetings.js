@@ -37,23 +37,25 @@ router.get('/series/project/:projectId', verifyProjectOwnership, async (req, res
 });
 
 router.post('/series',
-  [body('title').notEmpty(), body('recurrenceType').notEmpty(), body('projectId').notEmpty()],
+  [body('title').notEmpty(), body('projectId').notEmpty()],
   validate,
   verifyProjectOwnership,
   async (req, res, next) => {
     try {
+      const b = req.body;
       const series = await Meeting.createSeries({
         tenantId: req.tenantId,
-        projectId: req.body.projectId,
-        title: req.body.title,
-        meetingType: req.body.meetingType,
-        recurrenceType: req.body.recurrenceType,
-        dayOfWeek: req.body.dayOfWeek,
-        startTime: req.body.startTime,
-        endTime: req.body.endTime,
-        location: req.body.location,
-        description: req.body.description,
+        projectId: b.projectId,
+        title: b.title,
+        meetingType: b.meeting_type || b.meetingType,
+        recurrenceType: b.recurrence_type || b.recurrenceType,
+        dayOfWeek: b.day_of_week ?? b.dayOfWeek,
+        startTime: b.start_time || b.startTime,
+        endTime: b.end_time || b.endTime,
+        location: b.location,
+        description: b.description,
         createdBy: req.user.id,
+        carryOverStatuses: b.carry_over_statuses || b.carryOverStatuses,
       });
       res.status(201).json(series);
     } catch (err) { next(err); }
@@ -83,6 +85,13 @@ router.get('/project/:projectId', verifyProjectOwnership, async (req, res, next)
     const filters = { status: req.query.status, seriesId: req.query.seriesId };
     const meetings = await Meeting.findByProject(req.params.projectId, filters);
     res.json(meetings);
+  } catch (err) { next(err); }
+});
+
+router.get('/action-items/project/:projectId', verifyProjectOwnership, async (req, res, next) => {
+  try {
+    const items = await Meeting.findActionItemsByProject(req.params.projectId);
+    res.json(items);
   } catch (err) { next(err); }
 });
 
@@ -237,6 +246,13 @@ router.post('/:id/action-items', async (req, res, next) => {
   try {
     const item = await Meeting.addActionItem(req.params.id, req.body);
     res.status(201).json(item);
+  } catch (err) { next(err); }
+});
+
+router.put('/:id/action-items/reorder', async (req, res, next) => {
+  try {
+    await Meeting.reorderActionItems(req.params.id, req.body.orderedIds);
+    res.json({ success: true });
   } catch (err) { next(err); }
 });
 

@@ -17,6 +17,7 @@ interface SearchableSelectProps {
   className?: string;
   onSearchTermChange?: (term: string) => void;
   compact?: boolean;
+  autoOpen?: boolean;
 }
 
 const MAX_VISIBLE = 50;
@@ -30,29 +31,29 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
   style,
   className,
   onSearchTermChange,
-  compact = false
+  compact = false,
+  autoOpen = false,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(autoOpen);
   const [searchTerm, setSearchTerm] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0, flipUp: false });
   const triggerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  // Memoize valid options (filter out null/empty labels)
   const validOptions = useMemo(
     () => options.filter(opt => opt.label != null && opt.label !== ''),
     [options]
   );
 
-  // Get the selected option's label
   const displayValue = useMemo(() => {
     if (!value) return '';
     const selected = validOptions.find(opt => opt.value.toString() === value);
     return selected?.label ?? '';
   }, [validOptions, value]);
 
-  // Smart filter: each word in the search must appear somewhere in searchText (or label)
   const filteredOptions = useMemo(() => {
     if (!searchTerm.trim()) return validOptions;
     const words = searchTerm.toLowerCase().trim().split(/\s+/);
@@ -62,18 +63,19 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     });
   }, [validOptions, searchTerm]);
 
-  // Cap rendered results for performance
   const visibleOptions = useMemo(
     () => filteredOptions.slice(0, MAX_VISIBLE),
     [filteredOptions]
   );
   const hasMore = filteredOptions.length > MAX_VISIBLE;
 
-  // Calculate dropdown position when opening — flip upward when near the bottom of the viewport
+  // Reset highlight when search changes
+  useEffect(() => { setHighlightedIndex(0); }, [searchTerm]);
+
   const updatePosition = useCallback(() => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      const DROPDOWN_MAX_HEIGHT = 308; // 300 list + 8 search bar
+      const DROPDOWN_MAX_HEIGHT = 308;
       const spaceBelow = window.innerHeight - rect.bottom - 8;
       const flipUp = spaceBelow < DROPDOWN_MAX_HEIGHT && rect.top > spaceBelow;
       setDropdownPos({
@@ -85,19 +87,21 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     }
   }, []);
 
-  // Open dropdown and calculate position
   const handleToggle = useCallback(() => {
     if (disabled) return;
     setIsOpen(prev => {
-      if (!prev) {
-        // Opening - calculate position
-        setTimeout(updatePosition, 0);
-      }
+      if (!prev) setTimeout(updatePosition, 0);
       return !prev;
     });
   }, [disabled, updatePosition]);
 
-  // Close dropdown when clicking outside
+  // Auto-open positioning
+  useEffect(() => {
+    if (autoOpen) {
+      setTimeout(updatePosition, 0);
+    }
+  }, [autoOpen, updatePosition]);
+
   useEffect(() => {
     if (!isOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
@@ -114,7 +118,6 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  // Reposition on scroll/resize
   useEffect(() => {
     if (!isOpen) return;
     const handleReposition = () => updatePosition();
@@ -126,18 +129,43 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     };
   }, [isOpen, updatePosition]);
 
-  // Focus input when dropdown opens
   useEffect(() => {
     if (isOpen && inputRef.current) {
       inputRef.current.focus();
     }
   }, [isOpen]);
 
-  const handleSelect = useCallback((optionValue: string | number) => {
+  // Scroll highlighted row into view
+  useEffect(() => {
+    if (!listRef.current) return;
+    const highlighted = listRef.current.querySelector<HTMLElement>('[data-highlighted="true"]');
+    if (highlighted) highlighted.scrollIntoView({ block: 'nearest' });
+  }, [highlightedIndex]);
+
+  const selectOption = useCallback((optionValue: string | number) => {
     onChange(optionValue.toString());
     setIsOpen(false);
     setSearchTerm('');
+    setHighlightedIndex(0);
   }, [onChange]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.min(i + 1, visibleOptions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      if (visibleOptions.length > 0) {
+        e.preventDefault();
+        selectOption(visibleOptions[highlightedIndex]?.value ?? visibleOptions[0].value);
+      }
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+      setSearchTerm('');
+    }
+  }, [visibleOptions, highlightedIndex, selectOption]);
 
   const handleClear = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -145,7 +173,6 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     setSearchTerm('');
   }, [onChange]);
 
-  // Render dropdown via portal so it's never clipped by parent overflow
   const dropdown = isOpen ? ReactDOM.createPortal(
     <div
       ref={dropdownRef}
@@ -166,7 +193,6 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         flexDirection: 'column' as const,
       }}
     >
-      {/* Search input */}
       <div style={{ padding: '0.5rem', borderBottom: '1px solid #e2e8f0' }}>
         <input
           ref={inputRef}
@@ -176,6 +202,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
             setSearchTerm(e.target.value);
             onSearchTermChange?.(e.target.value);
           }}
+          onKeyDown={handleKeyDown}
           placeholder={`Type to search (${validOptions.length} options)...`}
           style={{
             width: '100%',
@@ -191,12 +218,10 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         />
       </div>
 
-      {/* Options list */}
-      <div style={{ overflowY: 'auto', maxHeight: '240px' }}>
-        {/* Clear / none option */}
+      <div ref={listRef} style={{ overflowY: 'auto', maxHeight: '240px' }}>
         {!searchTerm && (
           <div
-            onClick={() => handleSelect('')}
+            onClick={() => selectOption('')}
             style={{
               padding: '0.5rem 0.75rem',
               cursor: 'pointer',
@@ -214,24 +239,21 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
         {visibleOptions.length > 0 ? (
           <>
-            {visibleOptions.map((option) => {
+            {visibleOptions.map((option, idx) => {
               const isSelected = option.value.toString() === value;
+              const isHighlighted = idx === highlightedIndex;
               return (
                 <div
                   key={option.value}
-                  onClick={() => handleSelect(option.value)}
+                  data-highlighted={isHighlighted ? 'true' : undefined}
+                  onClick={() => selectOption(option.value)}
+                  onMouseEnter={() => setHighlightedIndex(idx)}
                   style={{
                     padding: '0.5rem 0.75rem',
                     cursor: 'pointer',
                     fontSize: '0.875rem',
-                    background: isSelected ? '#eff6ff' : 'transparent',
-                    color: isSelected ? '#3b82f6' : '#1e293b'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.background = '#f8fafc';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = isSelected ? '#eff6ff' : 'transparent';
+                    background: isHighlighted ? '#eff6ff' : isSelected ? '#eff6ff' : 'transparent',
+                    color: isSelected || isHighlighted ? '#3b82f6' : '#1e293b',
                   }}
                 >
                   {option.label}
@@ -270,14 +292,9 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
   return (
     <div
-      style={{
-        position: 'relative',
-        minWidth: '200px',
-        ...style
-      }}
+      style={{ position: 'relative', minWidth: '200px', ...style }}
       className={className}
     >
-      {/* Display field */}
       <div
         ref={triggerRef}
         className="searchable-select-trigger"
@@ -304,13 +321,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
             <button
               onClick={handleClear}
               style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '0 4px',
-                color: '#94a3b8',
-                fontSize: '1rem',
-                lineHeight: 1
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: '0 4px', color: '#94a3b8', fontSize: '1rem', lineHeight: 1
               }}
               title="Clear"
             >

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { meetingsApi, MeetingSeries, MEETING_TYPES, RECURRENCE_LABELS } from '../../services/meetings';
+import { meetingsApi, MEETING_TYPES, RECURRENCE_LABELS } from '../../services/meetings';
 import { projectsApi } from '../../services/projects';
 import ForumIcon from '@mui/icons-material/Forum';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
@@ -9,6 +9,18 @@ import '../../styles/SalesPipeline.css';
 import './Meetings.css';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function addMinsToTime(timeStr: string, mins: number): string {
+  const [h, m] = timeStr.split(':').map(Number);
+  const total = h * 60 + m + mins;
+  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function diffMins(startStr: string, endStr: string): number {
+  const [sh, sm] = startStr.split(':').map(Number);
+  const [eh, em] = endStr.split(':').map(Number);
+  return (eh * 60 + em) - (sh * 60 + sm);
+}
 
 const MeetingForm: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id?: string }>();
@@ -19,34 +31,24 @@ const MeetingForm: React.FC = () => {
   const isEdit = Boolean(id);
 
   const [meetingMode, setMeetingMode] = useState<'oneoff' | 'series'>('oneoff');
-  const [showNewSeries, setShowNewSeries] = useState(false);
+  const [duration, setDuration] = useState(60);
+  const initialStart = searchParams.get('time') || '';
   const [form, setForm] = useState({
     title: '',
     meeting_type: 'project_meeting',
     series_id: '',
+    recurrence_type: 'weekly',
+    day_of_week: '1',
     scheduled_date: searchParams.get('date') || '',
-    start_time: searchParams.get('time') || '',
-    end_time: '',
+    start_time: initialStart,
+    end_time: initialStart ? addMinsToTime(initialStart, 60) : '',
     location: '',
     description: '',
-  });
-  const [newSeries, setNewSeries] = useState({
-    title: '',
-    recurrence_type: 'weekly',
-    day_of_week: 1,
-    start_time: '',
-    end_time: '',
-    location: '',
   });
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => projectsApi.getById(Number(projectId)).then(r => r.data),
-  });
-
-  const { data: seriesList = [] } = useQuery({
-    queryKey: ['meeting-series', Number(projectId)],
-    queryFn: () => meetingsApi.getSeriesByProject(Number(projectId)).then(r => r.data),
   });
 
   const { data: existingMeeting } = useQuery({
@@ -57,7 +59,8 @@ const MeetingForm: React.FC = () => {
 
   useEffect(() => {
     if (existingMeeting) {
-      setForm({
+      setForm(f => ({
+        ...f,
         title: existingMeeting.title,
         meeting_type: existingMeeting.meeting_type,
         series_id: existingMeeting.series_id ? String(existingMeeting.series_id) : '',
@@ -66,55 +69,40 @@ const MeetingForm: React.FC = () => {
         end_time: existingMeeting.end_time || '',
         location: existingMeeting.location || '',
         description: existingMeeting.description || '',
-      });
+      }));
       if (existingMeeting.series_id) setMeetingMode('series');
+      if (existingMeeting.start_time && existingMeeting.end_time) {
+        const mins = diffMins(existingMeeting.start_time, existingMeeting.end_time);
+        if (mins > 0) setDuration(mins);
+      }
     }
   }, [existingMeeting]);
 
-  const selectedSeries = seriesList.find(s => String(s.id) === form.series_id);
-  useEffect(() => {
-    if (selectedSeries && !isEdit) {
-      setForm(f => ({
-        ...f,
-        title: f.title || selectedSeries.title,
-        meeting_type: selectedSeries.meeting_type,
-        start_time: selectedSeries.start_time || f.start_time,
-        end_time: selectedSeries.end_time || f.end_time,
-        location: selectedSeries.location || f.location,
-      }));
-    }
-  }, [selectedSeries?.id]);
-
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
-  const setNS = (k: string, v: any) => setNewSeries(f => ({ ...f, [k]: v }));
-
-  const createSeriesMutation = useMutation({
-    mutationFn: (title: string) => meetingsApi.createSeries({
-      projectId: Number(projectId),
-      title,
-      meeting_type: form.meeting_type,
-      recurrence_type: newSeries.recurrence_type as any,
-      day_of_week: newSeries.day_of_week,
-      start_time: newSeries.start_time || undefined,
-      end_time: newSeries.end_time || undefined,
-      location: newSeries.location || undefined,
-    }),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['meeting-series', Number(projectId)] });
-      setForm(f => ({ ...f, series_id: String(res.data.id) }));
-      setShowNewSeries(false);
-      toast.success('Series created.');
-    },
-    onError: () => toast.error('Failed to create series.'),
-  });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      let seriesId = form.series_id ? Number(form.series_id) : undefined;
+
+      if (!isEdit && meetingMode === 'series' && !seriesId) {
+        const seriesRes = await meetingsApi.createSeries({
+          projectId: Number(projectId),
+          title: form.title,
+          meeting_type: form.meeting_type,
+          recurrence_type: form.recurrence_type as any,
+          day_of_week: Number(form.day_of_week),
+          start_time: form.start_time || undefined,
+          end_time: form.end_time || undefined,
+          location: form.location || undefined,
+        });
+        seriesId = seriesRes.data.id;
+      }
+
       const payload = {
         projectId: Number(projectId),
         title: form.title,
         meetingType: form.meeting_type,
-        seriesId: form.series_id ? Number(form.series_id) : undefined,
+        seriesId,
         scheduledDate: form.scheduled_date || undefined,
         startTime: form.start_time || undefined,
         endTime: form.end_time || undefined,
@@ -126,6 +114,7 @@ const MeetingForm: React.FC = () => {
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['meetings', Number(projectId)] });
+      queryClient.invalidateQueries({ queryKey: ['meeting-series', Number(projectId)] });
       toast.success(isEdit ? 'Meeting updated.' : 'Meeting created.');
       navigate(`/projects/${projectId}/meetings/${res.data.id}`);
     },
@@ -157,7 +146,7 @@ const MeetingForm: React.FC = () => {
 
           {!isEdit && (
             <div className="form-group">
-              <label className="form-label">Meeting Type</label>
+              <label className="form-label">Schedule</label>
               <div style={{ display: 'flex', gap: 0, border: '1px solid #d1d5db', borderRadius: 6, overflow: 'hidden', width: 'fit-content' }}>
                 <button
                   type="button"
@@ -167,7 +156,7 @@ const MeetingForm: React.FC = () => {
                     background: meetingMode === 'oneoff' ? '#1e3a5f' : '#fff',
                     color: meetingMode === 'oneoff' ? '#fff' : '#374151',
                   }}
-                >One-off Meeting</button>
+                >One-off</button>
                 <button
                   type="button"
                   onClick={() => setMeetingMode('series')}
@@ -176,80 +165,8 @@ const MeetingForm: React.FC = () => {
                     background: meetingMode === 'series' ? '#1e3a5f' : '#fff',
                     color: meetingMode === 'series' ? '#fff' : '#374151',
                   }}
-                >Series Meeting</button>
+                >Recurring</button>
               </div>
-            </div>
-          )}
-
-          {meetingMode === 'series' && (
-            <div className="form-group">
-              <label className="form-label">Meeting Series</label>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <select
-                  className="form-input"
-                  value={form.series_id}
-                  onChange={e => { set('series_id', e.target.value); setShowNewSeries(false); }}
-                  style={{ flex: 1 }}
-                >
-                  <option value="">— Select a series —</option>
-                  {seriesList.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.title} ({RECURRENCE_LABELS[s.recurrence_type]})
-                    </option>
-                  ))}
-                </select>
-                <button type="button" className="sales-btn sales-btn-secondary" onClick={() => setShowNewSeries(v => !v)}>
-                  {showNewSeries ? 'Cancel' : '+ New Series'}
-                </button>
-              </div>
-              {showNewSeries && (
-                <div style={{ marginTop: 12, padding: 16, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div className="form-group">
-                      <label className="form-label">Series Name *</label>
-                      <input className="form-input" value={newSeries.title} onChange={e => setNS('title', e.target.value)} placeholder="e.g. Weekly OAC" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Recurrence</label>
-                      <select className="form-input" value={newSeries.recurrence_type} onChange={e => setNS('recurrence_type', e.target.value)}>
-                        {Object.entries(RECURRENCE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  {newSeries.recurrence_type !== 'monthly' && (
-                    <div className="form-group">
-                      <label className="form-label">Day of Week</label>
-                      <select className="form-input" value={newSeries.day_of_week} onChange={e => setNS('day_of_week', Number(e.target.value))}>
-                        {DAY_NAMES.map((d, i) => <option key={i} value={i}>{d}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div className="form-group">
-                      <label className="form-label">Default Start Time</label>
-                      <input className="form-input" type="time" value={newSeries.start_time} onChange={e => setNS('start_time', e.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Default End Time</label>
-                      <input className="form-input" type="time" value={newSeries.end_time} onChange={e => setNS('end_time', e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Default Location</label>
-                    <input className="form-input" value={newSeries.location} onChange={e => setNS('location', e.target.value)} />
-                  </div>
-                  <div>
-                    <button
-                      type="button"
-                      className="sales-btn sales-btn-primary"
-                      onClick={() => createSeriesMutation.mutate(newSeries.title)}
-                      disabled={!newSeries.title || createSeriesMutation.isPending}
-                    >
-                      {createSeriesMutation.isPending ? 'Creating…' : 'Create Series'}
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -271,14 +188,75 @@ const MeetingForm: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+          {meetingMode === 'series' && !isEdit && (
+            <div style={{ display: 'grid', gridTemplateColumns: form.recurrence_type !== 'monthly' ? '1fr 1fr' : '1fr', gap: 16 }}>
+              <div className="form-group">
+                <label className="form-label">Recurrence</label>
+                <select className="form-input" value={form.recurrence_type} onChange={e => set('recurrence_type', e.target.value)}>
+                  {Object.entries(RECURRENCE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              {form.recurrence_type !== 'monthly' && (
+                <div className="form-group">
+                  <label className="form-label">Day of Week</label>
+                  <select className="form-input" value={form.day_of_week} onChange={e => set('day_of_week', e.target.value)}>
+                    {DAY_NAMES.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isEdit && existingMeeting?.series_title && (
+            <div className="form-group">
+              <label className="form-label">Series</label>
+              <div style={{ fontSize: 13, color: '#374151', padding: '6px 0' }}>{existingMeeting.series_title}</div>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
             <div className="form-group">
               <label className="form-label">Start Time</label>
-              <input className="form-input" type="time" value={form.start_time} onChange={e => set('start_time', e.target.value)} />
+              <input
+                className="form-input"
+                type="time"
+                value={form.start_time}
+                onChange={e => {
+                  const newStart = e.target.value;
+                  set('start_time', newStart);
+                  if (newStart && duration > 0) set('end_time', addMinsToTime(newStart, duration));
+                }}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Duration (min)</label>
+              <input
+                className="form-input"
+                type="number"
+                min={1}
+                value={duration}
+                onChange={e => {
+                  const mins = Math.max(1, parseInt(e.target.value) || 1);
+                  setDuration(mins);
+                  if (form.start_time) set('end_time', addMinsToTime(form.start_time, mins));
+                }}
+              />
             </div>
             <div className="form-group">
               <label className="form-label">End Time</label>
-              <input className="form-input" type="time" value={form.end_time} onChange={e => set('end_time', e.target.value)} />
+              <input
+                className="form-input"
+                type="time"
+                value={form.end_time}
+                onChange={e => {
+                  const newEnd = e.target.value;
+                  set('end_time', newEnd);
+                  if (form.start_time && newEnd) {
+                    const mins = diffMins(form.start_time, newEnd);
+                    if (mins > 0) setDuration(mins);
+                  }
+                }}
+              />
             </div>
             <div className="form-group">
               <label className="form-label">Location</label>

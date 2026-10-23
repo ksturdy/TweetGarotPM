@@ -33,7 +33,7 @@ const MeetingAttendeesSection: React.FC<Props> = ({ meetingId, projectId, attend
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['meeting', meetingId] });
 
   const [addMode, setAddMode] = useState<'internal' | 'external' | null>(null);
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [addKey, setAddKey] = useState(0);
   const [selectedContactId, setSelectedContactId] = useState('');
   const [extName, setExtName] = useState('');
   const [extCompany, setExtCompany] = useState('');
@@ -52,7 +52,18 @@ const MeetingAttendeesSection: React.FC<Props> = ({ meetingId, projectId, attend
 
   const addMutation = useMutation({
     mutationFn: (data: Partial<MeetingAttendee>) => meetingsApi.addAttendee(meetingId, data),
-    onSuccess: () => { invalidate(); setAddMode(null); setSelectedUserId(''); setSelectedContactId(''); setExtName(''); setExtCompany(''); toast.success('Attendee added.'); },
+    onSuccess: (_, vars) => {
+      invalidate();
+      // If adding an internal user, stay in mode with a fresh dropdown
+      if ((vars as any).user_id) {
+        setAddKey(k => k + 1);
+      } else {
+        setAddMode(null);
+        setSelectedContactId('');
+        setExtName('');
+        setExtCompany('');
+      }
+    },
     onError: () => toast.error('Failed to add attendee.'),
   });
 
@@ -68,11 +79,12 @@ const MeetingAttendeesSection: React.FC<Props> = ({ meetingId, projectId, attend
     onError: () => toast.error('Failed to remove attendee.'),
   });
 
-  const handleAddInternal = () => {
-    if (!selectedUserId) return;
-    const user = users.find(u => String(u.id) === selectedUserId);
+  // Auto-submit when a user is selected from the dropdown
+  const handleUserSelect = (userId: string) => {
+    if (!userId) return;
+    const user = users.find(u => String(u.id) === userId);
     addMutation.mutate({
-      user_id: Number(selectedUserId),
+      user_id: Number(userId),
       name: user ? `${user.first_name} ${user.last_name}` : '',
     } as any);
   };
@@ -150,17 +162,19 @@ const MeetingAttendeesSection: React.FC<Props> = ({ meetingId, projectId, attend
           {addMode === 'internal' && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: 1 }}>
               <SearchableSelect
+                key={addKey}
                 options={users.filter(u => !existingUserIds.has(String(u.id))).map(u => ({
                   value: u.id,
                   label: `${u.first_name} ${u.last_name}`,
                 }))}
-                value={selectedUserId}
-                onChange={setSelectedUserId}
-                placeholder="— Select team member —"
+                value=""
+                onChange={handleUserSelect}
+                placeholder="— Type to search team members —"
                 style={{ flex: 1 }}
+                autoOpen
+                disabled={addMutation.isPending}
               />
-              <button className="sales-btn sales-btn-primary" onClick={handleAddInternal} disabled={!selectedUserId || addMutation.isPending}>Add</button>
-              <button className="sales-btn sales-btn-secondary" onClick={() => setAddMode(null)}>Cancel</button>
+              <button className="sales-btn sales-btn-secondary" onClick={() => { setAddMode(null); setAddKey(0); }}>Done</button>
             </div>
           )}
 

@@ -14,8 +14,8 @@ const UserManagement: React.FC = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchName, setSearchName] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
-  const [sortField, setSortField] = useState<'name' | 'last_active' | 'password_age' | 'created'>('name');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortField, setSortField] = useState<'name' | 'last_active' | 'password_age' | 'created'>('last_active');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [formData, setFormData] = useState<UpdateUserData>({
     email: '',
     first_name: '',
