@@ -382,8 +382,8 @@ const CostDrillIn: React.FC = () => {
             <thead>
               <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 2 }}>
                 <SortTh sortKey="phase" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} align="left">Phase</SortTh>
+                {(!jobs || jobs.length !== 1) && <SortTh sortKey="job" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} align="left">Job</SortTh>}
                 <SortTh sortKey="phase_description" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} align="left">Description</SortTh>
-                {!jobs || jobs.length !== 1 && <SortTh sortKey="job" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} align="left">Job</SortTh>}
                 {isLabor && <SortTh sortKey="est_hours" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Est Hrs</SortTh>}
                 <SortTh sortKey="est_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Est Cost</SortTh>
                 {isLabor && <SortTh sortKey="est_rate" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Est Rate</SortTh>}
@@ -419,8 +419,8 @@ const CostDrillIn: React.FC = () => {
                 return (
                   <tr key={row.id} id={rowPhaseId} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <Td style={{ whiteSpace: 'nowrap', fontWeight: 600, color: '#1e293b' }}>{row.phase}</Td>
+                    {(!jobs || jobs.length !== 1) && <Td style={{ whiteSpace: 'nowrap' }}>{row.job}</Td>}
                     <Td style={{ minWidth: '220px', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.phase_description || '-'}</Td>
-                    {!jobs || jobs.length !== 1 && <Td>{row.job}</Td>}
                     {isLabor && <Td align="right">{fmtNum(estHrs)}</Td>}
                     <Td align="right">{fmt(row.est_cost)}</Td>
                     {isLabor && <Td align="right">{fmtRate(row.est_cost, estHrs)}</Td>}
@@ -485,8 +485,8 @@ const CostDrillIn: React.FC = () => {
             <tfoot>
               <tr style={{ backgroundColor: '#f8fafc', borderTop: '2px solid #e2e8f0', fontWeight: 700, position: 'sticky', bottom: 0, zIndex: 2 }}>
                 <Td>Total</Td>
+                {(!jobs || jobs.length !== 1) && <Td />}
                 <Td />
-                {!jobs || jobs.length !== 1 && <Td />}
                 {isLabor && <Td align="right">{fmtNum(totals.est_hours)}</Td>}
                 <Td align="right">{fmt(totals.est_cost)}</Td>
                 {isLabor && <Td align="right">{fmtRate(totals.est_cost, totals.est_hours)}</Td>}
