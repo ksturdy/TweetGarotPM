@@ -1262,19 +1262,28 @@ const CostTypeSchedule: React.FC<Props> = ({
             style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem', fontFamily: 'inherit', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#1e293b' }}>
             {initPending ? 'Initializing…' : hasAnyDates ? 'Fill Missing from Project Dates' : 'Initialize from Project Dates'}
           </button>
-          <button
-            onClick={handleAlignToggle}
-            title={alignPhases ? 'All segments share the same dates — click to edit individually' : 'Click to lock all segments to the same start and end date'}
-            style={{
-              padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontFamily: 'inherit', cursor: 'pointer',
-              border: `1px solid ${alignPhases ? '#1d4ed8' : '#e2e8f0'}`,
-              borderRadius: 6,
-              background: alignPhases ? '#eff6ff' : 'white',
-              color: alignPhases ? '#1d4ed8' : '#64748b',
-              fontWeight: alignPhases ? 600 : 400,
-            }}>
-            {alignPhases ? '⊟ Aligned' : '⊞ Align Phases'}
-          </button>
+          <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}
+            title={alignPhases ? 'Summary: all segments share one date window — click Cost Type to set dates independently' : 'Cost Type: each segment has its own date window — click Summary to lock all to one window'}>
+            <button
+              onClick={() => !alignPhases && handleAlignToggle()}
+              style={{
+                padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontFamily: 'inherit', cursor: alignPhases ? 'default' : 'pointer',
+                border: 'none', background: alignPhases ? '#1e3a5f' : '#f8fafc',
+                color: alignPhases ? '#fff' : '#94a3b8', fontWeight: alignPhases ? 600 : 400,
+              }}>
+              Summary
+            </button>
+            <button
+              onClick={() => alignPhases && handleAlignToggle()}
+              style={{
+                padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontFamily: 'inherit', cursor: alignPhases ? 'pointer' : 'default',
+                border: 'none', borderLeft: '1px solid #e2e8f0',
+                background: !alignPhases ? '#1e3a5f' : '#f8fafc',
+                color: !alignPhases ? '#fff' : '#94a3b8', fontWeight: !alignPhases ? 600 : 400,
+              }}>
+              Cost Type
+            </button>
+          </div>
           <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
             <button style={viewBtn(viewMode === 'gantt')} onClick={() => setViewMode('gantt')}>Gantt</button>
             <button style={{ ...viewBtn(viewMode === 'table'), borderLeft: '1px solid #e2e8f0' }} onClick={() => setViewMode('table')}>$ Cost</button>
