@@ -302,7 +302,7 @@ const ProjectFinancials: React.FC = () => {
   const { data: segmentCosts } = useQuery({
     queryKey: ['schedule-segment-costs', projectId],
     queryFn: () => scheduleSegmentsService.getCosts(Number(projectId)),
-    enabled: !!projectId && project?.scheduling_mode === 'cost_type',
+    enabled: !!projectId,
   });
 
   const getTradeSummary = (trade: string) => {
@@ -351,10 +351,11 @@ const ProjectFinancials: React.FC = () => {
       const jtdRateReliable = jtdH > 0 && jtdH >= estH * 0.05;
       const rate = jtdRateReliable ? jtdC / jtdH : estH > 0 ? estC / estH : 0;
       const projH = rate > 0 ? projC / rate : estH;
-      // Cost_type mode: use est-jtd directly (matches CostTypeSchedule default/est-rate).
-      // Summary mode: use projected_cost / rate to reflect overrun scenarios.
-      const isCostType = project?.scheduling_mode === 'cost_type';
-      const remaining = Math.max(0, isCostType ? estH - jtdH : projH - jtdH);
+      // When segment schedules exist, distribution uses per-segment remaining from getCosts().
+      // This remaining is used for the Rem Hrs column display and the no-segment fallback.
+      // Use est-jtd when segments are configured (matches CostTypeSchedule); projH-jtd otherwise.
+      const hasSegments = (segmentsData?.segments?.length ?? 0) > 0;
+      const remaining = Math.max(0, hasSegments ? estH - jtdH : projH - jtdH);
       // Split remaining hours between field and shop proportionally by estimated hours.
       // Field and shop share the same $/hr rate; only their schedule windows differ.
       const estHField = rows.filter((r: LaborTradeSummary) => r.location === 'field').reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0);
@@ -399,17 +400,17 @@ const ProjectFinancials: React.FC = () => {
     const monthlySegHC = new Map<string, Record<string, number>>();
 
     const resolveSegmentWindow = (segKey: string): { startOff: number; endOff: number; contour: ContourType } => {
-      if (schedulingMode === 'cost_type') {
-        const seg = segments.find((s: ScheduleSegment) => s.segment_key === segKey);
-        if (seg?.start_date) {
-          // Clamp to current month — matches CostTypeSchedule.clampStart behavior
-          const sOff = Math.max(0, dateToMonthOff(seg.start_date) ?? 0);
-          const eUserOff = dateToMonthOff(seg.end_date);
-          const eOff = eUserOff != null
-            ? Math.max(sOff + 1, Math.min(37, eUserOff + 1))
-            : sOff + Math.max(1, Math.min(36, Math.ceil(laborDuration(contractVal) * (1 - (proj > 0 ? earned / proj : 0)))));
-          return { startOff: sOff, endOff: eOff, contour: (seg.contour_type as ContourType) || laborAutoContour(pctComplete) };
-        }
+      // Always prefer segment-level dates when available — in summary mode all segments share
+      // the same aligned window, in cost_type each has its own. Fall back to contract-level
+      // dates only when no segment dates have been configured.
+      const seg = segments.find((s: ScheduleSegment) => s.segment_key === segKey);
+      if (seg?.start_date) {
+        const sOff = Math.max(0, dateToMonthOff(seg.start_date) ?? 0);
+        const eUserOff = dateToMonthOff(seg.end_date);
+        const eOff = eUserOff != null
+          ? Math.max(sOff + 1, Math.min(37, eUserOff + 1))
+          : sOff + Math.max(1, Math.min(36, Math.ceil(laborDuration(contractVal) * (1 - (proj > 0 ? earned / proj : 0)))));
+        return { startOff: sOff, endOff: eOff, contour: (seg.contour_type as ContourType) || laborAutoContour(pctComplete) };
       }
       return { startOff: projectStartOff, endOff: projectEndOff, contour: projectContour };
     };
@@ -478,7 +479,7 @@ const ProjectFinancials: React.FC = () => {
       catch { return 'est-rate'; }
     })();
 
-    if (schedulingMode === 'cost_type' && segmentCosts && segmentCosts.length > 0) {
+    if (segmentCosts && segmentCosts.length > 0) {
       segmentCosts.forEach(sc => {
         const tradeKey = SEG_TO_TRADE[sc.segment_key];
         if (!tradeKey) return;
