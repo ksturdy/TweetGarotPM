@@ -814,20 +814,30 @@ interface Props {
   onInitialize: () => void;
   initPending: boolean;
   project?: Project;
+  onModeChange?: (mode: 'summary' | 'cost_type') => void;
 }
 
 const CostTypeSchedule: React.FC<Props> = ({
-  projectId, segments, activeKeys, onSegmentUpdate, onInitialize, initPending, project,
+  projectId, segments, activeKeys, onSegmentUpdate, onInitialize, initPending, project, onModeChange,
 }) => {
   const queryClient = useQueryClient();
   const { confirm } = useTitanFeedback();
   const [viewMode, setViewMode] = useState<'gantt' | 'table' | 'manpower'>('gantt');
   const [showProvisional, setShowProvisional] = useState(false);
 
-  // ── Align Phases ──────────────────────────────────────────────────────────
-  const [alignPhases, setAlignPhases] = useState(() =>
-    localStorage.getItem(`alignPhases-${projectId}`) === 'true'
-  );
+  // ── Summary / Cost Type mode ──────────────────────────────────────────────
+  // True = Summary (all segments share one date window), False = Cost Type (independent dates).
+  // Initialized from project.scheduling_mode; falls back to localStorage for projects not yet saved.
+  const [alignPhases, setAlignPhases] = useState(() => {
+    if (project?.scheduling_mode) return project.scheduling_mode === 'summary';
+    return localStorage.getItem(`alignPhases-${projectId}`) === 'true';
+  });
+
+  // Keep in sync when project record refreshes after the modeMutation succeeds
+  useEffect(() => {
+    if (project?.scheduling_mode === 'summary') setAlignPhases(true);
+    else if (project?.scheduling_mode === 'cost_type') setAlignPhases(false);
+  }, [project?.scheduling_mode]);
   const [alignedStart,   setAlignedStart]   = useState('');
   const [alignedEnd,     setAlignedEnd]     = useState('');
   const [alignedContour, setAlignedContour] = useState<ContourType>('bell');
@@ -1265,7 +1275,7 @@ const CostTypeSchedule: React.FC<Props> = ({
           <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}
             title={alignPhases ? 'Summary: all segments share one date window — click Cost Type to set dates independently' : 'Cost Type: each segment has its own date window — click Summary to lock all to one window'}>
             <button
-              onClick={() => !alignPhases && handleAlignToggle()}
+              onClick={() => { if (!alignPhases) { handleAlignToggle(); onModeChange?.('summary'); } }}
               style={{
                 padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontFamily: 'inherit', cursor: alignPhases ? 'default' : 'pointer',
                 border: 'none', background: alignPhases ? '#1e3a5f' : '#f8fafc',
@@ -1274,7 +1284,7 @@ const CostTypeSchedule: React.FC<Props> = ({
               Summary
             </button>
             <button
-              onClick={() => alignPhases && handleAlignToggle()}
+              onClick={() => { if (alignPhases) { handleAlignToggle(); onModeChange?.('cost_type'); } }}
               style={{
                 padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontFamily: 'inherit', cursor: alignPhases ? 'pointer' : 'default',
                 border: 'none', borderLeft: '1px solid #e2e8f0',

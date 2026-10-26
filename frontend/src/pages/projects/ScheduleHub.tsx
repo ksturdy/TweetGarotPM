@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
 import { scheduleSegmentsService, type SchedulingMode } from '../../services/scheduleSegments';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import api from '../../services/api';
 import CostTypeSchedule from './CostTypeSchedule';
 import '../../styles/SalesPipeline.css';
 
@@ -71,6 +72,15 @@ const ScheduleHub: React.FC = () => {
       toast.success('Segments initialized from project dates');
     },
     onError: () => toast.error('Failed to initialize segments'),
+  });
+
+  const modeMutation = useMutation({
+    mutationFn: (newMode: 'summary' | 'cost_type') =>
+      api.put(`/projects/${pid}/scheduling-mode`, { mode: newMode }).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', pid] });
+    },
+    onError: () => toast.error('Failed to update scheduling mode'),
   });
 
   const mode = project?.scheduling_mode ?? 'cost_type';
@@ -156,6 +166,7 @@ const ScheduleHub: React.FC = () => {
           onInitialize={() => initMutation.mutate()}
           initPending={initMutation.isPending}
           project={project}
+          onModeChange={(m) => modeMutation.mutate(m)}
         />
       )}
 

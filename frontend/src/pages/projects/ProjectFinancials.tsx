@@ -299,6 +299,12 @@ const ProjectFinancials: React.FC = () => {
     enabled: !!projectId,
   });
 
+  const { data: segmentCosts } = useQuery({
+    queryKey: ['schedule-segment-costs', projectId],
+    queryFn: () => scheduleSegmentsService.getCosts(Number(projectId)),
+    enabled: !!projectId && project?.scheduling_mode === 'cost_type',
+  });
+
   const getTradeSummary = (trade: string) => {
     if (!costSummary?.labor) return { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0, change_from_last_projection: 0 };
     const rows = costSummary.labor.filter((l: LaborTradeSummary) => l.trade === trade);
@@ -460,20 +466,53 @@ const ProjectFinancials: React.FC = () => {
       } catch { return 0; }
     };
 
-    // Distribute remaining projected hours for each trade into their segment windows,
-    // split by field/shop proportion derived from estimated hours.
-    TRADE_META.forEach(({ key }, idx) => {
-      const t = tradeHours[idx];
-      const fSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_FIELD_SEG[key]);
-      const sSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_SHOP_SEG[key]);
-      // Prefer localStorage shift hours (cost_type mode) → DB weekly_hours → fallback 40h/wk
-      const fWH = getLocalShiftWeeklyHours(TRADE_FIELD_SEG[key])
-               || (typeof fSeg?.weekly_hours === 'number' && fSeg.weekly_hours > 0 ? fSeg.weekly_hours : 40);
-      const sWH = getLocalShiftWeeklyHours(TRADE_SHOP_SEG[key])
-               || (typeof sSeg?.weekly_hours === 'number' && sSeg.weekly_hours > 0 ? sSeg.weekly_hours : 40);
-      distributeHours(key, t.remainingField, t.rate, TRADE_FIELD_SEG[key], fWH, monthlyHours, monthlyCosts, now);
-      distributeHours(key, t.remainingShop,  t.rate, TRADE_SHOP_SEG[key],  sWH, monthlyHours, monthlyCosts, now);
-    });
+    // Distribute remaining hours into monthly buckets.
+    // Cost_type mode: iterate over actual per-segment costs so field and shop are independent
+    // (avoids the proportional-split error when one segment has 0 actual hours).
+    // Summary mode: fall back to proportional field/shop split from estimated hours.
+    const SEG_TO_TRADE: Record<string, string> = {
+      '30': 'sm', '35': 'sm', '40': 'pf', '45': 'pf', '50': 'pl', '55': 'pl', '70': 'admin',
+    };
+    const segRemMode = (() => {
+      try { return localStorage.getItem(`costTypeSchedule_remainingMode_${projectId}`) === 'jtd-rate' ? 'jtd-rate' : 'est-rate'; }
+      catch { return 'est-rate'; }
+    })();
+
+    if (schedulingMode === 'cost_type' && segmentCosts && segmentCosts.length > 0) {
+      segmentCosts.forEach(sc => {
+        const tradeKey = SEG_TO_TRADE[sc.segment_key];
+        if (!tradeKey) return;
+        const estH = sc.est_hours ?? 0;
+        const jtdH = sc.jtd_hours ?? 0;
+        const jtdC = sc.jtd_cost ?? 0;
+        const projC = sc.projected_cost ?? 0;
+        let remH: number;
+        if (segRemMode === 'jtd-rate' && jtdC > 0 && jtdH > 0) {
+          remH = Math.max(0, (projC - jtdC) / (jtdC / jtdH));
+        } else {
+          remH = Math.max(0, estH - jtdH);
+        }
+        if (remH <= 0) return;
+        const tradeIdx = TRADE_META.findIndex(t => t.key === tradeKey);
+        const rate = tradeIdx >= 0 ? tradeHours[tradeIdx].rate : 0;
+        const segObj = segments.find((s: ScheduleSegment) => s.segment_key === sc.segment_key);
+        const wh = getLocalShiftWeeklyHours(sc.segment_key)
+          || (typeof segObj?.weekly_hours === 'number' && segObj.weekly_hours > 0 ? segObj.weekly_hours : 40);
+        distributeHours(tradeKey, remH, rate, sc.segment_key, wh, monthlyHours, monthlyCosts, now);
+      });
+    } else {
+      TRADE_META.forEach(({ key }, idx) => {
+        const t = tradeHours[idx];
+        const fSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_FIELD_SEG[key]);
+        const sSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_SHOP_SEG[key]);
+        const fWH = getLocalShiftWeeklyHours(TRADE_FIELD_SEG[key])
+                 || (typeof fSeg?.weekly_hours === 'number' && fSeg.weekly_hours > 0 ? fSeg.weekly_hours : 40);
+        const sWH = getLocalShiftWeeklyHours(TRADE_SHOP_SEG[key])
+                 || (typeof sSeg?.weekly_hours === 'number' && sSeg.weekly_hours > 0 ? sSeg.weekly_hours : 40);
+        distributeHours(key, t.remainingField, t.rate, TRADE_FIELD_SEG[key], fWH, monthlyHours, monthlyCosts, now);
+        distributeHours(key, t.remainingShop,  t.rate, TRADE_SHOP_SEG[key],  sWH, monthlyHours, monthlyCosts, now);
+      });
+    }
 
     const prevWeekCost = costSummary.labor_totals?.prior_week_cost ?? 0;
     // Build columns identical to ContractProjectionStrip: 12 monthly + year cols
@@ -505,7 +544,7 @@ const ProjectFinancials: React.FC = () => {
       }
     }
     return { monthlyHours, monthlyCosts, columns, contour: projectContour, tradeHours, totalRem, pctComplete, prevWeekCost, monthlySegHC };
-  }, [costSummary, c, project, segmentsData]);
+  }, [costSummary, c, project, segmentsData, segmentCosts]);
 
 
   const captureSnapshotMutation = useMutation({
