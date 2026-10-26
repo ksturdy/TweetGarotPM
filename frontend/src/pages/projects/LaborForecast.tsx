@@ -801,6 +801,28 @@ const LaborForecast: React.FC = () => {
         const TRADE_SHOP_SEG:  Record<string, string>  = { pf: '45', sm: '35', pl: '55' };
         const monthlySegHC = new Map<string, Record<string, number>>();
 
+        // Match CostTypeSchedule's remainingMode for this project (est-rate default)
+        let segRemMode: 'est-rate' | 'jtd-rate' = 'est-rate';
+        try {
+          const stored = resolvedProjId
+            ? localStorage.getItem(`costTypeSchedule_remainingMode_${resolvedProjId}`)
+            : null;
+          if (stored === 'jtd-rate') segRemMode = 'jtd-rate';
+        } catch {}
+
+        const calcSegRemHrs = (seg: ScheduleSegment): number => {
+          const estH = seg.est_hours || 0;
+          const jtdH = seg.jtd_hours || 0;
+          if (estH <= 0) return 0;
+          if (segRemMode === 'est-rate') return Math.max(0, estH - jtdH);
+          const jtdC = seg.jtd_cost || 0;
+          if (jtdC > 0 && jtdH > 0) {
+            const projC = seg.projected_cost || 0;
+            return Math.max(0, (projC - jtdC) / (jtdC / jtdH));
+          }
+          return Math.max(0, estH - jtdH);
+        };
+
         const distributeSegHours = (tradeKey: 'pf' | 'sm' | 'pl', hours: number, segKey: string) => {
           if (hours <= 0) return;
           const seg = projectSegs.find((s: ScheduleSegment) => s.segment_key === segKey);
@@ -840,13 +862,15 @@ const LaborForecast: React.FC = () => {
         };
 
         TRADES.forEach((trade) => {
-          const td = sfData?.[trade.key];
-          if (!td) return;
           const fieldSegKey = TRADE_FIELD_SEG[trade.key];
           const shopSegKey  = TRADE_SHOP_SEG[trade.key];
-          // Use est-jtd per location — matches CostTypeSchedule source of truth
-          const remField = Math.max(0, (td.field?.est || 0) - (td.field?.jtd || 0));
-          const remShop  = Math.max(0, (td.shop?.est  || 0) - (td.shop?.jtd  || 0));
+          // Use segment-level remaining hours — same linked_project_id filter and
+          // same est/jtd-rate formula as CostTypeSchedule. sfData joins by contract
+          // number and can include unrelated job codes, inflating the hour count.
+          const fieldSeg = projectSegs.find((s: ScheduleSegment) => s.segment_key === fieldSegKey);
+          const shopSeg  = projectSegs.find((s: ScheduleSegment) => s.segment_key === shopSegKey);
+          const remField = fieldSeg ? calcSegRemHrs(fieldSeg) : 0;
+          const remShop  = shopSeg  ? calcSegRemHrs(shopSeg)  : 0;
           const fieldHours = locationFilter !== 'shop'  ? remField : 0;
           const shopHours  = locationFilter !== 'field' ? remShop  : 0;
           distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', fieldHours, fieldSegKey);
@@ -2457,6 +2481,20 @@ const LaborForecast: React.FC = () => {
                       })()}
                       {displayColumns.map(col => {
                         const h = applyTradeFilter(getHoursForColumn(p.monthlyHours, col));
+                        // For cost_type projects use pre-computed per-segment headcount
+                        // (correct per-segment HPM). Fall back to global HPM for summary mode.
+                        const displayHC = p.monthlySegHC
+                          ? (() => {
+                              const mk = col.monthKey ?? col.key;
+                              const seg = p.monthlySegHC!.get(mk) ?? {};
+                              let hc = 0;
+                              if (tradeFilter.includes('pf')) hc += (seg['40'] ?? 0) + (seg['45'] ?? 0);
+                              if (tradeFilter.includes('sm')) hc += (seg['30'] ?? 0) + (seg['35'] ?? 0);
+                              if (tradeFilter.includes('pl')) hc += (seg['50'] ?? 0) + (seg['55'] ?? 0);
+                              if (granularity === 'weekly' && timeHorizon <= 12) hc /= (weekInfo.weeksPerMonth[mk] || 1);
+                              return hc < 0.1 ? '-' : hc.toFixed(1);
+                            })()
+                          : fmtHeadcount(h.total, hoursPerPersonPerMonth);
                         return (
                           <td key={col.key} title={h.total > 0 ? cellTooltip(h) : ''}
                             style={{
@@ -2465,7 +2503,7 @@ const LaborForecast: React.FC = () => {
                               fontWeight: h.total > 0 ? 500 : 400,
                               fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem',
                             }}>
-                            {fmtHeadcount(h.total, hoursPerPersonPerMonth)}
+                            {displayHC}
                           </td>
                         );
                       })}

@@ -345,7 +345,10 @@ const ProjectFinancials: React.FC = () => {
       const jtdRateReliable = jtdH > 0 && jtdH >= estH * 0.05;
       const rate = jtdRateReliable ? jtdC / jtdH : estH > 0 ? estC / estH : 0;
       const projH = rate > 0 ? projC / rate : estH;
-      const remaining = Math.max(0, projH - jtdH);
+      // Cost_type mode: use est-jtd directly (matches CostTypeSchedule default/est-rate).
+      // Summary mode: use projected_cost / rate to reflect overrun scenarios.
+      const isCostType = project?.scheduling_mode === 'cost_type';
+      const remaining = Math.max(0, isCostType ? estH - jtdH : projH - jtdH);
       // Split remaining hours between field and shop proportionally by estimated hours.
       // Field and shop share the same $/hr rate; only their schedule windows differ.
       const estHField = rows.filter((r: LaborTradeSummary) => r.location === 'field').reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0);
@@ -393,8 +396,8 @@ const ProjectFinancials: React.FC = () => {
       if (schedulingMode === 'cost_type') {
         const seg = segments.find((s: ScheduleSegment) => s.segment_key === segKey);
         if (seg?.start_date) {
-          // Do NOT clamp to 0 — a past start keeps the correct contour position
-          const sOff = dateToMonthOff(seg.start_date) ?? 0;
+          // Clamp to current month — matches CostTypeSchedule.clampStart behavior
+          const sOff = Math.max(0, dateToMonthOff(seg.start_date) ?? 0);
           const eUserOff = dateToMonthOff(seg.end_date);
           const eOff = eUserOff != null
             ? Math.max(sOff + 1, Math.min(37, eUserOff + 1))

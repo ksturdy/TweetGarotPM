@@ -144,7 +144,8 @@ async function getBulkByProjects(projectIds, tenantId) {
   if (!projectIds || projectIds.length === 0) return {};
   const { rows } = await db.query(
     `SELECT pss.project_id, pss.segment_key, pss.label, pss.start_date, pss.end_date,
-            pss.contour_type, pss.weekly_hours, costs.est_hours
+            pss.contour_type, pss.weekly_hours,
+            costs.est_hours, costs.jtd_hours, costs.jtd_cost, costs.projected_cost
        FROM project_schedule_segments pss
        LEFT JOIN (
          SELECT linked_project_id,
@@ -164,7 +165,10 @@ async function getBulkByProjects(projectIds, tenantId) {
                   WHEN cost_type = 6 THEN 'gc'
                   ELSE NULL
                 END AS segment_key,
-                SUM(NULLIF(est_hours, 'NaN'::numeric)) AS est_hours
+                SUM(NULLIF(est_hours,      'NaN'::numeric)) AS est_hours,
+                SUM(NULLIF(jtd_hours,      'NaN'::numeric)) AS jtd_hours,
+                SUM(NULLIF(jtd_cost,       'NaN'::numeric)) AS jtd_cost,
+                SUM(NULLIF(projected_cost, 'NaN'::numeric)) AS projected_cost
            FROM vp_phase_codes
           WHERE linked_project_id = ANY($1::int[]) AND tenant_id = $2
           GROUP BY linked_project_id, segment_key
@@ -182,7 +186,10 @@ async function getBulkByProjects(projectIds, tenantId) {
       end_date: row.end_date,
       contour_type: row.contour_type,
       weekly_hours: row.weekly_hours,
-      est_hours: row.est_hours != null ? Number(row.est_hours) : null,
+      est_hours:       row.est_hours       != null ? Number(row.est_hours)       : null,
+      jtd_hours:       row.jtd_hours       != null ? Number(row.jtd_hours)       : null,
+      jtd_cost:        row.jtd_cost        != null ? Number(row.jtd_cost)        : null,
+      projected_cost:  row.projected_cost  != null ? Number(row.projected_cost)  : null,
     });
   }
   return result;

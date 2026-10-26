@@ -913,7 +913,12 @@ const CostTypeSchedule: React.FC<Props> = ({
     });
   }, [projectId]);
 
-  const [remainingMode, setRemainingMode] = useState<RemHrsMode>('est-rate');
+  const [remainingMode, setRemainingMode] = useState<RemHrsMode>(() => {
+    try {
+      const stored = localStorage.getItem(`costTypeSchedule_remainingMode_${projectId}`);
+      return stored === 'jtd-rate' ? 'jtd-rate' : 'est-rate';
+    } catch { return 'est-rate'; }
+  });
 
   // ── Column widths ─────────────────────────────────────────────────────────
   const [colWidths, setColWidths] = useState<typeof GANTT_COL_DEFAULTS>(() => {
@@ -1431,7 +1436,10 @@ const CostTypeSchedule: React.FC<Props> = ({
               { value: 'est-rate' as const, label: 'Est Rate', title: '(Proj Cost − JTD Cost) ÷ Estimated labor rate — use early in job when rate is still settling' },
               { value: 'jtd-rate' as const, label: 'JTD Rate', title: '(Proj Cost − JTD Cost) ÷ JTD labor rate — use once rate is stable' },
             ]).map((opt, i) => (
-              <button key={opt.value} title={opt.title} onClick={() => setRemainingMode(opt.value)}
+              <button key={opt.value} title={opt.title} onClick={() => {
+                setRemainingMode(opt.value);
+                try { localStorage.setItem(`costTypeSchedule_remainingMode_${projectId}`, opt.value); } catch {}
+              }}
                 style={{
                   padding: '0.3rem 0.65rem', fontSize: '0.72rem', cursor: 'pointer',
                   border: 'none', borderLeft: i > 0 ? '1px solid #e2e8f0' : 'none',

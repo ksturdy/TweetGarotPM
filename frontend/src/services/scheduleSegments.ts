@@ -10,6 +10,9 @@ export interface ScheduleSegment {
   contour_type: string;
   weekly_hours: number | null;
   est_hours: number | null;
+  jtd_hours?: number | null;
+  jtd_cost?: number | null;
+  projected_cost?: number | null;
 }
 
 export interface SegmentCosts {
