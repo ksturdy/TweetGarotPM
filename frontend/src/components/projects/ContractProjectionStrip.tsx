@@ -53,27 +53,32 @@ interface Props {
   schedulingMode?: 'summary' | 'cost_type' | 'phase';
   segments?: ScheduleSegment[];
   costSummary?: PhaseCodeCostSummary;
+  onAlignedDatesChange?: (startDate: string, endDate: string | null, contour: string) => void;
 }
 
-const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScroll, schedulingMode, segments, costSummary }) => {
+const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScroll, schedulingMode, segments, costSummary, onAlignedDatesChange }) => {
   const datesLocked = (schedulingMode ?? 'summary') !== 'summary';
   const queryClient = useQueryClient();
 
-  const initialStart = dateToMonthOffset(contract.user_adjusted_start_date);
-  const initialEnd = dateToMonthOffset(contract.user_adjusted_end_date);
+  // In Summary mode with segments configured, segments are the source of truth for dates/contour.
+  // Fall back to contract user_adjusted fields for projects without segment data.
+  const effectiveSegment = !datesLocked ? (segments ?? []).find(s => s.start_date) : undefined;
+  const initialStart = dateToMonthOffset(effectiveSegment?.start_date ?? contract.user_adjusted_start_date);
+  const initialEnd = dateToMonthOffset(effectiveSegment?.end_date ?? contract.user_adjusted_end_date);
+  const initialContour = (effectiveSegment?.contour_type ?? contract.user_selected_contour) as ContourType ?? null;
   const [startMonths, setStartMonths] = useState<number | null>(initialStart === null ? null : Math.max(0, initialStart));
   const [endMonths, setEndMonths] = useState<number | null>(initialEnd === null ? null : Math.max(1, initialEnd));
-  const [contourOverride, setContourOverride] = useState<ContourType | null>(
-    (contract.user_selected_contour as ContourType) ?? null
-  );
+  const [contourOverride, setContourOverride] = useState<ContourType | null>(initialContour);
 
   useEffect(() => {
-    const s = dateToMonthOffset(contract.user_adjusted_start_date);
+    const seg = !datesLocked ? (segments ?? []).find(s => s.start_date) : undefined;
+    const s = dateToMonthOffset(seg?.start_date ?? contract.user_adjusted_start_date);
     setStartMonths(s === null ? null : Math.max(0, s));
-    const e = dateToMonthOffset(contract.user_adjusted_end_date);
+    const e = dateToMonthOffset(seg?.end_date ?? contract.user_adjusted_end_date);
     setEndMonths(e === null ? null : Math.max(1, e));
-    setContourOverride((contract.user_selected_contour as ContourType) ?? null);
-  }, [contract.id, contract.user_adjusted_start_date, contract.user_adjusted_end_date, contract.user_selected_contour]);
+    setContourOverride((seg?.contour_type ?? contract.user_selected_contour) as ContourType ?? null);
+  }, [contract.id, contract.user_adjusted_start_date, contract.user_adjusted_end_date, contract.user_selected_contour,
+      datesLocked, segments]);
 
   const save = useCallback(async (overrides: {
     user_adjusted_start_months?: number | null;
@@ -98,10 +103,20 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
       // and the all-contracts cache (Projected Revenue page).
       queryClient.invalidateQueries({ queryKey: ['vpContract'] });
       queryClient.invalidateQueries({ queryKey: ['vpContracts'] });
+
+      // In Summary mode: propagate to segments so CostTypeSchedule and labor forecast stay in sync.
+      if (!datesLocked && onAlignedDatesChange) {
+        const newStartOff = 'user_adjusted_start_months' in overrides ? overrides.user_adjusted_start_months ?? 0 : startMonths ?? 0;
+        const newEndOff = 'user_adjusted_end_months' in overrides ? overrides.user_adjusted_end_months : endMonths;
+        const newContour = 'user_selected_contour' in overrides ? (overrides.user_selected_contour ?? 'flat') : (contourOverride ?? 'flat');
+        const startStr = monthOffsetToDateString(newStartOff);
+        const endStr = newEndOff != null ? monthOffsetToDateString(newEndOff) : null;
+        onAlignedDatesChange(startStr, endStr, newContour);
+      }
     } catch (err) {
       console.error('Failed to save projection override:', err);
     }
-  }, [contract.id, queryClient]);
+  }, [contract.id, queryClient, datesLocked, onAlignedDatesChange, startMonths, endMonths, contourOverride]);
 
   const columns = useMemo(() => {
     const cols: { key: string; label: string; isYear: boolean }[] = [];

@@ -131,6 +131,21 @@ async function getCostsByProject(projectId, tenantId) {
   return rows;
 }
 
+// Sets every segment row to the same start/end/contour (Summary-mode alignment).
+// Used when the user adjusts dates from the ContractProjectionStrip or any synced view.
+async function setAlignedDates(projectId, tenantId, startDate, endDate, contourType) {
+  await db.query(
+    `UPDATE project_schedule_segments
+        SET start_date   = $1,
+            end_date     = $2,
+            contour_type = $3,
+            updated_at   = NOW()
+      WHERE project_id = $4 AND tenant_id = $5`,
+    [startDate || null, endDate || null, contourType || 'flat', projectId, tenantId]
+  );
+  return getByProject(projectId, tenantId);
+}
+
 async function patchWeeklyHours(projectId, tenantId, segmentKey, weeklyHours) {
   await db.query(
     `UPDATE project_schedule_segments
@@ -202,6 +217,7 @@ module.exports = {
   patchWeeklyHours,
   upsertSegment,
   initializeSegments,
+  setAlignedDates,
   getActiveSegmentKeys,
   getCostsByProject,
 };

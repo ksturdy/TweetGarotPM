@@ -537,6 +537,22 @@ router.put('/:id/scheduling-mode', authorize('admin', 'manager'), async (req, re
   }
 });
 
+// PUT /:id/aligned-segment-dates — sets all segment rows to the same start/end/contour.
+// Called when the user changes dates in ContractProjectionStrip (Summary mode) so CostTypeSchedule
+// and labor forecast always read from the same source as the revenue strip.
+router.put('/:id/aligned-segment-dates', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const ProjectScheduleSegment = require('../models/ProjectScheduleSegment');
+    const { start_date, end_date, contour_type } = req.body;
+    const rows = await ProjectScheduleSegment.setAlignedDates(
+      req.params.id, req.tenantId, start_date, end_date, contour_type
+    );
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // PATCH /:id/summary-dates — bidirectional sync with Labor Forecast
 // Writes to vp_contracts.user_adjusted_start/end_date (same field Labor Forecast uses)
 // so both views always read from the same source of truth.

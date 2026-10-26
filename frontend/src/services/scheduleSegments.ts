@@ -81,4 +81,9 @@ export const scheduleSegmentsService = {
 
   initialize: (projectId: number) =>
     api.post<ScheduleSegment[]>(`/projects/${projectId}/schedule-segments/initialize`).then((r) => r.data),
+
+  setAlignedDates: (projectId: number, startDate: string, endDate: string | null, contourType: string) =>
+    api.put<ScheduleSegment[]>(`/projects/${projectId}/aligned-segment-dates`, {
+      start_date: startDate, end_date: endDate, contour_type: contourType,
+    }).then((r) => r.data),
 };

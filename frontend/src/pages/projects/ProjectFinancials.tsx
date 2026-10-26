@@ -230,6 +230,15 @@ const ProjectFinancials: React.FC = () => {
     if (projRevScrollRef.current) projRevScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
   }, []);
 
+  const handleAlignedDatesChange = useCallback((startDate: string, endDate: string | null, contour: string) => {
+    if (!projectId) return;
+    scheduleSegmentsService.setAlignedDates(Number(projectId), startDate, endDate, contour).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['scheduleSegments', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['schedule-segment-costs', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['bulkSegments'] });
+    }).catch(() => {});
+  }, [projectId, queryClient]);
+
   const { data: noteCounts = [] } = useQuery({
     queryKey: ['projectionNoteCounts', projectId],
     queryFn: () => projectionNotesApi.counts(Number(projectId)).then(r => r.data),
@@ -909,7 +918,15 @@ const ProjectFinancials: React.FC = () => {
           </div>
 
           {/* ===== PROJECTED REVENUE STRIP (synced with /projects/projected-revenue) ===== */}
-          <ContractProjectionStrip contract={c} scrollRef={projRevScrollRef} onScroll={syncFromProjRev} schedulingMode={project?.scheduling_mode} segments={segmentsData?.segments} costSummary={costSummary} />
+          <ContractProjectionStrip
+        contract={c}
+        scrollRef={projRevScrollRef}
+        onScroll={syncFromProjRev}
+        schedulingMode={project?.scheduling_mode}
+        segments={segmentsData?.segments}
+        costSummary={costSummary}
+        onAlignedDatesChange={handleAlignedDatesChange}
+      />
 
           {/* ===== LABOR FORECAST (expandable) ===== */}
           {laborForecastData && (
