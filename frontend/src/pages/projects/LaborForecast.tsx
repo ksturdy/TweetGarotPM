@@ -78,6 +78,7 @@ const fmtHeadcount = (hours: number, hrsPerPerson: number): string => {
   if (hc < 0.1) return '-';
   return hc.toFixed(1);
 };
+const fmtDirectHC = (hc: number): string => hc < 0.1 ? '-' : hc.toFixed(1);
 
 // ─── Duration rules ────────────────────────────────────────
 
@@ -1097,6 +1098,32 @@ const LaborForecast: React.FC = () => {
     return totals;
   }, [projections, displayColumns, getHoursForColumn, tradeFilter]);
 
+  // Headcount totals — uses per-segment HPM via monthlySegHC for cost_type projects,
+  // falls back to global HPM for summary-mode projects.
+  const columnHCTotals = useMemo(() => {
+    const totals = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
+    displayColumns.forEach(col => {
+      let pf = 0, sm = 0, pl = 0;
+      const mk = col.monthKey ?? col.key;
+      const div = (granularity === 'weekly' && timeHorizon <= 12) ? (weekInfo.weeksPerMonth[mk] || 1) : 1;
+      projections.forEach(p => {
+        if (p.monthlySegHC) {
+          const seg = p.monthlySegHC.get(mk) ?? {};
+          if (tradeFilter.includes('pf')) pf += ((seg['40'] ?? 0) + (seg['45'] ?? 0)) / div;
+          if (tradeFilter.includes('sm')) sm += ((seg['30'] ?? 0) + (seg['35'] ?? 0)) / div;
+          if (tradeFilter.includes('pl')) pl += ((seg['50'] ?? 0) + (seg['55'] ?? 0)) / div;
+        } else {
+          const h = getHoursForColumn(p.monthlyHours, col);
+          if (tradeFilter.includes('pf')) pf += h.pf / hoursPerPersonPerMonth;
+          if (tradeFilter.includes('sm')) sm += h.sm / hoursPerPersonPerMonth;
+          if (tradeFilter.includes('pl')) pl += h.pl / hoursPerPersonPerMonth;
+        }
+      });
+      totals.set(col.key, { pf, sm, pl, total: pf + sm + pl });
+    });
+    return totals;
+  }, [projections, displayColumns, granularity, timeHorizon, weekInfo, hoursPerPersonPerMonth, getHoursForColumn, tradeFilter]);
+
   const grandTotalHours = useMemo(() => {
     let total = 0;
     projections.forEach(p => {
@@ -1234,7 +1261,7 @@ const LaborForecast: React.FC = () => {
 
     // Summary KPI strip
     y += 18;
-    const peakHC = Math.max(...Array.from(columnTotals.values()).map(h => h.total), 0) / hpp;
+    const peakHC = Math.max(...Array.from(columnHCTotals.values()).map(h => h.total), 0);
     const kpis = [
       { label: 'Projects', value: String(projections.length) },
       { label: 'Total Remaining', value: `${fmtHours(grandTotalHours)} hrs` },
@@ -1609,9 +1636,17 @@ const LaborForecast: React.FC = () => {
         ? fmtHours(grandTotalHours)
         : fmtHours(grandTotalsByTrade[trade.key as TradeName] || 0);
       const periodCols = pdfTableColumns.map(pc => {
-        const ct = aggColTotals(columnTotals, pc.keys);
-        const hours = trade.key === 'total' ? ct.total : ct[trade.key as TradeName] || 0;
-        return useQuarterly ? fmtHours(hours) : fmtHeadcount(hours, hpp);
+        if (useQuarterly) {
+          const ct = aggColTotals(columnTotals, pc.keys);
+          const hours = trade.key === 'total' ? ct.total : ct[trade.key as TradeName] || 0;
+          return fmtHours(hours);
+        }
+        let hc = 0;
+        pc.keys.forEach(k => {
+          const h = columnHCTotals.get(k);
+          if (h) hc += trade.key === 'total' ? h.total : (h[trade.key as TradeName] ?? 0);
+        });
+        return fmtDirectHC(hc);
       });
       return [trade.label, remaining, ...periodCols];
     });
@@ -1770,7 +1805,7 @@ const LaborForecast: React.FC = () => {
           <h2 style={{ margin: '0.25rem 0 0 0', fontSize: '1.25rem' }}>Labor Forecast</h2>
           <div style={{ color: '#64748b', fontSize: '0.8rem' }}>
             {projections.length} projects | Total Remaining: {fmtHours(grandTotalHours)} hours
-            {' '}| Peak Headcount: {fmtHeadcount(Math.max(...Array.from(columnTotals.values()).map(h => h.total), 0), hoursPerPersonPerMonth)} people
+            {' '}| Peak Headcount: {fmtDirectHC(Math.max(...Array.from(columnHCTotals.values()).map(h => h.total), 0))} people
             {locationFilter !== 'both' && (
               <span style={{ color: '#dc2626', fontWeight: 500 }}>
                 {' '}| {locationFilter === 'shop' ? 'Shop Only' : 'Field Only'}
@@ -2532,11 +2567,13 @@ const LaborForecast: React.FC = () => {
                       </td>
                       {displayColumns.map(col => {
                         const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                        const ctHC = columnHCTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
                         const hours = trade.key === 'total' ? ct.total : ct[trade.key as TradeName] || 0;
+                        const hc = trade.key === 'total' ? ctHC.total : ctHC[trade.key as TradeName] || 0;
                         return (
                           <td key={col.key}
                             onClick={() => hours > 0 && setDrillDownCol({ key: col.key, label: col.label, monthKey: col.monthKey })}
-                            title={hours > 0 ? `${(hours / hoursPerPersonPerMonth).toFixed(1)} people (${fmtHours(hours)} hrs) — click for details` : ''}
+                            title={hours > 0 ? `${fmtDirectHC(hc)} people (${fmtHours(hours)} hrs) — click for details` : ''}
                             style={{
                               padding: '0.5rem', textAlign: 'right',
                               color: hours > 0 ? '#1e293b' : '#cbd5e1',
@@ -2545,7 +2582,7 @@ const LaborForecast: React.FC = () => {
                               fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem',
                               cursor: hours > 0 ? 'pointer' : 'default',
                             }}>
-                            {fmtHeadcount(hours, hoursPerPersonPerMonth)}
+                            {fmtDirectHC(hc)}
                           </td>
                         );
                       })}
@@ -2647,18 +2684,18 @@ const LaborForecast: React.FC = () => {
                         {fmtHours(grandTotalHours + oppGrandTotalHours)}
                       </td>
                       {displayColumns.map(col => {
-                        const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                        const ctHC = columnHCTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
                         const ot = oppColumnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
-                        const combined = ct.total + ot.total;
+                        const combinedHC = ctHC.total + ot.total / hoursPerPersonPerMonth;
                         return (
                           <td key={col.key} style={{
                             padding: '0.5rem', textAlign: 'right',
-                            color: combined > 0 ? '#92400e' : '#fcd34d',
+                            color: combinedHC > 0 ? '#92400e' : '#fcd34d',
                             fontWeight: 700,
                             background: '#fef3c7',
                             fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem',
                           }}>
-                            {fmtHeadcount(combined, hoursPerPersonPerMonth)}
+                            {fmtDirectHC(combinedHC)}
                           </td>
                         );
                       })}
@@ -2686,12 +2723,14 @@ const LaborForecast: React.FC = () => {
                     <td style={{ padding: '0.5rem' }}>-</td>
                     {displayColumns.map(col => {
                       const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                      const ctHC = columnHCTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
                       const ot = oppMode !== 'off' ? (oppColumnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 }) : { pf: 0, sm: 0, pl: 0, total: 0 };
                       const combined = { pf: ct.pf + ot.pf, sm: ct.sm + ot.sm, pl: ct.pl + ot.pl, total: ct.total + ot.total };
+                      const combinedHC = ctHC.total + ot.total / hoursPerPersonPerMonth;
                       return (
                         <td key={col.key} title={combined.total > 0 ? cellTooltip(combined) : ''}
                           style={{ padding: '0.5rem', textAlign: 'right', background: '#f1f5f9', fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem' }}>
-                          {fmtHeadcount(combined.total, hoursPerPersonPerMonth)}
+                          {fmtDirectHC(combinedHC)}
                         </td>
                       );
                     })}
