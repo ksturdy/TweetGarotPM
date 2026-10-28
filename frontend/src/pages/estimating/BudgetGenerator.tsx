@@ -11,6 +11,7 @@ import {
 import { budgetGeneratorService, BudgetOptions, GeneratedBudget, SimilarProject, COST_TYPES } from '../../services/budgetGenerator';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import { budgetsApi, Budget } from '../../services/budgets';
+import api from '../../services/api';
 import { createMatrixFromBudget, getMatrixForBudget } from '../../services/costControl';
 import BudgetReportModal from '../../components/estimates/BudgetReportModal';
 import ScopeNumberLineChart from '../../components/estimates/ScopeNumberLineChart';
@@ -67,6 +68,7 @@ const BudgetGenerator: React.FC = () => {
   const [scope, setScope] = useState('');
   const [narrativeFile, setNarrativeFile] = useState<File | null>(null);
   const [narrativeAttachmentId, setNarrativeAttachmentId] = useState<number | null>(null);
+  const [narrativeAttachmentMeta, setNarrativeAttachmentMeta] = useState<{ original_name: string; url: string } | null>(null);
   const [narrativeWarning, setNarrativeWarning] = useState('');
 
   // Options for dropdowns
@@ -149,6 +151,17 @@ const BudgetGenerator: React.FC = () => {
     }
   }, [id]);
 
+  // Fetch attachment metadata when attachment ID is known but no local file (e.g. loading existing budget)
+  useEffect(() => {
+    if (narrativeAttachmentId && !narrativeFile) {
+      api.get(`/attachments/id/${narrativeAttachmentId}`)
+        .then(r => setNarrativeAttachmentMeta({ original_name: r.data.original_name, url: r.data.url }))
+        .catch(() => setNarrativeAttachmentMeta(null));
+    } else {
+      setNarrativeAttachmentMeta(null);
+    }
+  }, [narrativeAttachmentId, narrativeFile]);
+
   const loadExistingBudget = async (budgetId: number) => {
     try {
       setLoadingExisting(true);
@@ -176,6 +189,9 @@ const BudgetGenerator: React.FC = () => {
       setBidType(existingBudget.bid_type || '');
       setSqft(existingBudget.square_footage?.toString() || '');
       setScope(existingBudget.scope_notes || '');
+      if (existingBudget.narrative_attachment_id) {
+        setNarrativeAttachmentId(existingBudget.narrative_attachment_id);
+      }
 
       // Populate editable values
       setEditableValues({
@@ -2002,8 +2018,8 @@ const BudgetGenerator: React.FC = () => {
               <div className="form-group">
                 <label className="form-label">Design Narrative <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span></label>
                 <div
-                  className={`narrative-upload-zone${narrativeFile ? ' has-file' : ''}`}
-                  onClick={() => document.getElementById('narrative-file-input')?.click()}
+                  className={`narrative-upload-zone${(narrativeFile || narrativeAttachmentMeta) ? ' has-file' : ''}`}
+                  onClick={() => !narrativeAttachmentMeta && document.getElementById('narrative-file-input')?.click()}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
@@ -2021,11 +2037,25 @@ const BudgetGenerator: React.FC = () => {
                       if (f) { setNarrativeFile(f); setNarrativeAttachmentId(null); }
                     }}
                   />
-                  <span className="narrative-upload-icon">{narrativeFile ? '📄' : '📎'}</span>
+                  <span className="narrative-upload-icon">{(narrativeFile || narrativeAttachmentMeta) ? '📄' : '📎'}</span>
                   <span className="narrative-upload-text">
-                    {narrativeFile ? narrativeFile.name : 'Upload PDF, DOCX, or TXT — specs, narratives, scope docs'}
+                    {narrativeFile
+                      ? narrativeFile.name
+                      : narrativeAttachmentMeta
+                        ? (
+                          <a
+                            href={narrativeAttachmentMeta.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ color: 'inherit', textDecoration: 'underline' }}
+                          >
+                            {narrativeAttachmentMeta.original_name}
+                          </a>
+                        )
+                        : 'Upload PDF, DOCX, or TXT — specs, narratives, scope docs'}
                   </span>
-                  {narrativeFile && (
+                  {(narrativeFile || narrativeAttachmentMeta) && (
                     <button
                       type="button"
                       className="narrative-remove-btn"
@@ -2036,7 +2066,14 @@ const BudgetGenerator: React.FC = () => {
                     </button>
                   )}
                 </div>
-                <p className="narrative-hint">Max 20MB. Titan will read this document when building the estimate.</p>
+                {narrativeAttachmentMeta && !narrativeFile && (
+                  <p className="narrative-hint" style={{ color: '#16a34a' }}>
+                    Included in last estimate — regenerate to use this narrative again, or upload a new file to replace it.
+                  </p>
+                )}
+                {!narrativeAttachmentMeta && !narrativeFile && (
+                  <p className="narrative-hint">Max 20MB. Titan will read this document when building the estimate.</p>
+                )}
               </div>
 
               {narrativeWarning && (
