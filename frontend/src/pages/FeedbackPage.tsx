@@ -491,17 +491,6 @@ const FeedbackPage: React.FC = () => {
             <div className="kpi-label">Avg. Fix Time (30d)</div>
           </div>
         </div>
-        <div className="feedback-kpi-card">
-          <div className="kpi-icon kpi-icon--gold">&#9733;</div>
-          <div className="kpi-body">
-            <div className="kpi-value kpi-value--name">
-              {kpis?.top_contributor ? kpis.top_contributor.name.split(' ')[0] : '—'}
-            </div>
-            <div className="kpi-label">
-              Power User{kpis?.top_contributor ? ` (${kpis.top_contributor.count})` : ''}
-            </div>
-          </div>
-        </div>
       </div>
 
       <div className="feedback-content">
