@@ -63,12 +63,12 @@ export const getContourMultipliers = (months: number, contour: ContourType): num
         weight = Math.pow(env, 1.5);
         break;
       case 'rampup':
-        // Slow start, peaks at ~60%, ends at 0
-        weight = x * env;
+        // Linear ramp from light (0.1) to heavy (2.0)
+        weight = 0.1 + x * 1.9;
         break;
       case 'rampdown':
-        // Peaks at ~40%, long slow wind-down to 0
-        weight = (1 - x) * env;
+        // Linear ramp from heavy (2.0) to light (0.1) — never reaches 0 so last month stays non-zero
+        weight = 2.0 - x * 1.9;
         break;
       case 'gradual':
         // Gentle sin² bell — softer than bell

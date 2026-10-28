@@ -347,6 +347,16 @@ const ProjectFinancials: React.FC = () => {
   const laborForecastData = useMemo(() => {
     if (!costSummary || !c) return null;
     const pn = (v: number | string | null | undefined) => { const n = typeof v === 'string' ? parseFloat(v) : (v ?? 0); return isNaN(n as number) ? 0 : (n as number); };
+
+    // Define these early so tradeHours can use segmentCosts for remaining hours display.
+    const SEG_TO_TRADE_EARLY: Record<string, string> = {
+      '30': 'sm', '35': 'sm', '40': 'pf', '45': 'pf', '50': 'pl', '55': 'pl', '70': 'admin',
+    };
+    const segRemMode = (() => {
+      try { return localStorage.getItem(`costTypeSchedule_remainingMode_${projectId}`) === 'jtd-rate' ? 'jtd-rate' : 'est-rate'; }
+      catch { return 'est-rate'; }
+    })();
+
     const tradeHours = TRADE_META.map(({ key }) => {
       const rows = costSummary.labor.filter((l: LaborTradeSummary) => l.trade === key);
       const estH = rows.reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0);
@@ -360,11 +370,28 @@ const ProjectFinancials: React.FC = () => {
       const jtdRateReliable = jtdH > 0 && jtdH >= estH * 0.05;
       const rate = jtdRateReliable ? jtdC / jtdH : estH > 0 ? estC / estH : 0;
       const projH = rate > 0 ? projC / rate : estH;
-      // When segment schedules exist, distribution uses per-segment remaining from getCosts().
-      // This remaining is used for the Rem Hrs column display and the no-segment fallback.
-      // Use est-jtd when segments are configured (matches CostTypeSchedule); projH-jtd otherwise.
+      // When segmentCosts exist, derive remaining from them (per-segment, mode-aware) so
+      // the displayed Rem Hrs matches what's actually distributed — avoids showing trade-
+      // level Vista hours (field+shop combined) when only one segment is active.
       const hasSegments = (segmentsData?.segments?.length ?? 0) > 0;
-      const remaining = Math.max(0, hasSegments ? estH - jtdH : projH - jtdH);
+      const remaining = (() => {
+        if (segmentCosts && segmentCosts.length > 0) {
+          const tradeSCs = segmentCosts.filter((sc: { segment_key: string }) => SEG_TO_TRADE_EARLY[sc.segment_key] === key);
+          if (tradeSCs.length > 0) {
+            return Math.max(0, tradeSCs.reduce((sum: number, sc: { est_hours: number | null; jtd_hours: number | null; jtd_cost: number | null; projected_cost: number | null }) => {
+              const scEstH = sc.est_hours ?? 0;
+              const scJtdH = sc.jtd_hours ?? 0;
+              const scJtdC = sc.jtd_cost ?? 0;
+              const scProjC = sc.projected_cost ?? 0;
+              if (segRemMode === 'jtd-rate' && scJtdC > 0 && scJtdH > 0) {
+                return sum + Math.max(0, (scProjC - scJtdC) / (scJtdC / scJtdH));
+              }
+              return sum + Math.max(0, scEstH - scJtdH);
+            }, 0));
+          }
+        }
+        return Math.max(0, hasSegments ? estH - jtdH : projH - jtdH);
+      })();
       // Split remaining hours between field and shop proportionally by estimated hours.
       // Field and shop share the same $/hr rate; only their schedule windows differ.
       const estHField = rows.filter((r: LaborTradeSummary) => r.location === 'field').reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0);
@@ -480,13 +507,7 @@ const ProjectFinancials: React.FC = () => {
     // Cost_type mode: iterate over actual per-segment costs so field and shop are independent
     // (avoids the proportional-split error when one segment has 0 actual hours).
     // Summary mode: fall back to proportional field/shop split from estimated hours.
-    const SEG_TO_TRADE: Record<string, string> = {
-      '30': 'sm', '35': 'sm', '40': 'pf', '45': 'pf', '50': 'pl', '55': 'pl', '70': 'admin',
-    };
-    const segRemMode = (() => {
-      try { return localStorage.getItem(`costTypeSchedule_remainingMode_${projectId}`) === 'jtd-rate' ? 'jtd-rate' : 'est-rate'; }
-      catch { return 'est-rate'; }
-    })();
+    const SEG_TO_TRADE = SEG_TO_TRADE_EARLY; // alias — defined above for tradeHours
 
     if (segmentCosts && segmentCosts.length > 0) {
       segmentCosts.forEach(sc => {

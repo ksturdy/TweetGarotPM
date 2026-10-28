@@ -79,9 +79,22 @@ const ScheduleHub: React.FC = () => {
       api.put(`/projects/${pid}/scheduling-mode`, { mode: newMode }).then(r => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', pid] });
+      queryClient.invalidateQueries({ queryKey: ['project', String(pid)] });
     },
     onError: () => toast.error('Failed to update scheduling mode'),
   });
+
+  const handleAlignedDatesChange = useCallback(
+    (start: string, end: string | null, contour: string) => {
+      scheduleSegmentsService.setAlignedDates(pid, start, end, contour).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['schedule-segments', pid] });
+        queryClient.invalidateQueries({ queryKey: ['scheduleSegments'] });
+        queryClient.invalidateQueries({ queryKey: ['schedule-segment-costs', pid] });
+        queryClient.invalidateQueries({ queryKey: ['bulkSegments'] });
+      }).catch(() => toast.error('Failed to save dates'));
+    },
+    [pid, queryClient, toast]
+  );
 
   const mode = project?.scheduling_mode ?? 'cost_type';
 
@@ -167,6 +180,7 @@ const ScheduleHub: React.FC = () => {
           initPending={initMutation.isPending}
           project={project}
           onModeChange={(m) => modeMutation.mutate(m)}
+          onAlignedDatesChange={handleAlignedDatesChange}
         />
       )}
 

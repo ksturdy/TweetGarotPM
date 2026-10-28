@@ -815,10 +815,11 @@ interface Props {
   initPending: boolean;
   project?: Project;
   onModeChange?: (mode: 'summary' | 'cost_type') => void;
+  onAlignedDatesChange?: (start: string, end: string | null, contour: string) => void;
 }
 
 const CostTypeSchedule: React.FC<Props> = ({
-  projectId, segments, activeKeys, onSegmentUpdate, onInitialize, initPending, project, onModeChange,
+  projectId, segments, activeKeys, onSegmentUpdate, onInitialize, initPending, project, onModeChange, onAlignedDatesChange,
 }) => {
   const queryClient = useQueryClient();
   const { confirm } = useTitanFeedback();
@@ -969,6 +970,7 @@ const CostTypeSchedule: React.FC<Props> = ({
       if (ok) {
         setAlignPhases(false);
         localStorage.setItem(`alignPhases-${projectId}`, 'false');
+        onModeChange?.('cost_type');
       }
     });
   };
@@ -1066,16 +1068,23 @@ const CostTypeSchedule: React.FC<Props> = ({
 
   const saveAlignedToAll = useCallback((start: string, end: string, contour?: ContourType) => {
     const ct = contour ?? alignedContour;
-    activeKeys.forEach(key => onSegmentUpdate(key, { start_date: start || null, end_date: end || null, contour_type: ct }));
-  }, [activeKeys, alignedContour, onSegmentUpdate]);
+    if (onAlignedDatesChange) {
+      onAlignedDatesChange(start || '', end || null, ct);
+    } else {
+      activeKeys.forEach(key => onSegmentUpdate(key, { start_date: start || null, end_date: end || null, contour_type: ct }));
+    }
+  }, [activeKeys, alignedContour, onSegmentUpdate, onAlignedDatesChange]);
 
   const handleAlignedContour = (ct: ContourType) => {
     setAlignedContour(ct);
-    activeKeys.forEach(key => onSegmentUpdate(key, { start_date: alignedStart || null, end_date: alignedEnd || null, contour_type: ct }));
+    if (onAlignedDatesChange) {
+      onAlignedDatesChange(alignedStart || '', alignedEnd || null, ct);
+    } else {
+      activeKeys.forEach(key => onSegmentUpdate(key, { start_date: alignedStart || null, end_date: alignedEnd || null, contour_type: ct }));
+    }
   };
 
-  const handleAlignToggle = async () => {
-    const next = !alignPhases;
+  const handleAlignToggle = async (next: boolean) => {
     if (next) {
       const hasDiff = activeKeys.some(key => {
         const seg = segmentMap.get(key);
@@ -1087,16 +1096,24 @@ const CostTypeSchedule: React.FC<Props> = ({
       });
       if (hasDiff) {
         const ok = await confirm({
-          title: 'Enable Aligned Mode',
-          message: 'All segments will be reset to the master start date, end date, and contour. Any individual adjustments will be lost.',
-          confirmText: 'Enable Aligned Mode',
+          title: 'Switch to Summary Mode',
+          message: 'All segments will be set to the master start date, end date, and contour. Any individual cost type adjustments will be lost.',
+          confirmText: 'Switch to Summary',
         });
         if (!ok) return;
       }
+    } else {
+      const ok = await confirm({
+        title: 'Switch to Cost Type Mode',
+        message: 'Each segment will get its own date window. The current aligned dates will be kept as starting values — you can then adjust each segment independently.',
+        confirmText: 'Switch to Cost Type',
+      });
+      if (!ok) return;
     }
     setAlignPhases(next);
     localStorage.setItem(`alignPhases-${projectId}`, String(next));
     if (next && (alignedStart || alignedEnd)) saveAlignedToAll(alignedStart, alignedEnd, alignedContour);
+    onModeChange?.(next ? 'summary' : 'cost_type');
   };
 
   const totalEst = costs.reduce((s, c) => s + safeN(c.est_cost), 0);
@@ -1275,7 +1292,7 @@ const CostTypeSchedule: React.FC<Props> = ({
           <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}
             title={alignPhases ? 'Summary: all segments share one date window — click Cost Type to set dates independently' : 'Cost Type: each segment has its own date window — click Summary to lock all to one window'}>
             <button
-              onClick={() => { if (!alignPhases) { handleAlignToggle(); onModeChange?.('summary'); } }}
+              onClick={() => { if (!alignPhases) { handleAlignToggle(true); } }}
               style={{
                 padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontFamily: 'inherit', cursor: alignPhases ? 'default' : 'pointer',
                 border: 'none', background: alignPhases ? '#1e3a5f' : '#f8fafc',
@@ -1284,7 +1301,7 @@ const CostTypeSchedule: React.FC<Props> = ({
               Summary
             </button>
             <button
-              onClick={() => { if (alignPhases) { handleAlignToggle(); onModeChange?.('cost_type'); } }}
+              onClick={() => { if (alignPhases) { handleAlignToggle(false); } }}
               style={{
                 padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontFamily: 'inherit', cursor: alignPhases ? 'pointer' : 'default',
                 border: 'none', borderLeft: '1px solid #e2e8f0',
