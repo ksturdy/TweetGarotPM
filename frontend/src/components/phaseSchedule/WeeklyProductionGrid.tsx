@@ -278,12 +278,11 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, []);
 
-  // Use parent-supplied filtered items if provided; fall back to API items.
-  // Labor-only filtering is enforced by the backend when externalItems is absent.
+  // Always use the weekly-production API data as the base so the internal
+  // filter correctly updates the chart and footer totals. The backend already
+  // returns labor-only items (cost_types includes 1).
   const items = useMemo(() => {
-    let base = externalItems
-      ? externalItems.filter(item => item.cost_types?.includes(1))
-      : (data?.items ?? []);
+    let base = data?.items ?? [];
     if (hideNoQty) base = base.filter(item => parseNum(item.quantity) > 0);
     if (ctFilter.size > 0) {
       base = base.filter(item => item.cost_types?.some(ct => ctFilter.has(ct)));
@@ -308,7 +307,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
       });
     }
     return base;
-  }, [externalItems, data, hideNoQty, ctFilter, filterText, sortDir]);
+  }, [data, hideNoQty, ctFilter, filterText, sortDir]);
 
   // ── derived data ─────────────────────────────────────────────────────────
 
@@ -454,8 +453,13 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
           schedByWeek[w]  = (schedByWeek[w]  || 0) + (scheduledQtyByItem[item.id]?.[w]  || 0);
           earnedByWeek[w] = (earnedByWeek[w] || 0) + actual;
         } else if (metric === 'hours') {
-          schedByWeek[w]  = (schedByWeek[w]  || 0) + (scheduledHrsByItem[item.id]?.[w]  || 0);
-          earnedByWeek[w] = (earnedByWeek[w] || 0) + actual * hrsRate;
+          // Only items with a measurable quantity contribute to Sched/Earned Hours —
+          // indirect items (qty=0) can never earn, so including their scheduled hours
+          // creates a permanent gap that doesn't reflect actual productivity.
+          if (qty > 0) {
+            schedByWeek[w]  = (schedByWeek[w]  || 0) + (scheduledHrsByItem[item.id]?.[w]  || 0);
+            earnedByWeek[w] = (earnedByWeek[w] || 0) + actual * hrsRate;
+          }
           burnedByWeek[w] = (burnedByWeek[w] || 0) + getBurnedHours(item.id, w);
         } else {
           schedByWeek[w]  = (schedByWeek[w]  || 0) + (scheduledCostByItem[item.id]?.[w] || 0);
@@ -569,7 +573,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
         const a = getActualQty(item.id, w) ?? 0;
         schedQty[w]   = (schedQty[w]   || 0) + (scheduledQtyByItem[item.id]?.[w]  || 0);
         actualQty[w]  = (actualQty[w]  || 0) + a;
-        schedHrs[w]   = (schedHrs[w]   || 0) + (scheduledHrsByItem[item.id]?.[w]  || 0);
+        schedHrs[w]   = (schedHrs[w]   || 0) + (qty > 0 ? (scheduledHrsByItem[item.id]?.[w] || 0) : 0);
         earnedHrs[w]  = (earnedHrs[w]  || 0) + a * hrsRate;
         burnedHrs[w]  = (burnedHrs[w]  || 0) + getBurnedHours(item.id, w);
         schedCost[w]  = (schedCost[w]  || 0) + (scheduledCostByItem[item.id]?.[w] || 0);
@@ -665,6 +669,13 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
           </button>
         </div>
       </div>
+
+      {/* ── Filter indicator ──────────────────────────────────────────── */}
+      {filterText.trim() && (
+        <div style={{ padding: '2px 16px', fontSize: 11, color: '#92400e', background: '#fffbeb', borderBottom: '1px solid #fcd34d', flexShrink: 0 }}>
+          Filtered: <strong>{filterText.trim()}</strong> — {items.length} item{items.length !== 1 ? 's' : ''} · chart and totals reflect this filter
+        </div>
+      )}
 
       {/* ── S-Curve Chart ─────────────────────────────────────────────── */}
       <div style={{ height: 180, padding: '8px 16px 4px', flexShrink: 0, borderBottom: '1px solid #e2e8f0' }}>
