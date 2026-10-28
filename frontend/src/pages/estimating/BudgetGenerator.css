@@ -527,7 +527,7 @@
 
 .comparable-projects-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
 }
 
@@ -543,6 +543,8 @@
   border-radius: 0.5rem;
   border: 1px solid #e5e7eb;
   transition: all 0.2s;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .comparable-project:hover {
@@ -555,6 +557,7 @@
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
+  overflow: hidden;
 }
 
 .comparable-rank {
