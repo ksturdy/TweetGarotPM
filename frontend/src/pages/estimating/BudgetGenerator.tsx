@@ -1883,7 +1883,7 @@ const BudgetGenerator: React.FC = () => {
           <div className="card">
             <h2 style={{ marginTop: 0, marginBottom: '1.5rem' }}>Project Details</h2>
 
-            <form onSubmit={handleGenerate}>
+            <form onSubmit={isEditing ? (e) => { e.preventDefault(); handleRegenerate(); } : handleGenerate}>
               <div className="form-group">
                 <label className="form-label">Project Name *</label>
                 <input
@@ -2154,9 +2154,9 @@ const BudgetGenerator: React.FC = () => {
                   className="sales-btn sales-btn-primary"
                   disabled={loading || !projectName || !market || !sqft}
                 >
-                  {loading ? 'Generating...' : 'Generate Budget'}
+                  {loading ? 'Generating...' : (isEditing ? '↺ Regenerate' : 'Generate Budget')}
                 </button>
-                {budget && (
+                {!isEditing && budget && (
                   <button
                     type="button"
                     className="sales-btn sales-btn-secondary"
