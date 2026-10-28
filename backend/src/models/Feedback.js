@@ -178,11 +178,26 @@ class Feedback {
       values.push(tenantId);
     }
 
+    const DEFERRED_STATUSES = ['on_hold', 'future_enhancement'];
+
     // If status is being set to 'completed', set completed_at
     if (updates.status === 'completed') {
       const query = `
         UPDATE feedback
         SET ${setClause}, completed_at = CURRENT_TIMESTAMP,
+            first_responded_at = COALESCE(first_responded_at, CURRENT_TIMESTAMP)
+        ${whereClause}
+        RETURNING *
+      `;
+      const result = await pool.query(query, [id, ...values]);
+      return result.rows[0];
+    }
+
+    // If status is moving to a deferred state, flag it permanently
+    if (updates.status && DEFERRED_STATUSES.includes(updates.status)) {
+      const query = `
+        UPDATE feedback
+        SET ${setClause}, was_deferred = true,
             first_responded_at = COALESCE(first_responded_at, CURRENT_TIMESTAMP)
         ${whereClause}
         RETURNING *
@@ -331,7 +346,8 @@ class Feedback {
         ROUND(
           AVG(EXTRACT(EPOCH FROM (completed_at - created_at)) / 86400)
           FILTER (WHERE created_at >= NOW() - INTERVAL '30 days'
-                    AND completed_at IS NOT NULL)
+                    AND completed_at IS NOT NULL
+                    AND was_deferred = false)
         ::numeric, 1) as avg_fix_days,
         ROUND(
           AVG(EXTRACT(EPOCH FROM (first_responded_at - created_at)) / 86400)
