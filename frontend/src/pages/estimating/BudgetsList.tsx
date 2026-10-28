@@ -425,17 +425,16 @@ const BudgetsList: React.FC = () => {
                   <td>{new Date(budget.created_at).toLocaleDateString()}</td>
                   <td>{budget.created_by_name || '—'}</td>
                   <td>
-                    {budget.version_number > 0 && (
+                    {budget.version_count && Number(budget.version_count) > 1 && (
                       <span style={{
-                        background: (budget.version_count && Number(budget.version_count) > 1) ? '#2563eb' : '#e2e8f0',
-                        color: (budget.version_count && Number(budget.version_count) > 1) ? '#fff' : '#64748b',
+                        background: '#2563eb',
+                        color: '#fff',
                         borderRadius: '10px',
                         padding: '2px 8px',
                         fontSize: '11px',
                         fontWeight: 700,
                       }}>
-                        V{budget.version_number}
-                        {(budget.version_count && Number(budget.version_count) > 1) ? ` of ${budget.version_count}` : ''}
+                        V{budget.version_number} of {budget.version_count}
                       </span>
                     )}
                   </td>

@@ -2315,7 +2315,7 @@ const BudgetGenerator: React.FC = () => {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       <h2 style={{ margin: 0 }}>{currentBudget.summary.projectName}</h2>
-                      {budgetVersionNumber > 0 && (
+                      {budgetVersions.length > 1 && (
                         <span style={{
                           background: budgetVersionNumber > 1 ? '#2563eb' : '#64748b',
                           color: '#fff',
