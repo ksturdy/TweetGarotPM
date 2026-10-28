@@ -615,8 +615,11 @@ const BudgetGenerator: React.FC = () => {
             ...(result.narrativeAttachmentId
               ? { narrative_attachment_id: result.narrativeAttachmentId }
               : narrativeAttachmentId ? { narrative_attachment_id: narrativeAttachmentId } : {}),
-            // Pass group ID when regenerating so backend links this as a new version
-            ...(isRegenerating.current && budgetGroupId ? { budget_group_id: budgetGroupId } : {})
+            // Pass group ID when regenerating so backend links this as a new version.
+            // Fall back to the URL id (= budget_group_id for V1 budgets) if state hasn't settled.
+            ...(isRegenerating.current
+              ? { budget_group_id: budgetGroupId || (id ? parseInt(id, 10) : undefined) }
+              : {})
           };
 
           setShowGenerateModal(false);
@@ -2315,7 +2318,7 @@ const BudgetGenerator: React.FC = () => {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       <h2 style={{ margin: 0 }}>{currentBudget.summary.projectName}</h2>
-                      {(budgetVersions.length > 1 || budgetVersionNumber > 1) && (
+                      {(
                         <span style={{
                           background: budgetVersionNumber > 1 ? '#2563eb' : '#64748b',
                           color: '#fff',

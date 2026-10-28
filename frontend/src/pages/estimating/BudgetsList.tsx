@@ -425,18 +425,17 @@ const BudgetsList: React.FC = () => {
                   <td>{new Date(budget.created_at).toLocaleDateString()}</td>
                   <td>{budget.created_by_name || '—'}</td>
                   <td>
-                    {budget.version_count && Number(budget.version_count) > 1 && (
-                      <span style={{
-                        background: '#2563eb',
-                        color: '#fff',
-                        borderRadius: '10px',
-                        padding: '2px 8px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                      }}>
-                        V{budget.version_number} of {budget.version_count}
-                      </span>
-                    )}
+                    <span style={{
+                      background: Number(budget.version_number) > 1 ? '#2563eb' : '#94a3b8',
+                      color: '#fff',
+                      borderRadius: '10px',
+                      padding: '2px 8px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                    }}>
+                      V{budget.version_number || 1}
+                      {Number(budget.version_count) > 1 && ` of ${budget.version_count}`}
+                    </span>
                   </td>
                   <td onClick={e => e.stopPropagation()}>
                     {matrixMap[budget.id] != null ? (
