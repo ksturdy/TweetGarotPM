@@ -97,7 +97,7 @@ const FeedbackPage: React.FC = () => {
   // Fetch second panel items
   const { data: secondPanelItems = [] } = useQuery({
     queryKey: ['feedback-second-panel', secondPanelStatuses],
-    queryFn: () => feedbackService.getAll({ status: secondPanelStatuses.join(','), sortBy: 'id', order: 'asc' }),
+    queryFn: () => feedbackService.getAll({ status: secondPanelStatuses.join(','), sortBy: 'created', order: 'asc' }),
     enabled: secondPanelStatuses.length > 0,
   });
 
