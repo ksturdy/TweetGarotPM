@@ -29,13 +29,13 @@ const pct = (a: number | null, b: number | null) => {
 const DeltaCell: React.FC<{ a: number | null; b: number | null; invert?: boolean }> = ({ a, b, invert }) => {
   const d = delta(a, b);
   const p = pct(a, b);
-  if (d === null || p === null) return <td style={{ textAlign: 'right', color: '#94a3b8' }}>—</td>;
+  if (d === null || p === null) return <td style={{ textAlign: 'right', color: '#94a3b8', padding: '7px 20px' }}>—</td>;
   const isPositive = d > 0;
   // For costs, an increase is bad (red); invert=true flips the color logic
   const isGood = invert ? isPositive : !isPositive;
   const color = Math.abs(d) < 1 ? '#64748b' : isGood ? '#16a34a' : '#dc2626';
   return (
-    <td style={{ textAlign: 'right', color, fontWeight: 600, fontSize: '13px' }}>
+    <td style={{ textAlign: 'right', color, fontWeight: 600, fontSize: '13px', padding: '7px 20px' }}>
       {d >= 0 ? '+' : ''}{fmt(d)}
       <span style={{ fontSize: '11px', marginLeft: '4px', opacity: 0.8 }}>
         ({p >= 0 ? '+' : ''}{p.toFixed(1)}%)
@@ -165,7 +165,7 @@ const BudgetVersionCompare: React.FC<Props> = ({ groupId, currentBudgetId, onClo
                   <th style={{ ...thStyle, textAlign: 'left', width: '35%' }}>Section</th>
                   <th style={thStyle}>V{labelA?.version_number} ({labelA ? new Date(labelA.created_at).toLocaleDateString() : ''})</th>
                   <th style={thStyle}>V{labelB?.version_number} ({labelB ? new Date(labelB.created_at).toLocaleDateString() : ''})</th>
-                  <th style={thStyle}>Change</th>
+                  <th style={{ ...thStyle, padding: '8px 20px' }}>Change</th>
                 </tr>
               </thead>
               <tbody>
