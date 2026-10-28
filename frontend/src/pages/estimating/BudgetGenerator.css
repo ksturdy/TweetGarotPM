@@ -144,8 +144,9 @@
 
 .form-actions .btn,
 .form-actions .sales-btn {
-  flex: 1;
-  max-width: 220px;
+  flex: 0 0 auto;
+  text-align: center;
+  justify-content: center;
 }
 
 .error-message {
