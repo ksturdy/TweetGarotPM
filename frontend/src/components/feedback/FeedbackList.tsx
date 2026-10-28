@@ -68,6 +68,7 @@ const FeedbackList: React.FC<FeedbackListProps> = ({
       case 'completed': return '#28a745';
       case 'on_hold': return '#fd7e14';
       case 'rejected': return '#dc3545';
+      case 'future_enhancement': return '#3f51b5';
       default: return '#6c757d';
     }
   };

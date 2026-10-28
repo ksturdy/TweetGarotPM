@@ -15,9 +15,18 @@ import FeedbackForm from '../components/feedback/FeedbackForm';
 import FeedbackDetail from '../components/feedback/FeedbackDetail';
 import './FeedbackPage.css';
 
-const ALL_STATUSES = ['submitted', 'read', 'under_review', 'in_progress', 'in_testing', 'completed', 'on_hold', 'rejected'];
-const DEFAULT_STATUSES = ALL_STATUSES.filter(s => s !== 'completed');
+const ALL_STATUSES = ['submitted', 'read', 'under_review', 'in_progress', 'in_testing', 'completed', 'on_hold', 'rejected', 'future_enhancement'];
+const DEFAULT_STATUSES = ALL_STATUSES.filter(s => s !== 'completed' && s !== 'future_enhancement');
 const STORAGE_KEY = 'titan_feedback_default_statuses';
+const SECOND_PANEL_KEY = 'titan_feedback_second_panel_statuses';
+const DEFAULT_SECOND_PANEL = ['future_enhancement'];
+
+const loadSavedSecondPanel = (): string[] => {
+  try {
+    const saved = localStorage.getItem(SECOND_PANEL_KEY);
+    return saved ? JSON.parse(saved) : DEFAULT_SECOND_PANEL;
+  } catch { return DEFAULT_SECOND_PANEL; }
+};
 
 const loadSavedDefaults = (): string[] => {
   try {
@@ -35,6 +44,19 @@ const STATUS_LABELS: Record<string, string> = {
   completed: 'Completed',
   on_hold: 'On Hold',
   rejected: 'Rejected',
+  future_enhancement: 'Future Enhancement',
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  submitted: '#6c757d',
+  read: '#17a2b8',
+  under_review: '#ffc107',
+  in_progress: '#007bff',
+  in_testing: '#8b5cf6',
+  completed: '#28a745',
+  on_hold: '#fd7e14',
+  rejected: '#dc3545',
+  future_enhancement: '#3f51b5',
 };
 
 const FeedbackPage: React.FC = () => {
@@ -53,6 +75,8 @@ const FeedbackPage: React.FC = () => {
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [draftDefaults, setDraftDefaults] = useState<string[]>(loadSavedDefaults);
+  const [secondPanelStatuses, setSecondPanelStatuses] = useState<string[]>(loadSavedSecondPanel);
+  const [draftSecondPanel, setDraftSecondPanel] = useState<string[]>(loadSavedSecondPanel);
   const settingsRef = useRef<HTMLDivElement>(null);
   const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null);
   const [userVotes, setUserVotes] = useState<Map<number, FeedbackVote | null>>(new Map());
@@ -68,6 +92,13 @@ const FeedbackPage: React.FC = () => {
   const { data: feedbackItems = [], isLoading } = useQuery({
     queryKey: ['feedback', filters],
     queryFn: () => feedbackService.getAll(filters)
+  });
+
+  // Fetch second panel items
+  const { data: secondPanelItems = [] } = useQuery({
+    queryKey: ['feedback-second-panel', secondPanelStatuses],
+    queryFn: () => feedbackService.getAll({ status: secondPanelStatuses.join(','), sortBy: 'id', order: 'asc' }),
+    enabled: secondPanelStatuses.length > 0,
   });
 
   // Fetch comments for selected feedback
@@ -269,16 +300,27 @@ const FeedbackPage: React.FC = () => {
     );
   };
 
+  const toggleSecondPanelDraft = (status: string) => {
+    setDraftSecondPanel(prev =>
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
+
   const saveDefaults = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(draftDefaults));
+    localStorage.setItem(SECOND_PANEL_KEY, JSON.stringify(draftSecondPanel));
     setSelectedStatuses(draftDefaults);
+    setSecondPanelStatuses(draftSecondPanel);
     setSettingsOpen(false);
   };
 
   const resetDefaults = () => {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SECOND_PANEL_KEY);
     setDraftDefaults(DEFAULT_STATUSES);
     setSelectedStatuses(DEFAULT_STATUSES);
+    setDraftSecondPanel(DEFAULT_SECOND_PANEL);
+    setSecondPanelStatuses(DEFAULT_SECOND_PANEL);
     setSettingsOpen(false);
   };
 
@@ -436,7 +478,7 @@ const FeedbackPage: React.FC = () => {
               <div className="feedback-settings-header">Default Status Filters</div>
               <div className="feedback-settings-body">
                 <div className="feedback-settings-desc">
-                  These statuses will be pre-selected each time you open this page.
+                  Statuses pre-selected in the main list each time you open this page.
                 </div>
                 {ALL_STATUSES.map(s => (
                   <label key={s} className="multi-select-option">
@@ -444,6 +486,23 @@ const FeedbackPage: React.FC = () => {
                       type="checkbox"
                       checked={draftDefaults.includes(s)}
                       onChange={() => toggleDraft(s)}
+                    />
+                    <span>{STATUS_LABELS[s]}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="feedback-settings-section-divider" />
+              <div className="feedback-settings-header">Future Enhancements Panel</div>
+              <div className="feedback-settings-body">
+                <div className="feedback-settings-desc">
+                  Statuses shown in the bottom panel. Default: Future Enhancement.
+                </div>
+                {ALL_STATUSES.map(s => (
+                  <label key={s} className="multi-select-option">
+                    <input
+                      type="checkbox"
+                      checked={draftSecondPanel.includes(s)}
+                      onChange={() => toggleSecondPanelDraft(s)}
                     />
                     <span>{STATUS_LABELS[s]}</span>
                   </label>
@@ -495,17 +554,62 @@ const FeedbackPage: React.FC = () => {
 
       <div className="feedback-content">
         <div className="feedback-left">
-          {isLoading ? (
-            <div className="loading">Loading feedback...</div>
-          ) : (
-            <FeedbackList
-              feedbackItems={feedbackItems}
-              userVotes={userVotes}
-              onVote={handleVote}
-              onRemoveVote={handleRemoveVote}
-              onSelectFeedback={handleSelectFeedback}
-              selectedFeedbackId={selectedFeedback?.id}
-            />
+          <div className="feedback-main-list">
+            {isLoading ? (
+              <div className="loading">Loading feedback...</div>
+            ) : (
+              <FeedbackList
+                feedbackItems={feedbackItems}
+                userVotes={userVotes}
+                onVote={handleVote}
+                onRemoveVote={handleRemoveVote}
+                onSelectFeedback={handleSelectFeedback}
+                selectedFeedbackId={selectedFeedback?.id}
+              />
+            )}
+          </div>
+          {secondPanelStatuses.length > 0 && (
+            <div className="feedback-second-panel">
+              <div className="second-panel-header">
+                <span className="second-panel-title">Future Enhancements</span>
+                <span className="second-panel-count">{secondPanelItems.length}</span>
+              </div>
+              {secondPanelItems.length === 0 ? (
+                <div className="second-panel-empty">No items</div>
+              ) : (
+                <table className="second-panel-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Title</th>
+                      <th>Status</th>
+                      <th>Module</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {secondPanelItems.map(item => (
+                      <tr
+                        key={item.id}
+                        onClick={() => handleSelectFeedback(item)}
+                        className={selectedFeedback?.id === item.id ? 'selected' : ''}
+                      >
+                        <td className="sp-col-id">#{item.id}</td>
+                        <td className="sp-col-title">{item.title}</td>
+                        <td className="sp-col-status">
+                          <span
+                            className="sp-status-badge"
+                            style={{ background: STATUS_COLORS[item.status] ?? '#6c757d' }}
+                          >
+                            {STATUS_LABELS[item.status] ?? item.status}
+                          </span>
+                        </td>
+                        <td className="sp-col-module">{item.module || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           )}
         </div>
 

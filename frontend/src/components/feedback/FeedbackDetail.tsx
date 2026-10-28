@@ -95,6 +95,7 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
       case 'completed': return '#28a745';
       case 'on_hold': return '#fd7e14';
       case 'rejected': return '#dc3545';
+      case 'future_enhancement': return '#3f51b5';
       default: return '#6c757d';
     }
   };
@@ -358,6 +359,7 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
               <option value="completed">Completed</option>
               <option value="on_hold">On Hold</option>
               <option value="rejected">Rejected</option>
+              <option value="future_enhancement">Future Enhancement</option>
             </select>
           </div>
         )}

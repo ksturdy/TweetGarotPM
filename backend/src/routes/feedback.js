@@ -17,6 +17,7 @@ const STATUS_LABELS = {
   completed: 'Completed',
   on_hold: 'On Hold',
   rejected: 'Rejected',
+  future_enhancement: 'Future Enhancement',
 };
 
 // All routes require authentication and tenant context

@@ -8,7 +8,7 @@ export interface Feedback {
   title: string;
   description: string;
   type: 'bug' | 'enhancement' | 'feature_request' | 'improvement' | 'other';
-  status: 'submitted' | 'read' | 'under_review' | 'in_progress' | 'in_testing' | 'completed' | 'on_hold' | 'rejected';
+  status: 'submitted' | 'read' | 'under_review' | 'in_progress' | 'in_testing' | 'completed' | 'on_hold' | 'rejected' | 'future_enhancement';
   priority: 'low' | 'medium' | 'high' | 'critical';
   votes_count: number;
   upvotes: number;

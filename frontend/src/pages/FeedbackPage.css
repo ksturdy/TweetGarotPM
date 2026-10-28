@@ -324,6 +324,118 @@
   border: 1px solid #e0e2e7;
 }
 
+.feedback-main-list {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Second panel (Future Enhancements) ─────────────────────── */
+.feedback-second-panel {
+  flex-shrink: 0;
+  border-top: 2px solid #3f51b5;
+  background: white;
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.second-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: linear-gradient(135deg, #3f51b5 0%, #5c6bc0 100%);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.second-panel-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: white;
+}
+
+.second-panel-count {
+  background: rgba(255,255,255,0.25);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.second-panel-empty {
+  padding: 14px 12px;
+  font-size: 12px;
+  color: #6c757d;
+  text-align: center;
+}
+
+.second-panel-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.second-panel-table thead th {
+  background: #f0f1f3;
+  padding: 5px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #5a5a72;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid #e0e2e7;
+  white-space: nowrap;
+}
+
+.second-panel-table tbody tr {
+  cursor: pointer;
+  border-bottom: 1px solid #f0f1f3;
+  transition: background 0.1s;
+}
+
+.second-panel-table tbody tr:hover {
+  background: #f5f7ff;
+}
+
+.second-panel-table tbody tr.selected {
+  background: #eef0fb;
+}
+
+.second-panel-table td {
+  padding: 5px 10px;
+  font-size: 12px;
+  color: #212529;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-col-id    { width: 48px; color: #6c757d; font-size: 11px; }
+.sp-col-title { width: auto; }
+.sp-col-status { width: 130px; }
+.sp-col-module { width: 100px; color: #6c757d; font-size: 11px; }
+
+.sp-status-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+}
+
+.feedback-settings-section-divider {
+  height: 1px;
+  background: #dee2e6;
+  margin: 4px 0;
+}
+
 .loading {
   display: flex;
   justify-content: center;
