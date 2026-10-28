@@ -17,6 +17,7 @@ import BudgetReportModal from '../../components/estimates/BudgetReportModal';
 import ScopeNumberLineChart from '../../components/estimates/ScopeNumberLineChart';
 import ScopeJobMappingPanel from '../../components/estimates/ScopeJobMappingPanel';
 import { scopeJobMappingsApi } from '../../services/scopeJobMappings';
+import BudgetVersionCompare from '../../components/estimates/BudgetVersionCompare';
 import './BudgetGenerator.css';
 import '../../styles/SalesPipeline.css';
 
@@ -134,6 +135,13 @@ const BudgetGenerator: React.FC = () => {
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [scopeMapTarget, setScopeMapTarget] = useState<{id:number;source:'historical'|'project';name:string}|null>(null);
 
+  // Versioning state
+  const [budgetGroupId, setBudgetGroupId] = useState<number | null>(null);
+  const [budgetVersionNumber, setBudgetVersionNumber] = useState<number>(1);
+  const [budgetVersions, setBudgetVersions] = useState<any[]>([]);
+  const isRegenerating = useRef(false);
+  const [showVersionCompare, setShowVersionCompare] = useState(false);
+
   // Ref for print
   const reportRef = useRef<HTMLDivElement>(null);
   const resultsColumnRef = useRef<HTMLDivElement>(null);
@@ -242,6 +250,17 @@ const BudgetGenerator: React.FC = () => {
 
       setBudget(reconstructedBudget);
       setBaselineSections(existingBudget.baseline_sections || null);
+
+      // Load version info
+      const groupId = existingBudget.budget_group_id || existingBudget.id;
+      setBudgetGroupId(groupId);
+      setBudgetVersionNumber(existingBudget.version_number || 1);
+      try {
+        const versionsRes = await budgetsApi.getVersions(groupId);
+        setBudgetVersions(versionsRes.data);
+      } catch {
+        setBudgetVersions([]);
+      }
 
       // Load comparable projects if available
       if (existingBudget.comparable_projects) {
@@ -509,7 +528,11 @@ const BudgetGenerator: React.FC = () => {
 
       const result = narrativeFile
         ? await budgetGeneratorService.generateWithNarrative({ ...generateParams, narrativeFile })
-        : await budgetGeneratorService.generate(generateParams);
+        : await budgetGeneratorService.generate({
+            ...generateParams,
+            // Re-send stored narrative attachment when regenerating without a new file upload
+            narrativeAttachmentId: narrativeAttachmentId ?? undefined,
+          });
 
       if (result.narrativeWarning) setNarrativeWarning(result.narrativeWarning);
       if (result.narrativeAttachmentId) setNarrativeAttachmentId(result.narrativeAttachmentId);
@@ -534,8 +557,8 @@ const BudgetGenerator: React.FC = () => {
       // Auto-expand summary section
       setExpandedSections({ 'summary': true });
 
-      // Auto-save when creating a new budget (not editing existing)
-      if (!isEditing) {
+      // Auto-save: always runs on first generation; also runs when regenerating to create a new version
+      if (!isEditing || isRegenerating.current) {
         try {
           const dc = result.budget.totals.directCostSubtotal;
           const overheadPct = dc > 0 ? Math.round((result.budget.totals.overhead / dc) * 100) : 10;
@@ -589,11 +612,23 @@ const BudgetGenerator: React.FC = () => {
             })),
             scopes_of_work: scopesOfWork.length ? scopesOfWork : undefined,
             status: 'draft',
-            ...(result.narrativeAttachmentId ? { narrative_attachment_id: result.narrativeAttachmentId } : {})
+            ...(result.narrativeAttachmentId
+              ? { narrative_attachment_id: result.narrativeAttachmentId }
+              : narrativeAttachmentId ? { narrative_attachment_id: narrativeAttachmentId } : {}),
+            // Pass group ID when regenerating so backend links this as a new version
+            ...(isRegenerating.current && budgetGroupId ? { budget_group_id: budgetGroupId } : {})
           };
 
           setShowGenerateModal(false);
           const res = await budgetsApi.create(autoSaveData);
+          // Update version state and navigate to the new version's URL
+          const newGroupId = res.data.budget_group_id || res.data.id;
+          setBudgetGroupId(newGroupId);
+          setBudgetVersionNumber(res.data.version_number || 1);
+          try {
+            const versionsRes = await budgetsApi.getVersions(newGroupId);
+            setBudgetVersions(versionsRes.data);
+          } catch { /* non-fatal */ }
           navigate(`/estimating/budget-generator/${res.data.id}`, { replace: true });
         } catch (saveErr: any) {
           console.error('Auto-save failed:', saveErr);
@@ -822,7 +857,12 @@ const BudgetGenerator: React.FC = () => {
     setIsEditMode(false);
     setAdjustedBudget(null);
     setEditableValues(prev => ({ ...prev, sectionAdjustments: {}, excludedSections: {}, itemOverrides: {} }));
-    handleGenerate({ preventDefault: () => {} } as React.FormEvent);
+    isRegenerating.current = true;
+    try {
+      await handleGenerate({ preventDefault: () => {} } as React.FormEvent);
+    } finally {
+      isRegenerating.current = false;
+    }
   };
 
   const handleEditModeToggle = () => {
@@ -991,6 +1031,22 @@ const BudgetGenerator: React.FC = () => {
       .reduce((sum, s) => sum + s.items.reduce((isum, i) => isum + (i.materialCost || 0), 0), 0);
     if (embeddedMaterial > 0) {
       map[2].total += embeddedMaterial;
+      // Build one synthetic section per Labor section that carries material costs
+      currentBudget.sections
+        .filter(s => (s.costType ?? 1) === 1)
+        .forEach(s => {
+          const matItems = s.items
+            .filter(i => (i.materialCost || 0) > 0)
+            .map(i => ({ description: i.description, totalCost: i.materialCost || 0, materialCost: i.materialCost }));
+          if (matItems.length > 0) {
+            map[2].sections.push({
+              name: s.name,
+              costType: 2,
+              subtotal: matItems.reduce((sum, i) => sum + i.totalCost, 0),
+              items: matItems,
+            });
+          }
+        });
     }
 
     return COST_TYPES.map(ct => ({ ...ct, ...map[ct.id] })).filter(g => g.total > 0);
@@ -2257,7 +2313,62 @@ const BudgetGenerator: React.FC = () => {
               <div className="card summary-card">
                 <div className="summary-header">
                   <div style={{ flex: 1 }}>
-                    <h2 style={{ margin: 0 }}>{currentBudget.summary.projectName}</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <h2 style={{ margin: 0 }}>{currentBudget.summary.projectName}</h2>
+                      {budgetVersionNumber > 0 && (
+                        <span style={{
+                          background: budgetVersionNumber > 1 ? '#2563eb' : '#64748b',
+                          color: '#fff',
+                          borderRadius: '12px',
+                          padding: '2px 10px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          letterSpacing: '0.5px',
+                          flexShrink: 0,
+                        }}>
+                          V{budgetVersionNumber}
+                        </span>
+                      )}
+                      {budgetVersions.length > 1 && (
+                        <select
+                          value={parseInt(id || '0', 10)}
+                          onChange={(e) => navigate(`/estimating/budget-generator/${e.target.value}`)}
+                          style={{
+                            fontSize: '12px',
+                            padding: '2px 6px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            background: '#f8fafc',
+                            cursor: 'pointer',
+                          }}
+                          title="Switch version"
+                        >
+                          {budgetVersions.map(v => (
+                            <option key={v.id} value={v.id}>
+                              V{v.version_number} — {new Date(v.created_at).toLocaleDateString()}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {budgetVersions.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowVersionCompare(true)}
+                          style={{
+                            fontSize: '12px',
+                            padding: '2px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid #2563eb',
+                            background: '#eff6ff',
+                            color: '#2563eb',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Compare Versions
+                        </button>
+                      )}
+                    </div>
                     <p>
                       {currentBudget.summary.buildingType} - {currentBudget.summary.projectType}
                     </p>
@@ -2454,15 +2565,17 @@ const BudgetGenerator: React.FC = () => {
 
                     {/* Sections within this cost type */}
                     {group.sections.map((section, index) => {
+                  const isMaterialSection = section.costType === 2;
+                  const expandKey = isMaterialSection ? `material::${section.name}` : section.name;
                   const adjustment = editableValues.sectionAdjustments[section.name] || 0;
                   const isExcluded = editableValues.excludedSections[section.name];
                   return (
                   <div key={index} className={`budget-section ${isExcluded ? 'section-excluded' : ''}`}>
                     <div
                       className="section-header-row"
-                      onClick={() => toggleSection(section.name)}
+                      onClick={() => toggleSection(expandKey)}
                     >
-                      {isEditMode && (
+                      {isEditMode && !isMaterialSection && (
                         <button
                           type="button"
                           className={`section-exclude-toggle-inline ${isExcluded ? 'excluded' : ''}`}
@@ -2473,10 +2586,10 @@ const BudgetGenerator: React.FC = () => {
                         </button>
                       )}
                       <span className="section-expand-icon">
-                        {expandedSections[section.name] ? '▼' : '▶'}
+                        {expandedSections[expandKey] ? '▼' : '▶'}
                       </span>
                       <span className={`section-name ${isExcluded ? 'excluded-label' : ''}`}>{section.name}</span>
-                      {isEditMode && !isExcluded && (
+                      {isEditMode && !isExcluded && !isMaterialSection && (
                         <div className="section-inline-slider" onClick={(e) => e.stopPropagation()}>
                           {editingAdjustment === `inline-${section.name}` ? (
                             <input
@@ -2508,7 +2621,7 @@ const BudgetGenerator: React.FC = () => {
                       <span className="section-subtotal">
                         {isExcluded ? <span className="excluded-amount">Excluded</span> : formatCurrency(section.subtotal)}
                       </span>
-                      {!isExcluded && baselineSections && (() => {
+                      {!isExcluded && !isMaterialSection && baselineSections && (() => {
                         const baseline = baselineSections.find((bs: any) => bs.name === section.name);
                         if (!baseline || Math.round(baseline.subtotal) === Math.round(section.subtotal)) return null;
                         const delta = section.subtotal - baseline.subtotal;
@@ -2524,8 +2637,26 @@ const BudgetGenerator: React.FC = () => {
                       })()}
                     </div>
 
-                    {expandedSections[section.name] && section.items.length > 0 && (
+                    {expandedSections[expandKey] && section.items.length > 0 && (
                       <div className="section-items">
+                        {isMaterialSection ? (
+                          <table className="items-table">
+                            <thead>
+                              <tr>
+                                <th>Description</th>
+                                <th>Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {section.items.map((item, itemIndex) => (
+                                <tr key={itemIndex}>
+                                  <td>{item.description}</td>
+                                  <td><strong>{formatCurrency(item.totalCost)}</strong></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
                         <table className="items-table">
                           <thead>
                             <tr>
@@ -2610,6 +2741,7 @@ const BudgetGenerator: React.FC = () => {
                             })}
                           </tbody>
                         </table>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3283,6 +3415,15 @@ const BudgetGenerator: React.FC = () => {
           </div>
         </div>
       </div>
+    )}
+
+    {/* Version Compare Modal */}
+    {showVersionCompare && budgetGroupId && (
+      <BudgetVersionCompare
+        groupId={budgetGroupId}
+        currentBudgetId={parseInt(id || '0', 10)}
+        onClose={() => setShowVersionCompare(false)}
+      />
     )}
 
     {/* Budget Report Modal */}

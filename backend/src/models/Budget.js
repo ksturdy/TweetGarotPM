@@ -35,7 +35,9 @@ class Budget {
       created_by,
       narrative_attachment_id,
       baseline_sections,
-      scopes_of_work
+      scopes_of_work,
+      version_number,
+      budget_group_id
     } = budgetData;
 
     const result = await pool.query(
@@ -47,8 +49,8 @@ class Budget {
         overhead, profit, contingency, grand_total, overhead_percent,
         profit_percent, contingency_percent, sections, assumptions, risks,
         comparable_projects, status, created_by, narrative_attachment_id,
-        baseline_sections, scopes_of_work
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+        baseline_sections, scopes_of_work, version_number, budget_group_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
       RETURNING *`,
       [
         tenant_id, project_name, market || null, building_type, project_type, bid_type,
@@ -61,7 +63,9 @@ class Budget {
         JSON.stringify(comparable_projects || []), status || 'draft', created_by,
         narrative_attachment_id || null,
         baseline_sections ? JSON.stringify(baseline_sections) : null,
-        Array.isArray(scopes_of_work) && scopes_of_work.length ? scopes_of_work : null
+        Array.isArray(scopes_of_work) && scopes_of_work.length ? scopes_of_work : null,
+        version_number || 1,
+        budget_group_id || null
       ]
     );
     return result.rows[0];
@@ -79,42 +83,63 @@ class Budget {
   }
 
   static async findAll(tenantId, filters = {}) {
-    let query = `
-      SELECT b.*, u.first_name || ' ' || u.last_name as created_by_name
-      FROM budgets b
-      LEFT JOIN users u ON b.created_by = u.id
-      WHERE b.tenant_id = $1
-    `;
+    // Return only the latest version per budget group so the list isn't cluttered.
+    // Each group's max version_number row is selected; version_count lets the UI
+    // show a badge when multiple versions exist.
+    let baseWhere = `b.tenant_id = $1`;
     const params = [tenantId];
     let paramIndex = 2;
 
     if (filters.status) {
-      query += ` AND b.status = $${paramIndex}`;
+      baseWhere += ` AND b.status = $${paramIndex}`;
       params.push(filters.status);
       paramIndex++;
     }
-
     if (filters.building_type) {
-      query += ` AND b.building_type = $${paramIndex}`;
+      baseWhere += ` AND b.building_type = $${paramIndex}`;
       params.push(filters.building_type);
       paramIndex++;
     }
-
     if (filters.project_type) {
-      query += ` AND b.project_type = $${paramIndex}`;
+      baseWhere += ` AND b.project_type = $${paramIndex}`;
       params.push(filters.project_type);
       paramIndex++;
     }
-
     if (filters.search) {
-      query += ` AND b.project_name ILIKE $${paramIndex}`;
+      baseWhere += ` AND b.project_name ILIKE $${paramIndex}`;
       params.push(`%${filters.search}%`);
       paramIndex++;
     }
 
-    query += ' ORDER BY b.created_at DESC';
+    const query = `
+      SELECT DISTINCT ON (COALESCE(b.budget_group_id, b.id))
+        b.*,
+        u.first_name || ' ' || u.last_name as created_by_name,
+        (
+          SELECT COUNT(*) FROM budgets v
+          WHERE v.budget_group_id = COALESCE(b.budget_group_id, b.id)
+            AND v.tenant_id = b.tenant_id
+        ) as version_count
+      FROM budgets b
+      LEFT JOIN users u ON b.created_by = u.id
+      WHERE ${baseWhere}
+      ORDER BY COALESCE(b.budget_group_id, b.id), b.version_number DESC, b.created_at DESC
+    `;
 
     const result = await pool.query(query, params);
+    // Re-sort the deduplicated rows by created_at DESC
+    return result.rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
+
+  static async findByGroupId(groupId, tenantId) {
+    const result = await pool.query(
+      `SELECT b.*, u.first_name || ' ' || u.last_name as created_by_name
+       FROM budgets b
+       LEFT JOIN users u ON b.created_by = u.id
+       WHERE b.budget_group_id = $1 AND b.tenant_id = $2
+       ORDER BY b.version_number ASC`,
+      [groupId, tenantId]
+    );
     return result.rows;
   }
 
@@ -127,7 +152,7 @@ class Budget {
       'overhead', 'profit', 'contingency', 'grand_total', 'overhead_percent',
       'profit_percent', 'contingency_percent', 'sections', 'assumptions',
       'risks', 'comparable_projects', 'status', 'narrative_attachment_id',
-      'baseline_sections', 'scopes_of_work'
+      'baseline_sections', 'scopes_of_work', 'version_number', 'budget_group_id'
     ];
 
     const setClauses = [];

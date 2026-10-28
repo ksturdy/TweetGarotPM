@@ -38,6 +38,7 @@ const BudgetsList: React.FC = () => {
     status: 90,
     created: 100,
     createdBy: 130,
+    version: 90,
     costControl: 145,
     del: 44,
   };
@@ -369,6 +370,7 @@ const BudgetsList: React.FC = () => {
                 ['status',      'status',           'Status'],
                 ['created',     'created_at',       'Created'],
                 ['createdBy',   'created_by_name',  'Created By'],
+                ['version',     '',                 'Version'],
                 ['costControl', '',                 'Cost Control'],
                 ['del',         '',                 ''],
               ] as [string, string, string][]).map(([colKey, sk, label]) => (
@@ -422,6 +424,21 @@ const BudgetsList: React.FC = () => {
                   </td>
                   <td>{new Date(budget.created_at).toLocaleDateString()}</td>
                   <td>{budget.created_by_name || '—'}</td>
+                  <td>
+                    {budget.version_number > 0 && (
+                      <span style={{
+                        background: (budget.version_count && Number(budget.version_count) > 1) ? '#2563eb' : '#e2e8f0',
+                        color: (budget.version_count && Number(budget.version_count) > 1) ? '#fff' : '#64748b',
+                        borderRadius: '10px',
+                        padding: '2px 8px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                      }}>
+                        V{budget.version_number}
+                        {(budget.version_count && Number(budget.version_count) > 1) ? ` of ${budget.version_count}` : ''}
+                      </span>
+                    )}
+                  </td>
                   <td onClick={e => e.stopPropagation()}>
                     {matrixMap[budget.id] != null ? (
                       <button

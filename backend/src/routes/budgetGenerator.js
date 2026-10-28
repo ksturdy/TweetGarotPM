@@ -6,6 +6,7 @@ const { tenantContext, requireFeature } = require('../middleware/tenant');
 const { parseNarrative } = require('../utils/narrativeParser');
 const { getR2Client, isR2Enabled } = require('../config/r2Client');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
+const { getFileStream } = require('../utils/fileStorage');
 const path = require('path');
 const fs = require('fs');
 const pool = require('../config/database');
@@ -446,6 +447,27 @@ async function generateHandler(req, res, next) {
       }
     }
 
+    // Re-use a previously stored narrative when regenerating without uploading a new file
+    if (!req.file && req.body.narrativeAttachmentId) {
+      try {
+        const attResult = await pool.query(
+          'SELECT * FROM attachments WHERE id = $1',
+          [parseInt(req.body.narrativeAttachmentId, 10)]
+        );
+        if (attResult.rows.length > 0) {
+          const att = attResult.rows[0];
+          const { stream } = await getFileStream(att.filename);
+          const chunks = [];
+          for await (const chunk of stream) chunks.push(chunk);
+          narrativeText = await parseNarrative(Buffer.concat(chunks), att.mime_type, att.original_name);
+          console.log(`[BudgetGenerator] Narrative re-fetched: ${narrativeText.length} chars from attachment ${att.id}`);
+        }
+      } catch (e) {
+        console.error('[BudgetGenerator] Narrative re-fetch failed:', e.message);
+        // non-fatal — proceed without narrative
+      }
+    }
+
     // Find similar projects for scoring (unified historical + live projects)
     const similarProjects = await HistoricalProject.findSimilar({
       market: market || null,
@@ -549,7 +571,7 @@ async function generateHandler(req, res, next) {
       });
     }
 
-    // Recompute cost-type totals from sections so they are always correct regardless of AI arithmetic
+    // Recompute all totals from sections — prevents AI arithmetic errors from reaching the UI
     if (budgetJson.sections && budgetJson.totals) {
       budgetJson.totals.equipmentSubtotal = budgetJson.sections
         .filter(s => s.costType === 5)
@@ -559,6 +581,18 @@ async function generateHandler(req, res, next) {
         .reduce((sum, s) => sum + (parseFloat(s.subtotal) || 0), 0);
       budgetJson.totals.materialSubtotal = budgetJson.sections.reduce((sum, s) =>
         sum + (s.items || []).reduce((isum, i) => isum + (parseFloat(i.materialCost) || 0), 0), 0);
+
+      // Recompute directCostSubtotal as the authoritative sum of section subtotals
+      const computedDC = budgetJson.sections.reduce((sum, s) => sum + (parseFloat(s.subtotal) || 0), 0);
+      if (computedDC > 0) {
+        const origDC = parseFloat(budgetJson.totals.directCostSubtotal) || computedDC;
+        const ratio = origDC > 0 ? computedDC / origDC : 1;
+        budgetJson.totals.directCostSubtotal = computedDC;
+        budgetJson.totals.overhead    = (parseFloat(budgetJson.totals.overhead)    || 0) * ratio;
+        budgetJson.totals.profit      = (parseFloat(budgetJson.totals.profit)      || 0) * ratio;
+        budgetJson.totals.contingency = (parseFloat(budgetJson.totals.contingency) || 0) * ratio;
+        budgetJson.totals.grandTotal  = computedDC + budgetJson.totals.overhead + budgetJson.totals.profit + budgetJson.totals.contingency;
+      }
     }
 
     // Persist narrative file to storage and record in attachments table

@@ -177,6 +177,8 @@ export const budgetGeneratorService = {
     location?: string;
     selectedProjectIds?: number[];
     projectStatuses?: string[];
+    scopesOfWork?: string[];
+    narrativeAttachmentId?: number | null;
   }): Promise<BudgetGeneratorResponse> {
     const response = await api.post<BudgetGeneratorResponse>('/budget-generator/generate', params);
     return response.data;

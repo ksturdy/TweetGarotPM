@@ -69,6 +69,9 @@ export interface Budget {
   updated_at: string;
   narrative_attachment_id?: number | null;
   scopes_of_work?: string[] | null;
+  version_number: number;
+  budget_group_id?: number | null;
+  version_count?: number;
 }
 
 export interface BudgetStats {
@@ -105,4 +108,7 @@ export const budgetsApi = {
 
   delete: (id: number) =>
     api.delete(`/budgets/${id}`),
+
+  getVersions: (groupId: number) =>
+    api.get<Budget[]>(`/budgets/group/${groupId}`),
 };
