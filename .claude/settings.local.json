@@ -19,7 +19,8 @@
       "PowerShell(Receive-Job -Name \"backend\" -Keep)",
       "mcp__claude_ai_Claude_Docs__update",
       "mcp__claude_ai_Claude_Docs__batch",
-      "PowerShell(New-Item -ItemType Directory -Force \"C:\\\\Projects\\\\Titan PM\\\\frontend\\\\src\\\\pages\\\\design\")"
+      "PowerShell(New-Item -ItemType Directory -Force \"C:\\\\Projects\\\\Titan PM\\\\frontend\\\\src\\\\pages\\\\design\")",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
