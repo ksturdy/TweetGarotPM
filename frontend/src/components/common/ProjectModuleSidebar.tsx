@@ -174,7 +174,7 @@ const ProjectModuleSidebar: React.FC<Props> = ({ projectId, isCollapsed, onToggl
 
   return (
     <aside className={`project-module-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
-      {/* Overview link at the top */}
+      {/* Overview link + collapse toggle at the top */}
       <div className="project-module-sidebar-header">
         {isCollapsed ? (
           <Link
@@ -193,6 +193,13 @@ const ProjectModuleSidebar: React.FC<Props> = ({ projectId, isCollapsed, onToggl
             <span>Overview</span>
           </Link>
         )}
+        <button
+          className="project-module-toggle project-module-toggle-top"
+          onClick={onToggleCollapse}
+          title={isCollapsed ? 'Expand modules' : 'Collapse modules'}
+        >
+          {isCollapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+        </button>
       </div>
 
       {/* Scrollable group nav */}
@@ -246,11 +253,6 @@ const ProjectModuleSidebar: React.FC<Props> = ({ projectId, isCollapsed, onToggl
           })}
         </nav>
       </div>
-
-      {/* Collapse toggle */}
-      <button className="project-module-toggle" onClick={onToggleCollapse} title={isCollapsed ? 'Expand modules' : 'Collapse modules'}>
-        {isCollapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}
-      </button>
 
       {/* Flyout — collapsed mode only */}
       {isCollapsed && hoveredGroup && (() => {

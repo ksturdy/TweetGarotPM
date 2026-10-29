@@ -254,19 +254,29 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  padding: 0.75rem;
-  border: none;
-  border-top: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
   background: #f9fafb;
   color: #6b7280;
   cursor: pointer;
   transition: all 0.15s ease;
+  padding: 0;
+  margin-left: auto;
 }
 
 .project-module-toggle:hover {
   background: #f3f4f6;
   color: #002356;
+  border-color: #cbd5e1;
+}
+
+/* When collapsed, center the toggle in the header */
+.project-module-sidebar.collapsed .project-module-toggle-top {
+  margin-left: 0;
+  margin: 0 auto;
 }
 
 /* ── Flyout — opens to the left of the sidebar ─────────────────── */
