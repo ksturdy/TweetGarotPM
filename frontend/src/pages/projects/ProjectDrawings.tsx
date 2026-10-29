@@ -510,7 +510,7 @@ const ProjectDrawings: React.FC = () => {
                   )}
                 </td>
                 <td>
-                  <Link to={`/projects/${projectId}/drawings/${drawing.id}`}>
+                  <Link to={`/projects/${projectId}/drawings/${drawing.id}/view`}>
                     {drawing.title}
                   </Link>
                   {drawing.description && (
@@ -542,7 +542,7 @@ const ProjectDrawings: React.FC = () => {
                 </td>
                 <td>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <Link to={`/projects/${projectId}/drawings/${drawing.id}`} className="btn btn-secondary btn-sm">
+                    <Link to={`/projects/${projectId}/drawings/${drawing.id}/view`} className="btn btn-secondary btn-sm">
                       View
                     </Link>
                     <button onClick={() => handleEditClick(drawing)} className="btn btn-secondary btn-sm">

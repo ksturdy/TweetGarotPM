@@ -116,6 +116,7 @@ import ProjectCostModel from './pages/projects/ProjectCostModel';
 import ProjectPhotos from './pages/projects/ProjectPhotos';
 import PreJobChecklist from './pages/projects/PreJobChecklist';
 import DrawingDetail from './pages/projects/DrawingDetail';
+import DrawingViewerPage from './components/drawings/viewer/DrawingViewerPage';
 import ProjectFinancials from './pages/projects/ProjectFinancials';
 import ProjectCashFlow from './pages/projects/ProjectCashFlow';
 import CostDrillIn from './pages/projects/CostDrillIn';
@@ -417,6 +418,16 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/more" element={<FieldMoreHome />} />
           <Route path="projects/:projectId/more/vendors" element={<FieldFavoriteVendors />} />
         </Route>
+
+        {/* Drawing viewer — standalone full-screen (no sidebar/header) */}
+        <Route
+          path="/projects/:id/drawings/:drawingId/view"
+          element={
+            <PrivateRoute>
+              <DrawingViewerPage />
+            </PrivateRoute>
+          }
+        />
 
         {/* Traceover workspace — standalone layout (no main Layout wrapper) */}
         <Route
