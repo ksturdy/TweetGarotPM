@@ -91,6 +91,10 @@ const Submittal = {
     );
     return result.rows[0].next_number;
   },
+
+  async delete(id) {
+    await db.query('DELETE FROM submittals WHERE id = $1', [id]);
+  },
 };
 
 module.exports = Submittal;

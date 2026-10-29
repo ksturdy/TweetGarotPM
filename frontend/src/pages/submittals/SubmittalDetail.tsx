@@ -7,6 +7,7 @@ import { projectsApi } from '../../services/projects';
 import { attachmentsApi, Attachment } from '../../services/attachments';
 import api from '../../services/api';
 import { format, isValid } from 'date-fns';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const fmtDate = (v: string | null | undefined): string => {
@@ -44,6 +45,7 @@ const SubmittalDetail: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [isEditing, setIsEditing] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -152,6 +154,17 @@ const SubmittalDetail: React.FC = () => {
     },
   });
 
+  const handleDelete = async () => {
+    const ok = await confirm({
+      message: 'Are you sure you want to delete this submittal? This action cannot be undone.',
+      danger: true,
+    });
+    if (!ok) return;
+    await submittalsApi.delete(Number(id));
+    queryClient.invalidateQueries({ queryKey: ['submittals', projectId] });
+    navigate(`/projects/${projectId}/submittals`);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const submitData = {
@@ -210,6 +223,14 @@ const SubmittalDetail: React.FC = () => {
               Edit
             </button>
           )}
+          <button
+            className="btn btn-danger"
+            type="button"
+            onClick={handleDelete}
+            style={{ background: '#ef4444', color: '#fff', border: 'none' }}
+          >
+            Delete
+          </button>
         </div>
       </div>
 

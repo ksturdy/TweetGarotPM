@@ -146,4 +146,22 @@ router.post(
   }
 );
 
+// Delete submittal
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const existing = await Submittal.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Submittal not found' });
+    }
+    const project = await Project.findByIdAndTenant(existing.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Submittal not found' });
+    }
+    await Submittal.delete(req.params.id);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

@@ -210,6 +210,9 @@ import FieldIssueDetail from './pages/field/issues/FieldIssueDetail';
 import FieldRFIList from './pages/field/rfis/FieldRFIList';
 import FieldRFIForm from './pages/field/rfis/FieldRFIForm';
 import FieldRFIDetail from './pages/field/rfis/FieldRFIDetail';
+import FieldSubmittalList from './pages/field/submittals/FieldSubmittalList';
+import FieldSubmittalForm from './pages/field/submittals/FieldSubmittalForm';
+import FieldSubmittalDetail from './pages/field/submittals/FieldSubmittalDetail';
 import FieldMoreHome from './pages/field/FieldMoreHome';
 import FieldFavoriteVendors from './pages/field/vendors/FieldFavoriteVendors';
 import VistaDataSettings from './pages/settings/VistaDataSettings';
@@ -406,6 +409,10 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/rfis/new" element={<FieldRFIForm />} />
           <Route path="projects/:projectId/rfis/:id" element={<FieldRFIDetail />} />
           <Route path="projects/:projectId/rfis/:id/edit" element={<FieldRFIForm />} />
+          <Route path="projects/:projectId/submittals" element={<FieldSubmittalList />} />
+          <Route path="projects/:projectId/submittals/new" element={<FieldSubmittalForm />} />
+          <Route path="projects/:projectId/submittals/:id" element={<FieldSubmittalDetail />} />
+          <Route path="projects/:projectId/submittals/:id/edit" element={<FieldSubmittalForm />} />
           <Route path="projects/:projectId/more" element={<FieldMoreHome />} />
           <Route path="projects/:projectId/more/vendors" element={<FieldFavoriteVendors />} />
         </Route>

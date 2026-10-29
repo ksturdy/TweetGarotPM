@@ -591,6 +591,7 @@ html {
 .field-tile-icon.purple { background: #ede9fe; color: #5b21b6; }
 .field-tile-icon.cyan { background: #cffafe; color: #155e75; }
 .field-tile-icon.amber { background: #fef3c7; color: #b45309; }
+.field-tile-icon.indigo { background: #e0e7ff; color: #3730a3; }
 
 .field-tile-label {
   font-size: 13px;

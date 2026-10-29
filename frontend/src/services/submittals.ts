@@ -30,4 +30,6 @@ export const submittalsApi = {
 
   review: (id: number, data: { status: string; reviewNotes?: string }) =>
     api.post<Submittal>(`/submittals/${id}/review`, data),
+
+  delete: (id: number) => api.delete(`/submittals/${id}`),
 };

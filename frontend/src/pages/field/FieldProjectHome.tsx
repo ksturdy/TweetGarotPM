@@ -6,6 +6,7 @@ import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import BuildIcon from '@mui/icons-material/Build';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
 
 const FieldProjectHome: React.FC = () => {
   const { projectId } = useParams();
@@ -18,6 +19,7 @@ const FieldProjectHome: React.FC = () => {
     { label: 'Safety', icon: <HealthAndSafetyIcon />, path: 'safety', color: 'red' },
     { label: 'Issues', icon: <BugReportIcon />, path: 'issues', color: 'orange' },
     { label: 'RFIs', icon: <QuestionAnswerIcon />, path: 'rfis', color: 'cyan' },
+    { label: 'Submittals', icon: <AttachFileIcon />, path: 'submittals', color: 'indigo' },
   ];
 
   return (
