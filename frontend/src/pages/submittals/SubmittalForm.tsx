@@ -11,6 +11,7 @@ const SubmittalForm: React.FC = () => {
 
   const [formData, setFormData] = useState({
     projectId: Number(projectId),
+    name: '',
     spec_section: '',
     description: '',
     subcontractor: '',
@@ -29,6 +30,7 @@ const SubmittalForm: React.FC = () => {
     e.preventDefault();
     const submitData = {
       projectId: formData.projectId,
+      name: formData.name,
       specSection: formData.spec_section,
       description: formData.description,
       subcontractor: formData.subcontractor || undefined,
@@ -42,6 +44,12 @@ const SubmittalForm: React.FC = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const errorMessage = createMutation.isError
+    ? ((createMutation.error as any)?.response?.data?.errors?.[0]?.msg
+        || (createMutation.error as any)?.response?.data?.error
+        || 'Error creating submittal. Please try again.')
+    : null;
+
   return (
     <div>
       <div className="sales-page-header">
@@ -54,12 +62,23 @@ const SubmittalForm: React.FC = () => {
             <div className="sales-subtitle">Create a new submittal</div>
           </div>
         </div>
-        <div className="sales-header-actions">
-        </div>
       </div>
 
       <div className="card">
         <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label className="form-label">Submittal Name *</label>
+            <input
+              type="text"
+              name="name"
+              className="form-input"
+              value={formData.name}
+              onChange={handleChange}
+              placeholder="e.g., HVAC Equipment Submittal"
+              required
+            />
+          </div>
+
           <div className="form-group">
             <label className="form-label">Spec Section *</label>
             <input
@@ -86,7 +105,7 @@ const SubmittalForm: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Subcontractor</label>
+            <label className="form-label">Vendor/Supplier</label>
             <input
               type="text"
               name="subcontractor"
@@ -107,6 +126,12 @@ const SubmittalForm: React.FC = () => {
             />
           </div>
 
+          {errorMessage && (
+            <div className="error-message" style={{ marginBottom: '1rem' }}>
+              {errorMessage}
+            </div>
+          )}
+
           <div className="form-actions">
             <button
               type="button"
@@ -123,12 +148,6 @@ const SubmittalForm: React.FC = () => {
               {createMutation.isPending ? 'Creating...' : 'Create Submittal'}
             </button>
           </div>
-
-          {createMutation.isError && (
-            <div className="error-message" style={{ marginTop: '1rem' }}>
-              Error creating submittal. Please try again.
-            </div>
-          )}
         </form>
       </div>
     </div>

@@ -6,6 +6,26 @@ import { projectsApi } from '../../services/projects';
 import { format } from 'date-fns';
 import '../../styles/SalesPipeline.css';
 
+const fmtDate = (v: string | null | undefined): string => {
+  if (!v) return '-';
+  const d = new Date(v.includes('T') ? v : v + 'T00:00:00');
+  return isNaN(d.getTime()) ? '-' : format(d, 'MMM d, yyyy');
+};
+
+const STATUS_BADGE: Record<string, string> = {
+  requested_from_vendor: 'badge-warning',
+  submitted_for_approval: 'badge-info',
+  revise_resubmit: 'badge-warning',
+  approved: 'badge-success',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  requested_from_vendor: 'Requested from Vendor',
+  submitted_for_approval: 'Submitted for Approval',
+  revise_resubmit: 'Revise and Resubmit',
+  approved: 'Approved',
+};
+
 const SubmittalList: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
 
@@ -18,18 +38,6 @@ const SubmittalList: React.FC = () => {
     queryKey: ['submittals', projectId],
     queryFn: () => submittalsApi.getByProject(Number(projectId)).then((res) => res.data),
   });
-
-  const getStatusBadge = (status: string) => {
-    const classes: Record<string, string> = {
-      pending: 'badge-warning',
-      under_review: 'badge-info',
-      approved: 'badge-success',
-      approved_as_noted: 'badge-success',
-      revise_resubmit: 'badge-warning',
-      rejected: 'badge-danger',
-    };
-    return `badge ${classes[status] || 'badge-info'}`;
-  };
 
   if (isLoading) {
     return <div className="loading">Loading...</div>;
@@ -57,9 +65,10 @@ const SubmittalList: React.FC = () => {
           <thead>
             <tr>
               <th>#</th>
+              <th>Name</th>
               <th>Spec Section</th>
               <th>Description</th>
-              <th>Subcontractor</th>
+              <th>Vendor/Supplier</th>
               <th>Status</th>
               <th>Due Date</th>
             </tr>
@@ -68,16 +77,21 @@ const SubmittalList: React.FC = () => {
             {submittals?.map((submittal) => (
               <tr key={submittal.id} style={{ cursor: 'pointer' }} onClick={() => window.location.href = `/projects/${projectId}/submittals/${submittal.id}`}>
                 <td><Link to={`/projects/${projectId}/submittals/${submittal.id}`}>{submittal.number}</Link></td>
+                <td>{submittal.name || '-'}</td>
                 <td>{submittal.spec_section}</td>
                 <td>{submittal.description}</td>
                 <td>{submittal.subcontractor || '-'}</td>
-                <td><span className={getStatusBadge(submittal.status)}>{submittal.status.replace(/_/g, ' ')}</span></td>
-                <td>{submittal.due_date ? format(new Date(submittal.due_date + 'T00:00:00'), 'MMM d, yyyy') : '-'}</td>
+                <td>
+                  <span className={`badge ${STATUS_BADGE[submittal.status] || 'badge-info'}`}>
+                    {STATUS_LABEL[submittal.status] ?? submittal.status.replace(/_/g, ' ')}
+                  </span>
+                </td>
+                <td>{fmtDate(submittal.due_date)}</td>
               </tr>
             ))}
             {submittals?.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', color: 'var(--secondary)' }}>
+                <td colSpan={7} style={{ textAlign: 'center', color: 'var(--secondary)' }}>
                   No submittals found
                 </td>
               </tr>

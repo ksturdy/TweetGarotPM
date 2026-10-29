@@ -74,6 +74,7 @@ router.post(
   '/',
   [
     body('projectId').isInt(),
+    body('name').trim().notEmpty(),
     body('specSection').trim().notEmpty(),
     body('description').trim().notEmpty(),
   ],
@@ -118,7 +119,7 @@ router.put('/:id', async (req, res, next) => {
 // Review submittal
 router.post(
   '/:id/review',
-  [body('status').isIn(['approved', 'approved_as_noted', 'revise_resubmit', 'rejected'])],
+  [body('status').isIn(['requested_from_vendor', 'submitted_for_approval', 'revise_resubmit', 'approved'])],
   validate,
   async (req, res, next) => {
     try {

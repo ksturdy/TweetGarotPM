@@ -1,16 +1,42 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { submittalsApi } from '../../services/submittals';
 import { projectsApi } from '../../services/projects';
-import { format } from 'date-fns';
+import { attachmentsApi, Attachment } from '../../services/attachments';
+import { format, isValid } from 'date-fns';
 import '../../styles/SalesPipeline.css';
+
+const fmtDate = (v: string | null | undefined): string => {
+  if (!v) return '-';
+  const d = new Date(v.includes('T') ? v : v + 'T00:00:00');
+  return isValid(d) ? format(d, 'MMM d, yyyy') : '-';
+};
+
+const STATUS_OPTIONS = [
+  { value: 'requested_from_vendor', label: 'Requested from Vendor' },
+  { value: 'submitted_for_approval', label: 'Submitted for Approval' },
+  { value: 'revise_resubmit', label: 'Revise and Resubmit' },
+  { value: 'approved', label: 'Approved' },
+];
+
+const STATUS_BADGE: Record<string, string> = {
+  requested_from_vendor: 'badge-warning',
+  submitted_for_approval: 'badge-info',
+  revise_resubmit: 'badge-warning',
+  approved: 'badge-success',
+};
+
+const statusLabel = (status: string) =>
+  STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status.replace(/_/g, ' ');
 
 const SubmittalDetail: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -22,17 +48,25 @@ const SubmittalDetail: React.FC = () => {
     queryFn: () => submittalsApi.getById(Number(id)).then((res) => res.data),
   });
 
+  const { data: attachments = [] } = useQuery<Attachment[]>({
+    queryKey: ['attachments', 'submittal', id],
+    queryFn: () => attachmentsApi.getByEntity('submittal', Number(id)).then((res) => res.data),
+    enabled: !!id,
+  });
+
   const [formData, setFormData] = useState({
+    name: '',
     spec_section: '',
     description: '',
     subcontractor: '',
     due_date: '',
-    status: 'pending',
+    status: 'requested_from_vendor',
   });
 
   React.useEffect(() => {
     if (submittal) {
       setFormData({
+        name: submittal.name || '',
         spec_section: submittal.spec_section,
         description: submittal.description,
         subcontractor: submittal.subcontractor || '',
@@ -51,9 +85,24 @@ const SubmittalDetail: React.FC = () => {
     },
   });
 
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => attachmentsApi.upload('submittal', Number(id), file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attachments', 'submittal', id] });
+    },
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: (attId: number) => attachmentsApi.delete(attId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attachments', 'submittal', id] });
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const submitData = {
+      name: formData.name || undefined,
       specSection: formData.spec_section,
       description: formData.description,
       subcontractor: formData.subcontractor || undefined,
@@ -68,25 +117,24 @@ const SubmittalDetail: React.FC = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  if (isLoading) {
-    return <div className="loading">Loading...</div>;
-  }
-
-  if (!submittal) {
-    return <div className="card">Submittal not found</div>;
-  }
-
-  const getStatusBadge = (status: string) => {
-    const classes: Record<string, string> = {
-      pending: 'badge-warning',
-      under_review: 'badge-info',
-      approved: 'badge-success',
-      approved_as_noted: 'badge-success',
-      revise_resubmit: 'badge-warning',
-      rejected: 'badge-danger',
-    };
-    return `badge ${classes[status] || 'badge-info'}`;
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        await uploadMutation.mutateAsync(files[i]);
+      }
+    } catch {
+      // error visible in uploadMutation.isError
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
+
+  if (isLoading) return <div className="loading">Loading...</div>;
+  if (!submittal) return <div className="card">Submittal not found</div>;
 
   return (
     <div>
@@ -97,7 +145,7 @@ const SubmittalDetail: React.FC = () => {
               &larr; Back to Submittals
             </Link>
             <h1>📎 Submittal #{submittal.number}</h1>
-            <div className="sales-subtitle">{submittal.description}</div>
+            <div className="sales-subtitle">{submittal.name || submittal.description}</div>
           </div>
         </div>
         <div className="sales-header-actions">
@@ -112,6 +160,18 @@ const SubmittalDetail: React.FC = () => {
       <div className="card">
         {isEditing ? (
           <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Submittal Name</label>
+              <input
+                type="text"
+                name="name"
+                className="form-input"
+                value={formData.name}
+                onChange={handleChange}
+                placeholder="e.g., HVAC Equipment Submittal"
+              />
+            </div>
+
             <div className="form-group">
               <label className="form-label">Spec Section *</label>
               <input
@@ -139,7 +199,7 @@ const SubmittalDetail: React.FC = () => {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Subcontractor</label>
+                <label className="form-label">Vendor/Supplier</label>
                 <input
                   type="text"
                   name="subcontractor"
@@ -157,12 +217,9 @@ const SubmittalDetail: React.FC = () => {
                   value={formData.status}
                   onChange={handleChange}
                 >
-                  <option value="pending">Pending</option>
-                  <option value="under_review">Under Review</option>
-                  <option value="approved">Approved</option>
-                  <option value="approved_as_noted">Approved as Noted</option>
-                  <option value="revise_resubmit">Revise & Resubmit</option>
-                  <option value="rejected">Rejected</option>
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -186,6 +243,7 @@ const SubmittalDetail: React.FC = () => {
                   setIsEditing(false);
                   if (submittal) {
                     setFormData({
+                      name: submittal.name || '',
                       spec_section: submittal.spec_section,
                       description: submittal.description,
                       subcontractor: submittal.subcontractor || '',
@@ -215,10 +273,13 @@ const SubmittalDetail: React.FC = () => {
         ) : (
           <div>
             <div style={{ marginBottom: '1.5rem' }}>
-              <span className={getStatusBadge(submittal.status)} style={{ marginBottom: '1rem', display: 'inline-block' }}>
-                {submittal.status.replace(/_/g, ' ')}
+              <span className={`badge ${STATUS_BADGE[submittal.status] || 'badge-info'}`} style={{ marginBottom: '1rem', display: 'inline-block' }}>
+                {statusLabel(submittal.status)}
               </span>
-              <h2 style={{ margin: '0 0 0.5rem 0' }}>{submittal.spec_section}</h2>
+              {submittal.name && (
+                <h2 style={{ margin: '0 0 0.25rem 0' }}>{submittal.name}</h2>
+              )}
+              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>{submittal.spec_section}</div>
               <div style={{ color: 'var(--secondary)' }}>{submittal.description}</div>
             </div>
 
@@ -230,20 +291,20 @@ const SubmittalDetail: React.FC = () => {
                 <div style={{ whiteSpace: 'pre-wrap' }}>{submittal.review_notes}</div>
                 {submittal.reviewed_at && (
                   <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', marginTop: '0.5rem' }}>
-                    Reviewed on {format(new Date(submittal.reviewed_at), 'MMM d, yyyy')}
+                    Reviewed on {fmtDate(submittal.reviewed_at)}
                   </div>
                 )}
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Subcontractor</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Vendor/Supplier</div>
                 <div>{submittal.subcontractor || '-'}</div>
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Due Date</div>
-                <div>{submittal.due_date ? format(new Date(submittal.due_date + 'T00:00:00'), 'MMM d, yyyy') : '-'}</div>
+                <div>{fmtDate(submittal.due_date)}</div>
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Created By</div>
@@ -251,9 +312,80 @@ const SubmittalDetail: React.FC = () => {
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Created</div>
-                <div>{format(new Date(submittal.created_at), 'MMM d, yyyy')}</div>
+                <div>{fmtDate(submittal.created_at)}</div>
               </div>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Attachments */}
+      <div className="card" style={{ marginTop: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Attachments</h3>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploading ? 'Uploading...' : '+ Upload File'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+          />
+        </div>
+
+        {uploadMutation.isError && (
+          <div className="error-message" style={{ marginBottom: '1rem' }}>
+            Upload failed. Please try again.
+          </div>
+        )}
+
+        {attachments.length === 0 ? (
+          <div style={{ color: 'var(--secondary)', fontSize: '0.875rem' }}>No attachments yet.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {attachments.map((att) => (
+              <div
+                key={att.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.5rem 0.75rem',
+                  background: '#f8fafc',
+                  borderRadius: '6px',
+                  border: '1px solid #e5e7eb',
+                }}
+              >
+                <a
+                  href={att.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}
+                >
+                  {att.original_name}
+                </a>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>
+                    {(att.size / 1024).toFixed(0)} KB
+                  </span>
+                  <button
+                    type="button"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '0.875rem', padding: 0 }}
+                    onClick={() => deleteAttachmentMutation.mutate(att.id)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

@@ -4,11 +4,12 @@ export interface Submittal {
   id: number;
   project_id: number;
   number: number;
+  name: string | null;
   spec_section: string;
   description: string;
-  subcontractor: string;
+  subcontractor: string | null;
   status: string;
-  due_date: string;
+  due_date: string | null;
   review_notes: string | null;
   created_by: number;
   created_by_name: string;

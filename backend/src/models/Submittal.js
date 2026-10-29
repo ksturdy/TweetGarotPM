@@ -1,12 +1,12 @@
 const db = require('../config/database');
 
 const Submittal = {
-  async create({ projectId, number, specSection, description, subcontractor, dueDate, createdBy }) {
+  async create({ projectId, number, name, specSection, description, subcontractor, dueDate, createdBy }) {
     const result = await db.query(
-      `INSERT INTO submittals (project_id, number, spec_section, description, subcontractor, due_date, created_by, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+      `INSERT INTO submittals (project_id, number, name, spec_section, description, subcontractor, due_date, created_by, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'requested_from_vendor')
        RETURNING *`,
-      [projectId, number, specSection, description, subcontractor, dueDate, createdBy]
+      [projectId, number, name, specSection, description, subcontractor, dueDate, createdBy]
     );
     return result.rows[0];
   },
