@@ -106,7 +106,8 @@ const Drawing = {
 
     const allowedFields = [
       'drawing_number', 'title', 'description', 'discipline',
-      'sheet_number', 'version_number', 'is_latest', 'notes'
+      'sheet_number', 'version_number', 'is_latest', 'is_original_bid', 'notes',
+      'file_name', 'file_path', 'file_size', 'file_type',
     ];
 
     Object.keys(data).forEach((key) => {

@@ -16,10 +16,12 @@ const ProjectDrawings: React.FC = () => {
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [disciplineFilter, setDisciplineFilter] = useState('');
   const [showAllVersions, setShowAllVersions] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [editingDrawing, setEditingDrawing] = useState<Drawing | null>(null);
   const [editFormData, setEditFormData] = useState<Partial<Drawing>>({});
+  const [editSelectedFile, setEditSelectedFile] = useState<File | null>(null);
+  const [editUploadProgress, setEditUploadProgress] = useState(0);
 
   const { data: drawings, isLoading } = useQuery({
     queryKey: ['drawings', projectId, disciplineFilter, showAllVersions],
@@ -47,7 +49,7 @@ const ProjectDrawings: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['drawings'] });
       setShowUploadForm(false);
-      setSelectedFile(null);
+      setSelectedFiles([]);
       setUploadProgress(0);
       setFormData({
         project_id: Number(projectId),
@@ -74,12 +76,17 @@ const ProjectDrawings: React.FC = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Drawing> }) =>
-      drawingsApi.update(id, data),
+    mutationFn: ({ id, formData }: { id: number; formData: FormData }) =>
+      drawingsApi.updateWithFile(id, formData, (percent) => setEditUploadProgress(percent)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['drawings'] });
       setEditingDrawing(null);
       setEditFormData({});
+      setEditSelectedFile(null);
+      setEditUploadProgress(0);
+    },
+    onError: () => {
+      setEditUploadProgress(0);
     },
   });
 
@@ -95,35 +102,66 @@ const ProjectDrawings: React.FC = () => {
       is_original_bid: drawing.is_original_bid,
       notes: drawing.notes || '',
     });
+    setEditSelectedFile(null);
+    setEditUploadProgress(0);
     setShowUploadForm(false);
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDrawing) return;
-    updateMutation.mutate({ id: editingDrawing.id, data: editFormData });
+    const fd = new FormData();
+    Object.entries(editFormData).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) fd.append(k, String(v));
+    });
+    if (editSelectedFile) fd.append('file', editSelectedFile);
+    updateMutation.mutate({ id: editingDrawing.id, formData: fd });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const buildUploadFormData = (file?: File) => {
+    const fd = new FormData();
+    fd.append('project_id', formData.project_id.toString());
+    fd.append('drawing_number', formData.drawing_number);
+    fd.append('title', formData.title);
+    if (formData.description) fd.append('description', formData.description);
+    if (formData.discipline) fd.append('discipline', formData.discipline);
+    if (formData.sheet_number) fd.append('sheet_number', formData.sheet_number);
+    fd.append('version_number', formData.version_number);
+    fd.append('is_original_bid', (formData.is_original_bid || false).toString());
+    if (formData.notes) fd.append('notes', formData.notes);
+    if (file) fd.append('file', file);
+    return fd;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    const formDataToSend = new FormData();
-    formDataToSend.append('project_id', formData.project_id.toString());
-    formDataToSend.append('drawing_number', formData.drawing_number);
-    formDataToSend.append('title', formData.title);
-    if (formData.description) formDataToSend.append('description', formData.description);
-    if (formData.discipline) formDataToSend.append('discipline', formData.discipline);
-    if (formData.sheet_number) formDataToSend.append('sheet_number', formData.sheet_number);
-    formDataToSend.append('version_number', formData.version_number);
-    formDataToSend.append('is_original_bid', (formData.is_original_bid || false).toString());
-    if (formData.notes) formDataToSend.append('notes', formData.notes);
-
-    if (selectedFile) {
-      formDataToSend.append('file', selectedFile);
-    }
-
     setUploadProgress(0);
-    uploadMutation.mutate(formDataToSend);
+    if (selectedFiles.length <= 1) {
+      uploadMutation.mutate(buildUploadFormData(selectedFiles[0]));
+    } else {
+      // Upload multiple files sequentially, one drawing record per file
+      for (let i = 0; i < selectedFiles.length; i++) {
+        await drawingsApi.uploadWithProgress(
+          buildUploadFormData(selectedFiles[i]),
+          (percent) => setUploadProgress(Math.round((i / selectedFiles.length) * 100 + percent / selectedFiles.length)),
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: ['drawings'] });
+      setShowUploadForm(false);
+      setSelectedFiles([]);
+      setUploadProgress(0);
+      setFormData({
+        project_id: Number(projectId),
+        drawing_number: '',
+        title: '',
+        description: '',
+        discipline: 'Mechanical',
+        sheet_number: '',
+        version_number: '1.0',
+        is_original_bid: false,
+        notes: '',
+      });
+    }
   };
 
   const handleDelete = async (drawing: Drawing) => {
@@ -226,16 +264,19 @@ const ProjectDrawings: React.FC = () => {
               </label>
             </div>
             <div className="form-group">
-              <label className="form-label">File</label>
+              <label className="form-label">File(s)</label>
               <input
                 type="file"
+                multiple
                 className="form-input"
                 accept=".pdf,.dwg,.dxf,.rvt,.png,.jpg,.jpeg,.tiff,.tif"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))}
               />
-              {selectedFile && (
+              {selectedFiles.length > 0 && (
                 <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#666' }}>
-                  Selected: {selectedFile.name} ({(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)
+                  {selectedFiles.length === 1
+                    ? `Selected: ${selectedFiles[0].name} (${(selectedFiles[0].size / (1024 * 1024)).toFixed(2)} MB)`
+                    : `${selectedFiles.length} files selected (${(selectedFiles.reduce((s, f) => s + f.size, 0) / (1024 * 1024)).toFixed(2)} MB total)`}
                 </div>
               )}
             </div>
@@ -268,7 +309,11 @@ const ProjectDrawings: React.FC = () => {
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button type="submit" className="btn btn-primary" disabled={uploadMutation.isPending}>
-                {uploadMutation.isPending ? 'Uploading...' : 'Upload Drawing'}
+                {uploadMutation.isPending
+                  ? 'Uploading...'
+                  : selectedFiles.length > 1
+                    ? `Upload ${selectedFiles.length} Drawings`
+                    : 'Upload Drawing'}
               </button>
               <button type="button" className="btn btn-secondary" onClick={() => setShowUploadForm(false)}>
                 Cancel
@@ -356,11 +401,52 @@ const ProjectDrawings: React.FC = () => {
                 <span>Original Bid Drawing</span>
               </label>
             </div>
+            <div className="form-group">
+              <label className="form-label">
+                Replace File
+                {editingDrawing?.file_name && (
+                  <span style={{ fontWeight: 'normal', color: '#6b7280', marginLeft: '0.5rem', fontSize: '0.8rem' }}>
+                    (current: {editingDrawing.file_name})
+                  </span>
+                )}
+              </label>
+              <input
+                type="file"
+                className="form-input"
+                accept=".pdf,.dwg,.dxf,.rvt,.png,.jpg,.jpeg,.tiff,.tif"
+                onChange={(e) => setEditSelectedFile(e.target.files?.[0] || null)}
+              />
+              {editSelectedFile && (
+                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#666' }}>
+                  Selected: {editSelectedFile.name} ({(editSelectedFile.size / (1024 * 1024)).toFixed(2)} MB)
+                </div>
+              )}
+            </div>
+            {updateMutation.isPending && editUploadProgress > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                  <span>Uploading...</span>
+                  <span>{editUploadProgress}%</span>
+                </div>
+                <div style={{ width: '100%', height: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${editUploadProgress}%`,
+                    height: '100%',
+                    backgroundColor: editUploadProgress === 100 ? '#10b981' : '#3b82f6',
+                    transition: 'width 0.3s ease',
+                    borderRadius: '4px',
+                  }} />
+                </div>
+                {editUploadProgress === 100 && (
+                  <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.25rem' }}>Processing file...</div>
+                )}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button type="submit" className="btn btn-primary" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+                {updateMutation.isPending ? (editSelectedFile ? 'Uploading...' : 'Saving...') : 'Save Changes'}
               </button>
-              <button type="button" className="btn btn-secondary" onClick={() => { setEditingDrawing(null); setEditFormData({}); }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setEditingDrawing(null); setEditFormData({}); setEditSelectedFile(null); }}>
                 Cancel
               </button>
             </div>

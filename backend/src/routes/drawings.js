@@ -482,12 +482,78 @@ router.put('/:id/pages/bulk', verifyDrawing, async (req, res, next) => {
   }
 });
 
-// Update drawing
-router.put('/:id', verifyDrawing, async (req, res, next) => {
+// Update drawing (metadata only, or metadata + file replacement)
+router.put('/:id', verifyDrawing, upload.single('file'), async (req, res, next) => {
   try {
-    const drawing = await Drawing.update(req.params.id, req.body);
+    const data = { ...req.body };
+
+    if (req.file) {
+      // Delete the old file before replacing
+      if (req.drawing.file_path) {
+        await deleteFile(req.drawing.file_path).catch(console.error);
+      }
+      const fileInfo = getFileInfo(req.file);
+      data.file_name = fileInfo.fileName;
+      data.file_path = fileInfo.filePath;
+      data.file_size = fileInfo.fileSize;
+      data.file_type = fileInfo.fileType;
+    }
+
+    const drawing = await Drawing.update(req.params.id, data);
+
+    // Re-run PDF extraction pipeline when the file is replaced
+    if (req.file && data.file_type === 'application/pdf') {
+      try {
+        const { extractPDFText } = require('../utils/pdfExtractor');
+        const { classifyAllPages } = require('../utils/drawingClassifier');
+        let pdfData;
+
+        if (isR2Enabled()) {
+          const { stream } = await getFileStream(data.file_path);
+          const tmpFile = path.join(os.tmpdir(), `pages_${drawing.id}_${Date.now()}.pdf`);
+          const chunks = [];
+          for await (const chunk of stream) chunks.push(chunk);
+          await fs.promises.writeFile(tmpFile, Buffer.concat(chunks));
+          try {
+            pdfData = await extractPDFText(tmpFile);
+          } finally {
+            await fs.promises.unlink(tmpFile).catch(() => {});
+          }
+        } else {
+          const localPath = path.isAbsolute(data.file_path)
+            ? data.file_path
+            : path.join(__dirname, '../../', data.file_path);
+          pdfData = await extractPDFText(localPath);
+        }
+
+        const numPages = pdfData?.numPages || 0;
+        if (numPages > 0) {
+          await Drawing.updatePageCount(drawing.id, numPages);
+          drawing.page_count = numPages;
+          drawing.is_drawing_set = numPages > 1;
+
+          if (pdfData.pageTexts && pdfData.pageTexts.length > 0) {
+            const classified = classifyAllPages(pdfData.pageTexts);
+            await DrawingPage.bulkUpsert(drawing.id, classified);
+          } else {
+            const emptyPages = [];
+            for (let i = 1; i <= numPages; i++) {
+              emptyPages.push({ page_number: i, ai_classified: false });
+            }
+            await DrawingPage.bulkUpsert(drawing.id, emptyPages);
+          }
+        }
+      } catch (extractError) {
+        console.error('Failed to extract/classify pages on update:', extractError.message);
+      }
+    }
+
     res.json({ data: drawing });
   } catch (error) {
+    if (req.file) {
+      const fileInfo = getFileInfo(req.file);
+      await deleteFile(fileInfo.filePath).catch(console.error);
+    }
     next(error);
   }
 });
@@ -516,18 +582,28 @@ router.get('/:id/download', verifyDrawing, async (req, res, next) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    // If using R2, redirect to presigned URL
+    // Stream through the backend for R2 — we cannot redirect to a presigned URL
+    // because axios (used by the PDF viewer) follows redirects while keeping the
+    // Authorization header, which causes R2 to reject the request.
     if (isR2Enabled()) {
-      const url = await getFileUrl(drawing.file_path);
-      return res.redirect(url);
+      const { stream, contentType, contentLength } = await getFileStream(drawing.file_path);
+      res.setHeader('Content-Type', contentType || drawing.file_type || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${drawing.file_name}"`);
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+      stream.pipe(res);
+      return;
     }
 
     // For local storage, serve the file directly
-    if (!fs.existsSync(drawing.file_path)) {
+    const filePath = path.isAbsolute(drawing.file_path)
+      ? drawing.file_path
+      : path.join(__dirname, '../../', drawing.file_path);
+
+    if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    res.download(drawing.file_path, drawing.file_name);
+    res.download(filePath, drawing.file_name);
   } catch (error) {
     next(error);
   }

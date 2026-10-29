@@ -94,6 +94,14 @@ export const drawingsApi = {
   update: (id: number, data: Partial<Drawing>) =>
     api.put<{ data: Drawing }>(`/drawings/${id}`, data),
 
+  updateWithFile: (id: number, formData: FormData, onProgress?: (percent: number) => void) =>
+    api.put<{ data: Drawing }>(`/drawings/${id}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: onProgress
+        ? (e) => { onProgress(Math.round((e.loaded * 100) / (e.total || 1))); }
+        : undefined,
+    }),
+
   delete: (id: number) =>
     api.delete(`/drawings/${id}`),
 
