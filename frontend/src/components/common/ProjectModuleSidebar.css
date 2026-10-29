@@ -249,34 +249,36 @@
   height: 28px;
 }
 
-/* ── Collapse toggle button ────────────────────────────────────── */
-.project-module-toggle {
+/* ── Drawer-pull handle on the left edge of the sidebar ─────────── */
+.project-module-handle {
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  background: #f9fafb;
+  border-right: none;
+  border-radius: 6px 0 0 6px;
   color: #6b7280;
   cursor: pointer;
-  transition: all 0.15s ease;
   padding: 0;
-  margin-left: auto;
+  box-shadow: -2px 0 6px rgba(0, 0, 0, 0.06);
+  transition: background 0.15s ease, color 0.15s ease;
+  z-index: 10;
 }
 
-.project-module-toggle:hover {
+.project-module-handle:hover {
   background: #f3f4f6;
   color: #002356;
-  border-color: #cbd5e1;
 }
 
-/* When collapsed, center the toggle in the header */
-.project-module-sidebar.collapsed .project-module-toggle-top {
-  margin-left: 0;
-  margin: 0 auto;
+.project-module-handle svg {
+  font-size: 18px;
 }
 
 /* ── Flyout — opens to the left of the sidebar ─────────────────── */

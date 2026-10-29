@@ -174,7 +174,17 @@ const ProjectModuleSidebar: React.FC<Props> = ({ projectId, isCollapsed, onToggl
 
   return (
     <aside className={`project-module-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
-      {/* Overview link + collapse toggle at the top */}
+      {/* Drawer-pull handle — always visible on the left edge */}
+      <button
+        className="project-module-handle"
+        onClick={onToggleCollapse}
+        title={isCollapsed ? 'Expand modules' : 'Collapse modules'}
+        aria-label={isCollapsed ? 'Expand modules' : 'Collapse modules'}
+      >
+        {isCollapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+      </button>
+
+      {/* Overview link at the top */}
       <div className="project-module-sidebar-header">
         {isCollapsed ? (
           <Link
@@ -193,13 +203,6 @@ const ProjectModuleSidebar: React.FC<Props> = ({ projectId, isCollapsed, onToggl
             <span>Overview</span>
           </Link>
         )}
-        <button
-          className="project-module-toggle project-module-toggle-top"
-          onClick={onToggleCollapse}
-          title={isCollapsed ? 'Expand modules' : 'Collapse modules'}
-        >
-          {isCollapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}
-        </button>
       </div>
 
       {/* Scrollable group nav */}
