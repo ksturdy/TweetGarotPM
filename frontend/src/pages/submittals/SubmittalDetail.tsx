@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { submittalsApi } from '../../services/submittals';
 import { projectsApi } from '../../services/projects';
 import { attachmentsApi, Attachment } from '../../services/attachments';
+import api from '../../services/api';
 import { format, isValid } from 'date-fns';
 import '../../styles/SalesPipeline.css';
 
@@ -11,6 +12,14 @@ const fmtDate = (v: string | null | undefined): string => {
   if (!v) return '-';
   const d = new Date(v.includes('T') ? v : v + 'T00:00:00');
   return isValid(d) ? format(d, 'MMM d, yyyy') : '-';
+};
+
+// Relative file URLs (local dev) need the backend origin prepended so the
+// browser hits Express at :3001 rather than React's dev server at :3000.
+const resolveFileUrl = (url: string): string => {
+  if (!url || url.startsWith('http')) return url;
+  const backendOrigin = (api.defaults.baseURL || '').replace(/\/api$/, '');
+  return backendOrigin + url;
 };
 
 const STATUS_OPTIONS = [
@@ -266,7 +275,9 @@ const SubmittalDetail: React.FC = () => {
 
             {updateMutation.isError && (
               <div className="error-message" style={{ marginTop: '1rem' }}>
-                Error updating submittal. Please try again.
+                {(updateMutation.error as any)?.response?.data?.errors?.[0]?.msg
+                  || (updateMutation.error as any)?.response?.data?.error
+                  || 'Error updating submittal. Please try again.'}
               </div>
             )}
           </form>
@@ -365,7 +376,7 @@ const SubmittalDetail: React.FC = () => {
                 }}
               >
                 <a
-                  href={att.url}
+                  href={resolveFileUrl(att.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}
