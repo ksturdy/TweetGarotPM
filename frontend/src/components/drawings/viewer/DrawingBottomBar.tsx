@@ -45,55 +45,48 @@ export default function DrawingBottomBar({
       display: 'flex',
       alignItems: 'center',
       padding: '0 12px',
-      gap: 6,
       flexShrink: 0,
       userSelect: 'none',
+      position: 'relative',
     }}>
-      {/* Zoom controls */}
-      <button onClick={zoomOut} style={zBtn} title="Zoom out">−</button>
-      <button
-        onClick={zoomFit}
-        title="Fit page"
-        style={{ ...zBtn, minWidth: 52, fontSize: 11 }}
-      >
-        {Math.round(zoomScale * 100)}%
-      </button>
-      <button onClick={zoomIn} style={zBtn} title="Zoom in">+</button>
+      {/* Left: page + scale info */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+        <span style={{ color: '#4a6480', fontSize: 11 }}>
+          Page {pageNumber}{pageCount > 1 ? ` of ${pageCount}` : ''}
+        </span>
+        {scaleCalibration && (
+          <>
+            <div style={{ width: 1, height: 18, background: '#1e3a5f' }} />
+            <span style={{ color: '#4a6480', fontSize: 11 }}>
+              Scale set ({UNIT_LABEL[scaleCalibration.real_world_unit as MeasurementUnit] ?? scaleCalibration.real_world_unit})
+            </span>
+          </>
+        )}
+      </div>
 
-      <button
-        onClick={zoomFit}
-        style={{ ...zBtn, padding: '0 8px', fontSize: 10, minWidth: 32 }}
-        title="Fit to window"
-      >
-        Fit
-      </button>
+      {/* Center: zoom controls (absolutely centered) */}
+      <div style={{
+        position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', alignItems: 'center', gap: 4,
+      }}>
+        <button onClick={zoomOut} style={zBtn} title="Zoom out">−</button>
+        <button onClick={zoomFit} title="Fit page" style={{ ...zBtn, minWidth: 52, fontSize: 11 }}>
+          {Math.round(zoomScale * 100)}%
+        </button>
+        <button onClick={zoomIn} style={zBtn} title="Zoom in">+</button>
+        <button onClick={zoomFit} style={{ ...zBtn, padding: '0 8px', fontSize: 10, minWidth: 28 }} title="Fit to window">
+          Fit
+        </button>
+      </div>
 
-      <div style={{ width: 1, height: 18, background: '#1e3a5f', margin: '0 4px' }} />
-
-      {/* Page indicator */}
-      <span style={{ color: '#4a6480', fontSize: 11 }}>
-        Page {pageNumber}{pageCount > 1 ? ` of ${pageCount}` : ''}
-      </span>
-
-      {/* Scale info */}
-      {scaleCalibration && (
-        <>
-          <div style={{ width: 1, height: 18, background: '#1e3a5f', margin: '0 4px' }} />
-          <span style={{ color: '#4a6480', fontSize: 11 }}>
-            Scale set ({UNIT_LABEL[scaleCalibration.real_world_unit as MeasurementUnit] ?? scaleCalibration.real_world_unit})
-          </span>
-        </>
-      )}
-
-      {/* Tool hint */}
-      {toolHints[activeTool] && (
-        <>
-          <div style={{ flex: 1 }} />
+      {/* Right: tool hint */}
+      <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+        {toolHints[activeTool] && (
           <span style={{ color: '#3a5470', fontSize: 11, fontStyle: 'italic' }}>
             {toolHints[activeTool]}
           </span>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }

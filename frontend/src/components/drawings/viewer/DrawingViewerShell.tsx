@@ -68,6 +68,47 @@ export default function DrawingViewerShell({ drawing, fileUrl, projectId, onBack
   const [pageW, setPageW]   = useState(0);
   const [pageH, setPageH]   = useState(0);
 
+  const [leftPanelWidth, setLeftPanelWidth]   = useState(60);
+  const [rightPanelWidth, setRightPanelWidth] = useState(220);
+  const resizingRef         = useRef<'left' | 'right' | null>(null);
+  const resizeStartXRef     = useRef(0);
+  const resizeStartWidthRef = useRef(0);
+
+  const handleLeftResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    resizingRef.current = 'left';
+    resizeStartXRef.current = e.clientX;
+    resizeStartWidthRef.current = leftPanelWidth;
+    e.preventDefault();
+  }, [leftPanelWidth]);
+
+  const handleRightResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    resizingRef.current = 'right';
+    resizeStartXRef.current = e.clientX;
+    resizeStartWidthRef.current = rightPanelWidth;
+    e.preventDefault();
+  }, [rightPanelWidth]);
+
+  useEffect(() => {
+    const SNAP = 36;
+    const onMouseMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return;
+      if (resizingRef.current === 'left') {
+        const raw = resizeStartWidthRef.current + (e.clientX - resizeStartXRef.current);
+        setLeftPanelWidth(raw < SNAP ? 0 : Math.min(200, raw));
+      } else {
+        const raw = resizeStartWidthRef.current + (resizeStartXRef.current - e.clientX);
+        setRightPanelWidth(raw < SNAP ? 0 : Math.min(480, raw));
+      }
+    };
+    const onMouseUp = () => { resizingRef.current = null; };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
   const stageRef    = useRef<Konva.Stage | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -251,11 +292,17 @@ export default function DrawingViewerShell({ drawing, fileUrl, projectId, onBack
   const pageCount   = drawing.page_count || 1;
 
   const rightPanel = selectedPin ? (
-    <IssuePinPanel pin={selectedPin} projectId={projectId}
-      onClose={() => setSelectedPinId(null)} onDelete={handleDeletePin} />
+    <IssuePinPanel
+      pin={selectedPin} projectId={projectId} drawingId={drawing.id}
+      onClose={() => setSelectedPinId(null)} onDelete={handleDeletePin}
+      onUpdate={updatedPin => setIssuePins(prev => prev.map(p => p.id === updatedPin.id ? updatedPin : p))}
+    />
   ) : selectedTag ? (
-    <SubmittalTagPanel tag={selectedTag} projectId={projectId}
-      onClose={() => setSelectedTagId(null)} onDelete={handleDeleteTag} />
+    <SubmittalTagPanel
+      tag={selectedTag} projectId={projectId} drawingId={drawing.id}
+      onClose={() => setSelectedTagId(null)} onDelete={handleDeleteTag}
+      onUpdate={updatedTag => setSubmittalTags(prev => prev.map(t => t.id === updatedTag.id ? updatedTag : t))}
+    />
   ) : (
     <LayerPanel layers={layers} activeLayerId={activeLayerId}
       onSelectLayer={setActiveLayerId}
@@ -297,10 +344,10 @@ export default function DrawingViewerShell({ drawing, fileUrl, projectId, onBack
         </button>
       </div>
 
-      {/* ── Main row: left toolbar | canvas area | right panel ── */}
+      {/* ── Main row: toolbar | left panel | canvas | right panel ── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* Left vertical toolbar */}
+        {/* Left vertical toolbar (fixed) */}
         <DrawingToolbar
           activeTool={activeTool}
           activeColor={activeColor}
@@ -312,21 +359,29 @@ export default function DrawingViewerShell({ drawing, fileUrl, projectId, onBack
           onRedo={() => {}}
         />
 
-        {/* Center column: page list + canvas + bottom bar */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-          {/* Canvas + page list row */}
-          <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-
-            {/* Page thumbnails */}
-            <div style={{
-              width: 60, flexShrink: 0,
+        {/* Left page-list panel */}
+        {leftPanelWidth === 0 ? (
+          <div
+            onClick={() => setLeftPanelWidth(60)}
+            title="Show page list"
+            style={{
+              width: 12, flexShrink: 0, cursor: 'pointer',
+              background: '#0c1520', borderRight: '1px solid #1e3a5f',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <span style={{ color: '#2d4a6a', fontSize: 14, lineHeight: 1 }}>›</span>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexShrink: 0 }}>
+            <div className="dv-page-list" style={{
+              width: leftPanelWidth,
               background: '#0c1520',
-              borderRight: '1px solid #1e3a5f',
               overflowY: 'auto',
+              scrollbarWidth: 'none',
               display: 'flex', flexDirection: 'column',
               gap: 4, padding: '6px 4px',
-            }}>
+            } as React.CSSProperties}>
               {Array.from({ length: pageCount }, (_, i) => i + 1).map(pg => (
                 <div
                   key={pg}
@@ -335,61 +390,72 @@ export default function DrawingViewerShell({ drawing, fileUrl, projectId, onBack
                     background: pg === activePage ? '#1e4a8a' : '#162032',
                     border: `1px solid ${pg === activePage ? '#2d72d9' : '#1e3a5f'}`,
                     borderRadius: 4, padding: '6px 2px', cursor: 'pointer',
-                    textAlign: 'center', color: '#cdd8e5', fontSize: 11,
+                    textAlign: 'center', color: '#cdd8e5', fontSize: 11, flexShrink: 0,
                   }}
                 >
                   {pg}
                 </div>
               ))}
             </div>
-
-            {/* PDF canvas */}
-            <div ref={containerRef} style={{ flex: 1, overflow: 'hidden' }}>
-              <DrawingCanvas
-                drawingFileUrl={fileUrl}
-                pageNumber={activePage}
-                activeTool={activeTool}
-                activeColor={activeColor}
-                activeStrokeWidth={activeStrokeWidth}
-                activeLayerId={activeLayerId}
-                layers={layers}
-                markups={markups}
-                issuePins={issuePins}
-                submittalTags={submittalTags}
-                measurements={measurements}
-                scaleCalibration={scaleCalibration}
-                selectedMarkupId={selectedMarkupId}
-                selectedPinId={selectedPinId}
-                selectedTagId={selectedTagId}
-                selectedMeasurementId={selectedMeasurementId}
-                onMarkupComplete={handleMarkupComplete}
-                onPinPlaced={handlePinPlaced}
-                onTagPlaced={handleTagPlaced}
-                onCalibrationLine={handleCalibrationLine}
-                onMeasurePoint={handleMeasurePoint}
-                onMeasureComplete={handleMeasureComplete}
-                viewportStage={viewport}
-                onViewportChange={setViewport}
-                onWheelZoom={handleWheelZoom}
-                onSelectMarkup={setSelectedMarkupId}
-                onSelectPin={setSelectedPinId}
-                onSelectTag={setSelectedTagId}
-                onSelectMeasurement={setSelectedMeasurementId}
-                onPageDimensionsReady={(w, h) => {
-                  setPageW(w);
-                  setPageH(h);
-                  // Auto-fit when dimensions first arrive
-                  if (containerRef.current) {
-                    const { clientWidth: cw, clientHeight: ch } = containerRef.current;
-                    resetView(cw, ch, w, h);
-                  }
-                }}
-                stageRef={stageRef}
-              />
+            {/* Right-edge drag handle */}
+            <div
+              onMouseDown={handleLeftResizeMouseDown}
+              title="Drag to resize · click to collapse"
+              style={{
+                width: 8, flexShrink: 0, cursor: 'col-resize',
+                background: '#0c1520', borderRight: '1px solid #1e3a5f',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <div style={{ width: 2, height: 32, background: '#2d4a6a', borderRadius: 1 }} />
             </div>
           </div>
+        )}
 
-          {/* Bottom zoom/status bar */}
+        {/* Center: canvas + bottom bar */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div ref={containerRef} style={{ flex: 1, overflow: 'hidden' }}>
+            <DrawingCanvas
+              drawingFileUrl={fileUrl}
+              pageNumber={activePage}
+              activeTool={activeTool}
+              activeColor={activeColor}
+              activeStrokeWidth={activeStrokeWidth}
+              activeLayerId={activeLayerId}
+              layers={layers}
+              markups={markups}
+              issuePins={issuePins}
+              submittalTags={submittalTags}
+              measurements={measurements}
+              scaleCalibration={scaleCalibration}
+              selectedMarkupId={selectedMarkupId}
+              selectedPinId={selectedPinId}
+              selectedTagId={selectedTagId}
+              selectedMeasurementId={selectedMeasurementId}
+              onMarkupComplete={handleMarkupComplete}
+              onPinPlaced={handlePinPlaced}
+              onTagPlaced={handleTagPlaced}
+              onCalibrationLine={handleCalibrationLine}
+              onMeasurePoint={handleMeasurePoint}
+              onMeasureComplete={handleMeasureComplete}
+              viewportStage={viewport}
+              onViewportChange={setViewport}
+              onWheelZoom={handleWheelZoom}
+              onSelectMarkup={setSelectedMarkupId}
+              onSelectPin={setSelectedPinId}
+              onSelectTag={setSelectedTagId}
+              onSelectMeasurement={setSelectedMeasurementId}
+              onPageDimensionsReady={(w, h) => {
+                setPageW(w);
+                setPageH(h);
+                if (containerRef.current) {
+                  const { clientWidth: cw, clientHeight: ch } = containerRef.current;
+                  resetView(cw, ch, w, h);
+                }
+              }}
+              stageRef={stageRef}
+            />
+          </div>
           <DrawingBottomBar
             zoomScale={viewport.scale}
             zoomIn={zoomIn}
@@ -403,14 +469,40 @@ export default function DrawingViewerShell({ drawing, fileUrl, projectId, onBack
         </div>
 
         {/* Right panel */}
-        <div style={{
-          width: 220, flexShrink: 0,
-          background: '#0f1b2d',
-          borderLeft: '1px solid #1e3a5f',
-          overflowY: 'auto',
-        }}>
-          {rightPanel}
-        </div>
+        {rightPanelWidth === 0 ? (
+          <div
+            onClick={() => setRightPanelWidth(220)}
+            title="Show panel"
+            style={{
+              width: 12, flexShrink: 0, cursor: 'pointer',
+              background: '#0f1b2d', borderLeft: '1px solid #1e3a5f',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <span style={{ color: '#2d4a6a', fontSize: 14, lineHeight: 1 }}>‹</span>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexShrink: 0 }}>
+            {/* Left-edge drag handle */}
+            <div
+              onMouseDown={handleRightResizeMouseDown}
+              title="Drag to resize · drag closed to collapse"
+              style={{
+                width: 8, flexShrink: 0, cursor: 'col-resize',
+                background: '#0f1b2d', borderLeft: '1px solid #1e3a5f',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <div style={{ width: 2, height: 32, background: '#2d4a6a', borderRadius: 1 }} />
+            </div>
+            <div style={{
+              width: rightPanelWidth, flexShrink: 0,
+              background: '#0f1b2d', overflowY: 'auto',
+            }}>
+              {rightPanel}
+            </div>
+          </div>
+        )}
       </div>
 
       {showCalibrationModal && (
