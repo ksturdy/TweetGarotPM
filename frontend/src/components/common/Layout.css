@@ -163,12 +163,17 @@
   object-fit: contain;
 }
 
-/* Company logo displayed on the right side of header */
+/* Company logo — always pinned to the top-right corner of the header */
 .company-logo-image {
-  height: 44px;
-  max-width: 180px;
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 36px;
+  max-width: 140px;
   object-fit: contain;
   filter: brightness(0) invert(1);
+  pointer-events: none;
 }
 
 /* Layout Body - Sidebar + Main */
@@ -343,11 +348,6 @@
 
   .user-menu {
     display: none;
-  }
-
-  .company-logo-image {
-    height: 32px;
-    max-width: 80px;
   }
 
   .header-right {

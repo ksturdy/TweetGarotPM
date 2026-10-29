@@ -141,10 +141,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 Logout
               </button>
             </div>
-            {logoUrl && (
-              <img src={logoUrl} alt={companyName || 'Company logo'} className="company-logo-image" />
-            )}
           </div>
+          {logoUrl && (
+            <img src={logoUrl} alt={companyName || 'Company logo'} className="company-logo-image" />
+          )}
         </div>
       </header>
       {sidebarOpen && <div className="sidebar-overlay" onClick={closeSidebar} />}

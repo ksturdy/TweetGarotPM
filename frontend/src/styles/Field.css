@@ -866,6 +866,24 @@ html {
 /* Sidebar Navigation - hidden on phone, visible on tablet/desktop via media queries */
 .field-sidebar {
   display: none;
+  transition: width 0.2s ease, min-width 0.2s ease, padding 0.2s ease;
+  overflow: hidden;
+}
+
+/* Sidebar toggle button - only visible on tablet/desktop */
+.field-sidebar-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  line-height: 0;
+  margin-right: 4px;
+}
+.field-sidebar-toggle:hover {
+  background: rgba(255,255,255,0.15);
 }
 
 /* iPhone SE / small screens (375px and below) */
@@ -966,6 +984,16 @@ html {
 
   .field-header-switch {
     display: none;
+  }
+
+  .field-sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .field-sidebar.collapsed {
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
   }
 
   /* Sidebar: icon rail */
@@ -1110,6 +1138,16 @@ html {
 
   .field-header-switch {
     display: none;
+  }
+
+  .field-sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .field-sidebar.collapsed {
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
   }
 
   /* Sidebar: full width with labels */

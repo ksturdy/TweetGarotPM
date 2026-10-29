@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -9,6 +9,8 @@ import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import HomeIcon from '@mui/icons-material/Home';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import MenuIcon from '@mui/icons-material/Menu';
+import CloseIcon from '@mui/icons-material/Close';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import '../../styles/Field.css';
@@ -24,6 +26,7 @@ const FieldLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -94,6 +97,15 @@ const FieldLayout: React.FC = () => {
           )}
         </div>
         <div className="field-header-right">
+          {isProjectSelected && (
+            <button
+              className="field-sidebar-toggle"
+              onClick={() => setSidebarCollapsed(c => !c)}
+              aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+            >
+              {sidebarCollapsed ? <MenuIcon style={{ fontSize: 22 }} /> : <CloseIcon style={{ fontSize: 22 }} />}
+            </button>
+          )}
           {isProjectSelected ? (
             <button className="field-project-selector field-header-switch" onClick={() => navigate('/field')}>
               Switch Job
@@ -112,7 +124,7 @@ const FieldLayout: React.FC = () => {
 
       <div className="field-body">
         {isProjectSelected && (
-          <aside className="field-sidebar">
+          <aside className={`field-sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
             <button className={`field-sidebar-item ${activeTab === 'home' ? 'active' : ''}`} onClick={() => navigate(`/field/projects/${projectId}`)}>
               <HomeIcon />
               <span className="field-sidebar-label">Home</span>
