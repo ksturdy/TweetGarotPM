@@ -18,6 +18,8 @@ const ProjectDrawings: React.FC = () => {
   const [showAllVersions, setShowAllVersions] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [editingDrawing, setEditingDrawing] = useState<Drawing | null>(null);
+  const [editFormData, setEditFormData] = useState<Partial<Drawing>>({});
 
   const { data: drawings, isLoading } = useQuery({
     queryKey: ['drawings', projectId, disciplineFilter, showAllVersions],
@@ -70,6 +72,37 @@ const ProjectDrawings: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['drawings'] });
     },
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Drawing> }) =>
+      drawingsApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['drawings'] });
+      setEditingDrawing(null);
+      setEditFormData({});
+    },
+  });
+
+  const handleEditClick = (drawing: Drawing) => {
+    setEditingDrawing(drawing);
+    setEditFormData({
+      drawing_number: drawing.drawing_number,
+      title: drawing.title,
+      description: drawing.description || '',
+      discipline: drawing.discipline || 'Mechanical',
+      sheet_number: drawing.sheet_number || '',
+      version_number: drawing.version_number,
+      is_original_bid: drawing.is_original_bid,
+      notes: drawing.notes || '',
+    });
+    setShowUploadForm(false);
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDrawing) return;
+    updateMutation.mutate({ id: editingDrawing.id, data: editFormData });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,6 +278,96 @@ const ProjectDrawings: React.FC = () => {
         </div>
       )}
 
+      {editingDrawing && (
+        <div className="card" style={{ marginBottom: '1.5rem', padding: '1.5rem', borderLeft: '4px solid var(--color-accent, #f97316)' }}>
+          <h3 style={{ marginTop: 0 }}>Edit Drawing — {editingDrawing.drawing_number}</h3>
+          <form onSubmit={handleEditSubmit}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">Drawing Number *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editFormData.drawing_number || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, drawing_number: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Sheet Number</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editFormData.sheet_number || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, sheet_number: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Version *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editFormData.version_number || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, version_number: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">Title *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editFormData.title || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Discipline</label>
+                <select
+                  className="form-input"
+                  value={editFormData.discipline || 'Mechanical'}
+                  onChange={(e) => setEditFormData({ ...editFormData, discipline: e.target.value })}
+                >
+                  {DISCIPLINES.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Description</label>
+              <textarea
+                className="form-input"
+                rows={2}
+                value={editFormData.description || ''}
+                onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input
+                  type="checkbox"
+                  checked={editFormData.is_original_bid || false}
+                  onChange={(e) => setEditFormData({ ...editFormData, is_original_bid: e.target.checked })}
+                />
+                <span>Original Bid Drawing</span>
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button type="submit" className="btn btn-primary" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => { setEditingDrawing(null); setEditFormData({}); }}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <div className="card" style={{ marginBottom: '1rem', padding: '1rem' }}>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <div>
@@ -336,6 +459,9 @@ const ProjectDrawings: React.FC = () => {
                     <Link to={`/projects/${projectId}/drawings/${drawing.id}`} className="btn btn-secondary btn-sm">
                       View
                     </Link>
+                    <button onClick={() => handleEditClick(drawing)} className="btn btn-secondary btn-sm">
+                      Edit
+                    </button>
                     {drawing.file_name && (
                       <button
                         onClick={() => drawingsApi.download(drawing.id)}

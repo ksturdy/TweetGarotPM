@@ -27,8 +27,6 @@ const MODULE_GROUPS: ModuleGroup[] = [
     modules: [
       { path: 'pre-job-checklist', label: 'Pre-Job Checklist' },
       { path: 'companies', label: 'Companies' },
-      { path: 'specifications', label: 'Specifications' },
-      { path: 'drawings', label: 'Drawings' },
     ],
   },
   {
@@ -49,6 +47,8 @@ const MODULE_GROUPS: ModuleGroup[] = [
       { path: 'rfis', label: 'RFIs' },
       { path: 'submittals', label: 'Submittals' },
       { path: 'change-orders', label: 'Change Orders' },
+      { path: 'specifications', label: 'Specifications' },
+      { path: 'drawings', label: 'Drawings' },
     ],
   },
   {
