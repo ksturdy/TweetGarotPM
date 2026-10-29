@@ -14,13 +14,12 @@ import type {
 import { loadPdfFromUrl } from '../../../lib/drawingViewer/pdfLoader';
 import { renderPageToCanvas } from '../../../lib/drawingViewer/pdfRenderer';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { useViewport } from './useViewport';
+import type { StageState } from './useViewport';
 import { useMarkupTools } from './useMarkupTools';
 import MarkupShape from './MarkupShape';
 import IssuePinShape from './IssuePinShape';
 import SubmittalTagShape from './SubmittalTagShape';
 import MeasurementShape from './MeasurementShape';
-import { denormalizePoints } from '../../../lib/drawingViewer/coordUtils';
 
 interface Props {
   drawingFileUrl: string;
@@ -39,6 +38,10 @@ interface Props {
   selectedPinId: number | null;
   selectedTagId: number | null;
   selectedMeasurementId: number | null;
+  // Viewport controlled by parent shell
+  viewportStage: StageState;
+  onViewportChange: (s: StageState) => void;
+  onWheelZoom: (e: Konva.KonvaEventObject<WheelEvent>) => void;
   onMarkupComplete: (layerId: number, geometry: unknown, style: MarkupStyle) => void;
   onPinPlaced: (x: number, y: number) => void;
   onTagPlaced: (x: number, y: number, w: number, h: number) => void;
@@ -49,6 +52,7 @@ interface Props {
   onSelectPin: (id: number | null) => void;
   onSelectTag: (id: number | null) => void;
   onSelectMeasurement: (id: number | null) => void;
+  onPageDimensionsReady: (w: number, h: number) => void;
   stageRef: React.MutableRefObject<Konva.Stage | null>;
 }
 
@@ -56,53 +60,53 @@ export default function DrawingCanvas({
   drawingFileUrl, pageNumber, activeTool, activeColor, activeStrokeWidth, activeLayerId,
   layers, markups, issuePins, submittalTags, measurements, scaleCalibration,
   selectedMarkupId, selectedPinId, selectedTagId, selectedMeasurementId,
+  viewportStage, onViewportChange, onWheelZoom,
   onMarkupComplete, onPinPlaced, onTagPlaced, onCalibrationLine, onMeasurePoint,
   onMeasureComplete, onSelectMarkup, onSelectPin, onSelectTag, onSelectMeasurement,
-  stageRef,
+  onPageDimensionsReady, stageRef,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
-  const [pdfImage, setPdfImage] = useState<HTMLImageElement | null>(null);
-  const [pageW, setPageW] = useState(0);
-  const [pageH, setPageH] = useState(0);
+  const [pdfDoc, setPdfDoc]             = useState<PDFDocumentProxy | null>(null);
+  const [pdfImage, setPdfImage]         = useState<HTMLImageElement | null>(null);
+  const [pageW, setPageW]               = useState(0);
+  const [pageH, setPageH]               = useState(0);
   const [containerSize, setContainerSize] = useState({ w: 800, h: 600 });
-  const { stage, setStage, handleWheel, resetView } = useViewport();
 
-  // Load PDF
+  // Load PDF document
   useEffect(() => {
     if (!drawingFileUrl) return;
     let cancelled = false;
-    loadPdfFromUrl(drawingFileUrl).then(result => {
-      if (!cancelled) setPdfDoc(result.document);
-    }).catch(console.error);
+    loadPdfFromUrl(drawingFileUrl)
+      .then(r => { if (!cancelled) setPdfDoc(r.document); })
+      .catch(console.error);
     return () => { cancelled = true; };
   }, [drawingFileUrl]);
 
-  // Render page
+  // Render page to canvas → Konva Image
   useEffect(() => {
     if (!pdfDoc) return;
     let cancelled = false;
-    const canvas = document.createElement('canvas');
-    renderPageToCanvas(pdfDoc, pageNumber, canvas, 1.5).then(({ width, height }) => {
+    const offscreen = document.createElement('canvas');
+    renderPageToCanvas(pdfDoc, pageNumber, offscreen, 1.5).then(({ width, height }) => {
       if (cancelled) return;
       const img = new window.Image();
-      img.src = canvas.toDataURL();
+      img.src = offscreen.toDataURL();
       img.onload = () => {
         if (cancelled) return;
         setPdfImage(img);
         setPageW(width);
         setPageH(height);
+        onPageDimensionsReady(width, height);
         if (containerRef.current) {
           const { clientWidth: w, clientHeight: h } = containerRef.current;
           setContainerSize({ w, h });
-          resetView(w, h, width, height);
         }
       };
     }).catch(console.error);
     return () => { cancelled = true; };
-  }, [pdfDoc, pageNumber, resetView]);
+  }, [pdfDoc, pageNumber, onPageDimensionsReady]);
 
-  // Observe container resize
+  // Container resize observer
   useEffect(() => {
     if (!containerRef.current) return;
     const obs = new ResizeObserver(entries => {
@@ -114,20 +118,14 @@ export default function DrawingCanvas({
   }, []);
 
   const { draft, handleMouseDown, handleMouseMove, handleMouseUp } = useMarkupTools(
-    activeTool,
-    activeColor,
-    activeStrokeWidth,
-    pageW,
-    pageH,
+    activeTool, activeColor, activeStrokeWidth, pageW, pageH,
     ({ geometry, style }) => {
       if (activeLayerId) onMarkupComplete(activeLayerId, geometry, style);
     }
   );
 
   const handleStageMouseDown = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (activeTool === 'pan') {
-      return; // draggable handles pan
-    }
+    if (activeTool === 'pan') return;
 
     const s = e.target.getStage();
     if (!s) return;
@@ -141,20 +139,14 @@ export default function DrawingCanvas({
       }
       return;
     }
-    if (activeTool === 'submittal_tag') {
-      handleMouseDown(e);
-      return;
-    }
-    if (activeTool === 'calibrate') {
-      handleMouseDown(e);
-      return;
-    }
     if (activeTool === 'measure_linear' || activeTool === 'measure_area') {
       onMeasurePoint(nx, ny);
       return;
     }
-
-    // markup tools
+    if (activeTool === 'submittal_tag' || activeTool === 'calibrate') {
+      handleMouseDown(e);
+      return;
+    }
     if (activeTool !== 'select') {
       handleMouseDown(e);
     }
@@ -178,9 +170,10 @@ export default function DrawingCanvas({
       const s = e.target.getStage();
       const pos = s?.getRelativePointerPosition();
       if (pos) {
-        const n1 = { x: draft.startX / pageW, y: draft.startY / pageH };
-        const n2 = { x: pos.x / pageW, y: pos.y / pageH };
-        onCalibrationLine(n1.x, n1.y, n2.x, n2.y);
+        onCalibrationLine(
+          draft.startX / pageW, draft.startY / pageH,
+          pos.x / pageW, pos.y / pageH
+        );
       }
       handleMouseUp(e);
       return;
@@ -188,16 +181,8 @@ export default function DrawingCanvas({
     handleMouseUp(e);
   }, [activeTool, draft, pageW, pageH, onTagPlaced, onCalibrationLine, handleMouseUp]);
 
-  const handleDblClick = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (activeTool === 'measure_linear' || activeTool === 'measure_area') {
-      onMeasureComplete();
-    }
-  }, [activeTool, onMeasureComplete]);
-
-  const visibleLayerIds = new Set(
-    layers.filter(l => l.is_visible).map(l => l.id)
-  );
-  const visibleMarkups = markups.filter(m => visibleLayerIds.has(m.layer_id));
+  const visibleLayerIds = new Set(layers.filter(l => l.is_visible).map(l => l.id));
+  const visibleMarkups  = markups.filter(m => visibleLayerIds.has(m.layer_id));
 
   const cursor = activeTool === 'pan' ? 'grab'
     : activeTool === 'select' ? 'default'
@@ -212,111 +197,89 @@ export default function DrawingCanvas({
         ref={stageRef}
         width={containerSize.w}
         height={containerSize.h}
-        x={stage.x}
-        y={stage.y}
-        scaleX={stage.scale}
-        scaleY={stage.scale}
-        onWheel={handleWheel}
+        x={viewportStage.x}
+        y={viewportStage.y}
+        scaleX={viewportStage.scale}
+        scaleY={viewportStage.scale}
+        onWheel={onWheelZoom}
         draggable={activeTool === 'pan'}
         onDragEnd={e => {
           const s = e.target as Konva.Stage;
-          setStage(prev => ({ ...prev, x: s.x(), y: s.y() }));
+          onViewportChange({ ...viewportStage, x: s.x(), y: s.y() });
         }}
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleStageMouseUp}
-        onDblClick={handleDblClick}
+        onDblClick={() => {
+          if (activeTool === 'measure_linear' || activeTool === 'measure_area') {
+            onMeasureComplete();
+          }
+        }}
         onClick={e => {
-          if (activeTool === 'select' && (e.target === e.target.getStage() || e.target.getClassName() === 'Image')) {
-            onSelectMarkup(null); onSelectPin(null); onSelectTag(null); onSelectMeasurement(null);
+          if (activeTool === 'select') {
+            const isBackground = e.target === e.target.getStage() || e.target.getClassName() === 'Image';
+            if (isBackground) {
+              onSelectMarkup(null); onSelectPin(null); onSelectTag(null); onSelectMeasurement(null);
+            }
           }
         }}
       >
-        {/* Layer 0: PDF Image */}
+        {/* Layer 0: PDF background */}
         <Layer>
           {pdfImage && <KonvaImage image={pdfImage} x={0} y={0} />}
         </Layer>
 
-        {/* Layer 1: Markup shapes */}
+        {/* Layer 1: Markups */}
         <Layer>
           {visibleMarkups.map(m => (
-            <MarkupShape
-              key={m.id}
-              markup={m}
-              pageW={pageW}
-              pageH={pageH}
-              isSelected={m.id === selectedMarkupId}
-              onClick={() => onSelectMarkup(m.id)}
-            />
+            <MarkupShape key={m.id} markup={m} pageW={pageW} pageH={pageH}
+              isSelected={m.id === selectedMarkupId} onClick={() => onSelectMarkup(m.id)} />
           ))}
         </Layer>
 
         {/* Layer 2: Pins + Tags */}
         <Layer>
           {issuePins.map(pin => (
-            <IssuePinShape
-              key={pin.id}
-              pin={pin}
-              pageW={pageW}
-              pageH={pageH}
-              isSelected={pin.id === selectedPinId}
-              onClick={() => onSelectPin(pin.id)}
-            />
+            <IssuePinShape key={pin.id} pin={pin} pageW={pageW} pageH={pageH}
+              isSelected={pin.id === selectedPinId} onClick={() => onSelectPin(pin.id)} />
           ))}
           {submittalTags.map(tag => (
-            <SubmittalTagShape
-              key={tag.id}
-              tag={tag}
-              pageW={pageW}
-              pageH={pageH}
-              isSelected={tag.id === selectedTagId}
-              onClick={() => onSelectTag(tag.id)}
-            />
+            <SubmittalTagShape key={tag.id} tag={tag} pageW={pageW} pageH={pageH}
+              isSelected={tag.id === selectedTagId} onClick={() => onSelectTag(tag.id)} />
           ))}
         </Layer>
 
         {/* Layer 3: Measurements */}
         <Layer>
           {measurements.map(m => (
-            <MeasurementShape
-              key={m.id}
-              measurement={m}
-              pageW={pageW}
-              pageH={pageH}
-              isSelected={m.id === selectedMeasurementId}
-              onClick={() => onSelectMeasurement(m.id)}
-            />
+            <MeasurementShape key={m.id} measurement={m} pageW={pageW} pageH={pageH}
+              isSelected={m.id === selectedMeasurementId} onClick={() => onSelectMeasurement(m.id)} />
           ))}
         </Layer>
 
-        {/* Layer 4: Draft / in-progress shape */}
+        {/* Layer 4: In-progress draft */}
         <Layer>
           {draft && pageW > 0 && (() => {
             const { tool, startX, startY, currentX, currentY, points } = draft;
-            const stroke = activeColor;
-            const sw = activeStrokeWidth;
-
+            const stroke = activeColor, sw = activeStrokeWidth;
             if ((tool === 'pencil' || tool === 'revision_cloud') && points) {
               return <Line points={points} stroke={stroke} strokeWidth={sw} lineCap="round" tension={0.4} />;
             }
             if (tool === 'rectangle') {
-              return <Rect x={Math.min(startX, currentX)} y={Math.min(startY, currentY)}
-                width={Math.abs(currentX - startX)} height={Math.abs(currentY - startY)}
-                stroke={stroke} strokeWidth={sw} fill="transparent" dash={[4, 2]} />;
+              return <Rect x={Math.min(startX,currentX)} y={Math.min(startY,currentY)}
+                width={Math.abs(currentX-startX)} height={Math.abs(currentY-startY)}
+                stroke={stroke} strokeWidth={sw} fill="transparent" dash={[4,2]} />;
             }
             if (tool === 'circle') {
-              return <Ellipse
-                x={(startX + currentX) / 2} y={(startY + currentY) / 2}
-                radiusX={Math.abs(currentX - startX) / 2} radiusY={Math.abs(currentY - startY) / 2}
-                stroke={stroke} strokeWidth={sw} fill="transparent" dash={[4, 2]} />;
+              return <Ellipse x={(startX+currentX)/2} y={(startY+currentY)/2}
+                radiusX={Math.abs(currentX-startX)/2} radiusY={Math.abs(currentY-startY)/2}
+                stroke={stroke} strokeWidth={sw} fill="transparent" dash={[4,2]} />;
             }
             if (tool === 'arrow') {
-              return <Arrow points={[startX, startY, currentX, currentY]}
-                stroke={stroke} fill={stroke} strokeWidth={sw} />;
+              return <Arrow points={[startX,startY,currentX,currentY]} stroke={stroke} fill={stroke} strokeWidth={sw} />;
             }
             if (tool === 'line' || tool === 'submittal_tag' || tool === 'calibrate') {
-              return <Line points={[startX, startY, currentX, currentY]}
-                stroke={stroke} strokeWidth={sw} dash={[4, 2]} />;
+              return <Line points={[startX,startY,currentX,currentY]} stroke={stroke} strokeWidth={sw} dash={[4,2]} />;
             }
             return null;
           })()}

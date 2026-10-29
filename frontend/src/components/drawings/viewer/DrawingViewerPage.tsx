@@ -83,7 +83,6 @@ export default function DrawingViewerPage() {
   return (
     <DrawingViewerShell
       drawing={drawing}
-      pages={pages}
       fileUrl={fileUrl}
       projectId={Number(projectId)}
       onBack={handleBack}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ActiveTool, StampType } from '../../../lib/drawingViewer/types';
+import type { ActiveTool } from '../../../lib/drawingViewer/types';
 
 interface Props {
   activeTool: ActiveTool;
@@ -10,133 +10,118 @@ interface Props {
   onStrokeWidthChange: (w: number) => void;
   onUndo: () => void;
   onRedo: () => void;
-  onExport: () => void;
-  onBack: () => void;
-  drawingTitle: string;
-  zoomIn: () => void;
-  zoomOut: () => void;
-  zoomScale: number;
 }
 
-const COLORS = ['#FF0000', '#FF6B00', '#FFD700', '#00AA00', '#0066CC', '#9B59B6', '#000000', '#FFFFFF'];
-const WIDTHS = [1, 2, 3, 5, 8];
+interface ToolDef { tool: ActiveTool; icon: string; title: string }
 
-interface ToolBtn {
-  tool: ActiveTool;
-  icon: string;
-  title: string;
-}
-
-const TOOL_GROUPS: ToolBtn[][] = [
+const TOOL_GROUPS: ToolDef[][] = [
   [
-    { tool: 'pan', icon: '✋', title: 'Pan (H)' },
-    { tool: 'select', icon: '↖', title: 'Select (V)' },
+    { tool: 'pan',    icon: '✋', title: 'Pan (H)' },
+    { tool: 'select', icon: '↖',  title: 'Select (V)' },
   ],
   [
-    { tool: 'pencil', icon: '✏️', title: 'Pencil' },
-    { tool: 'rectangle', icon: '▭', title: 'Rectangle' },
-    { tool: 'circle', icon: '○', title: 'Circle/Ellipse' },
-    { tool: 'arrow', icon: '→', title: 'Arrow' },
-    { tool: 'line', icon: '╱', title: 'Line' },
-    { tool: 'revision_cloud', icon: '☁', title: 'Revision Cloud' },
+    { tool: 'pencil',         icon: '✏',  title: 'Pencil (P)' },
+    { tool: 'rectangle',      icon: '▭',  title: 'Rectangle (R)' },
+    { tool: 'circle',         icon: '○',  title: 'Circle' },
+    { tool: 'arrow',          icon: '→',  title: 'Arrow (A)' },
+    { tool: 'line',           icon: '╱',  title: 'Line (L)' },
+    { tool: 'revision_cloud', icon: '☁',  title: 'Revision Cloud' },
   ],
   [
-    { tool: 'text', icon: 'T', title: 'Text' },
+    { tool: 'text',    icon: 'T',  title: 'Text' },
     { tool: 'callout', icon: '💬', title: 'Callout' },
-    { tool: 'stamp', icon: '⬡', title: 'Stamp' },
+    { tool: 'stamp',   icon: '⬡',  title: 'Stamp' },
   ],
   [
-    { tool: 'issue_pin', icon: '📌', title: 'Issue Pin' },
+    { tool: 'issue_pin',    icon: '📌', title: 'Issue Pin' },
     { tool: 'submittal_tag', icon: '🏷', title: 'Submittal Tag' },
   ],
   [
-    { tool: 'calibrate', icon: '📐', title: 'Calibrate Scale' },
+    { tool: 'calibrate',      icon: '📐', title: 'Calibrate Scale' },
     { tool: 'measure_linear', icon: '📏', title: 'Linear Measure' },
-    { tool: 'measure_area', icon: '⬛', title: 'Area Measure' },
+    { tool: 'measure_area',   icon: '⬛', title: 'Area Measure' },
   ],
 ];
+
+const COLORS = ['#FF0000','#FF6B00','#FFD700','#00AA00','#0066CC','#9B59B6','#000000','#FFFFFF'];
+const WIDTHS  = [1, 2, 3, 5, 8];
 
 export default function DrawingToolbar({
   activeTool, activeColor, activeStrokeWidth,
   onToolChange, onColorChange, onStrokeWidthChange,
-  onUndo, onRedo, onExport, onBack, drawingTitle,
-  zoomIn, zoomOut, zoomScale,
+  onUndo, onRedo,
 }: Props) {
   const [showColors, setShowColors] = useState(false);
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 6,
-      background: '#0f1b2d', borderBottom: '1px solid #1e3a5f',
-      padding: '6px 12px', flexWrap: 'wrap', userSelect: 'none',
+      width: 48,
+      background: '#0f1b2d',
+      borderRight: '1px solid #1e3a5f',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      padding: '6px 0',
+      gap: 0,
+      overflowY: 'auto',
+      flexShrink: 0,
+      userSelect: 'none',
     }}>
-      <button
-        onClick={onBack}
-        title="Back to drawings"
-        style={{ ...btnStyle, background: 'transparent', color: '#7a9ab5', fontSize: 18, padding: '4px 8px' }}
-      >
-        ←
-      </button>
-      <span style={{ color: '#e0e8f0', fontSize: 13, fontWeight: 600, marginRight: 8 }}>
-        {drawingTitle}
-      </span>
-
-      <div style={dividerStyle} />
-
       {TOOL_GROUPS.map((group, gi) => (
         <React.Fragment key={gi}>
-          <div style={{ display: 'flex', gap: 2 }}>
-            {group.map(({ tool, icon, title }) => (
-              <button
-                key={tool}
-                title={title}
-                onClick={() => onToolChange(tool)}
-                style={{
-                  ...btnStyle,
-                  background: activeTool === tool ? '#1e4a8a' : 'transparent',
-                  color: activeTool === tool ? '#fff' : '#7a9ab5',
-                  borderColor: activeTool === tool ? '#2d72d9' : 'transparent',
-                }}
-              >
-                {icon}
-              </button>
-            ))}
-          </div>
-          {gi < TOOL_GROUPS.length - 1 && <div style={dividerStyle} />}
+          {gi > 0 && <div style={sepStyle} />}
+          {group.map(({ tool, icon, title }) => (
+            <ToolButton
+              key={tool}
+              icon={icon}
+              title={title}
+              active={activeTool === tool}
+              onClick={() => onToolChange(tool)}
+            />
+          ))}
         </React.Fragment>
       ))}
 
-      <div style={dividerStyle} />
+      <div style={sepStyle} />
 
-      {/* Color picker */}
+      {/* Color swatch */}
       <div style={{ position: 'relative' }}>
         <button
-          title="Stroke color"
+          title={`Color: ${activeColor}`}
           onClick={() => setShowColors(v => !v)}
           style={{
-            ...btnStyle,
+            width: 32, height: 32,
             background: activeColor,
-            border: '2px solid #444',
-            width: 24, height: 24,
-            borderRadius: 4,
-            padding: 0,
+            border: '2px solid #2d4a6a',
+            borderRadius: 6,
+            cursor: 'pointer',
+            margin: '2px 0',
+            display: 'block',
           }}
         />
         {showColors && (
           <div style={{
-            position: 'absolute', top: '110%', left: 0, zIndex: 200,
-            background: '#162032', border: '1px solid #1e3a5f',
-            borderRadius: 6, padding: 6,
-            display: 'grid', gridTemplateColumns: 'repeat(4, 20px)', gap: 4,
+            position: 'absolute',
+            left: 38, top: 0, zIndex: 300,
+            background: '#162032',
+            border: '1px solid #1e3a5f',
+            borderRadius: 8,
+            padding: 8,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 22px)',
+            gap: 4,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
           }}>
             {COLORS.map(c => (
               <div
                 key={c}
                 onClick={() => { onColorChange(c); setShowColors(false); }}
                 style={{
-                  width: 20, height: 20, background: c,
-                  borderRadius: 3, cursor: 'pointer',
-                  border: c === activeColor ? '2px solid #fff' : '1px solid #444',
+                  width: 22, height: 22,
+                  background: c,
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  border: c === activeColor ? '2px solid #fff' : '1px solid #2d4a6a',
                 }}
               />
             ))}
@@ -145,56 +130,75 @@ export default function DrawingToolbar({
       </div>
 
       {/* Stroke width */}
-      <select
-        value={activeStrokeWidth}
-        onChange={e => onStrokeWidthChange(Number(e.target.value))}
-        style={{
-          background: '#162032', color: '#cdd8e5', border: '1px solid #1e3a5f',
-          borderRadius: 4, fontSize: 11, padding: '2px 4px',
-        }}
-      >
-        {WIDTHS.map(w => <option key={w} value={w}>{w}px</option>)}
-      </select>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, margin: '4px 0' }}>
+        {WIDTHS.map(w => (
+          <button
+            key={w}
+            title={`${w}px`}
+            onClick={() => onStrokeWidthChange(w)}
+            style={{
+              width: 32, height: 20,
+              background: w === activeStrokeWidth ? '#1e4a8a' : 'transparent',
+              border: `1px solid ${w === activeStrokeWidth ? '#2d72d9' : 'transparent'}`,
+              borderRadius: 4,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+            }}
+          >
+            <div style={{
+              width: 20, height: w,
+              background: activeColor,
+              borderRadius: w,
+              maxHeight: 8,
+            }} />
+          </button>
+        ))}
+      </div>
 
-      <div style={dividerStyle} />
+      <div style={sepStyle} />
 
-      <button title="Undo" onClick={onUndo} style={btnStyle}>↩</button>
-      <button title="Redo" onClick={onRedo} style={btnStyle}>↪</button>
-
-      <div style={dividerStyle} />
-
-      <button title="Zoom out" onClick={zoomOut} style={btnStyle}>−</button>
-      <span style={{ color: '#7a9ab5', fontSize: 11, minWidth: 40, textAlign: 'center' }}>
-        {Math.round(zoomScale * 100)}%
-      </span>
-      <button title="Zoom in" onClick={zoomIn} style={btnStyle}>+</button>
-
-      <div style={{ flex: 1 }} />
-
-      <button
-        onClick={onExport}
-        style={{ ...btnStyle, background: '#1e4a8a', color: '#fff', padding: '4px 12px', fontSize: 12 }}
-      >
-        Export PDF
-      </button>
+      <ToolButton icon="↩" title="Undo (Ctrl+Z)" active={false} onClick={onUndo} />
+      <ToolButton icon="↪" title="Redo (Ctrl+Y)" active={false} onClick={onRedo} />
     </div>
   );
 }
 
-const btnStyle: React.CSSProperties = {
-  background: 'transparent',
-  border: '1px solid transparent',
-  borderRadius: 4,
-  color: '#7a9ab5',
-  cursor: 'pointer',
-  fontSize: 14,
-  padding: '4px 6px',
-  lineHeight: 1,
-  transition: 'background 0.15s',
-};
+function ToolButton({ icon, title, active, onClick }: {
+  icon: string; title: string; active: boolean; onClick: () => void;
+}) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      style={{
+        width: 38,
+        height: 38,
+        background: active ? '#1e4a8a' : 'transparent',
+        border: `1px solid ${active ? '#2d72d9' : 'transparent'}`,
+        borderRadius: 6,
+        color: active ? '#fff' : '#7a9ab5',
+        cursor: 'pointer',
+        fontSize: 16,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        margin: '1px 0',
+        transition: 'background 0.1s',
+        flexShrink: 0,
+      }}
+    >
+      {icon}
+    </button>
+  );
+}
 
-const dividerStyle: React.CSSProperties = {
-  width: 1, height: 24,
+const sepStyle: React.CSSProperties = {
+  width: 32,
+  height: 1,
   background: '#1e3a5f',
-  margin: '0 4px',
+  margin: '5px 0',
+  flexShrink: 0,
 };
