@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import './Login.css';
 
@@ -15,6 +15,8 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { user, loading: authLoading, login, login2FA } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as any)?.from || '/';
 
   // If the user lands here already authenticated (typo, stale bookmark, etc.),
   // send them home instead of sitting on the form. Do NOT wipe localStorage
@@ -22,9 +24,9 @@ const Login: React.FC = () => {
   // logged-in users who happened to visit /login.
   useEffect(() => {
     if (!authLoading && user) {
-      navigate('/', { replace: true });
+      navigate(from, { replace: true });
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, from]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +41,7 @@ const Login: React.FC = () => {
         setRequires2FA(true);
         setUserId(result.userId);
       } else {
-        navigate('/');
+        navigate(from, { replace: true });
       }
     } catch (err: any) {
       if (err.response?.status === 423) {
@@ -64,7 +66,7 @@ const Login: React.FC = () => {
         throw new Error('User ID not found');
       }
       await login2FA(userId, twoFactorCode);
-      navigate('/');
+      navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.response?.data?.error || '2FA verification failed');
     } finally {
