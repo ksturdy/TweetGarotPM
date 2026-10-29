@@ -47,33 +47,49 @@ const SubmittalDetail: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedImg, setCopiedImg] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrRef = useRef<HTMLDivElement>(null);
   const [uploading, setUploading] = useState(false);
 
   const submittalUrl = `${window.location.origin}/projects/${projectId}/submittals/${id}`;
 
-  const downloadQR = useCallback(() => {
-    const svg = qrRef.current?.querySelector('svg');
-    if (!svg) return;
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const canvas = document.createElement('canvas');
-    const size = 300;
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, size, size);
-    const img = new Image();
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0, size, size);
-      const a = document.createElement('a');
-      a.download = `submittal-${id}-qr.png`;
-      a.href = canvas.toDataURL('image/png');
-      a.click();
-    };
-    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
-  }, [id]);
+  const svgToCanvas = useCallback((): Promise<HTMLCanvasElement> => {
+    return new Promise((resolve, reject) => {
+      const svg = qrRef.current?.querySelector('svg');
+      if (!svg) return reject(new Error('No SVG'));
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const canvas = document.createElement('canvas');
+      const size = 300;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, size, size);
+      const img = new Image();
+      img.onload = () => { ctx.drawImage(img, 0, 0, size, size); resolve(canvas); };
+      img.onerror = reject;
+      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    });
+  }, []);
+
+  const downloadQR = useCallback(async () => {
+    const canvas = await svgToCanvas();
+    const a = document.createElement('a');
+    a.download = `submittal-${id}-qr.png`;
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  }, [svgToCanvas, id]);
+
+  const copyQRImage = useCallback(async () => {
+    const canvas = await svgToCanvas();
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      setCopiedImg(true);
+      setTimeout(() => setCopiedImg(false), 2000);
+    }, 'image/png');
+  }, [svgToCanvas]);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -222,10 +238,10 @@ const SubmittalDetail: React.FC = () => {
               {submittalUrl}
             </p>
 
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 className="btn btn-secondary"
-                style={{ flex: 1 }}
+                style={{ flex: 1, fontSize: '0.8rem' }}
                 onClick={() => {
                   navigator.clipboard.writeText(submittalUrl);
                   setCopied(true);
@@ -236,10 +252,17 @@ const SubmittalDetail: React.FC = () => {
               </button>
               <button
                 className="btn btn-primary"
-                style={{ flex: 1 }}
+                style={{ flex: 1, fontSize: '0.8rem' }}
                 onClick={downloadQR}
               >
-                Download PNG
+                Download
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ flex: 1, fontSize: '0.8rem' }}
+                onClick={copyQRImage}
+              >
+                {copiedImg ? '✓ Copied!' : 'Copy Image'}
               </button>
             </div>
           </div>
