@@ -46,6 +46,7 @@ const SubmittalDetail: React.FC = () => {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrRef = useRef<HTMLDivElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -225,9 +226,13 @@ const SubmittalDetail: React.FC = () => {
               <button
                 className="btn btn-secondary"
                 style={{ flex: 1 }}
-                onClick={() => navigator.clipboard.writeText(submittalUrl)}
+                onClick={() => {
+                  navigator.clipboard.writeText(submittalUrl);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
               >
-                Copy Link
+                {copied ? '✓ Copied!' : 'Copy Link'}
               </button>
               <button
                 className="btn btn-primary"
