@@ -5,6 +5,7 @@ import { submittalsApi } from '../../services/submittals';
 import { projectsApi } from '../../services/projects';
 import { format } from 'date-fns';
 import '../../styles/SalesPipeline.css';
+import '../../styles/SubmittalList.css';
 
 const fmtDate = (v: string | null | undefined): string => {
   if (!v) return '-';
@@ -24,6 +25,13 @@ const STATUS_LABEL: Record<string, string> = {
   submitted_for_approval: 'Submitted for Approval',
   revise_resubmit: 'Revise and Resubmit',
   approved: 'Approved',
+};
+
+const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
+  requested_from_vendor: { bg: '#fffbeb', color: '#b45309' },
+  submitted_for_approval: { bg: '#eff6ff', color: '#1d4ed8' },
+  revise_resubmit: { bg: '#fff7ed', color: '#c2410c' },
+  approved: { bg: '#f0fdf4', color: '#15803d' },
 };
 
 const SubmittalList: React.FC = () => {
@@ -56,11 +64,12 @@ const SubmittalList: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
-          <Link to={`/projects/${projectId}/submittals/new`} className="btn btn-primary" style={{ textDecoration: 'none' }}>New Submittal</Link>
+          <Link to={`/projects/${projectId}/submittals/new`} className="btn btn-primary sales-btn-primary" style={{ textDecoration: 'none' }}>New Submittal</Link>
         </div>
       </div>
 
-      <div className="card">
+      {/* Desktop table */}
+      <div className="card submittal-list-table">
         <table className="table">
           <thead>
             <tr>
@@ -98,6 +107,41 @@ const SubmittalList: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="submittal-list-cards">
+        {submittals?.length === 0 && (
+          <div style={{ textAlign: 'center', color: 'var(--secondary)', padding: '2rem' }}>
+            No submittals found
+          </div>
+        )}
+        {submittals?.map((submittal) => {
+          const sc = STATUS_COLOR[submittal.status] || { bg: '#f3f4f6', color: '#374151' };
+          return (
+            <Link
+              key={submittal.id}
+              to={`/projects/${projectId}/submittals/${submittal.id}`}
+              className="submittal-card"
+            >
+              <div className="submittal-card-header">
+                <span className="submittal-card-number">#{submittal.number}</span>
+                <span className="submittal-card-status" style={{ background: sc.bg, color: sc.color }}>
+                  {STATUS_LABEL[submittal.status] ?? submittal.status.replace(/_/g, ' ')}
+                </span>
+              </div>
+              <div className="submittal-card-name">{submittal.name || submittal.description}</div>
+              {submittal.name && (
+                <div className="submittal-card-desc">{submittal.description}</div>
+              )}
+              <div className="submittal-card-meta">
+                {submittal.spec_section && <span>{submittal.spec_section}</span>}
+                {submittal.subcontractor && <span>{submittal.subcontractor}</span>}
+                {submittal.due_date && <span>Due {fmtDate(submittal.due_date)}</span>}
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
