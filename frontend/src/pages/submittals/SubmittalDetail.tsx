@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
+import QRCode from 'react-qr-code';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { submittalsApi } from '../../services/submittals';
@@ -44,8 +45,34 @@ const SubmittalDetail: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
+  const [showQR, setShowQR] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const qrRef = useRef<HTMLDivElement>(null);
   const [uploading, setUploading] = useState(false);
+
+  const submittalUrl = `${window.location.origin}/projects/${projectId}/submittals/${id}`;
+
+  const downloadQR = useCallback(() => {
+    const svg = qrRef.current?.querySelector('svg');
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement('canvas');
+    const size = 300;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, size, size);
+      const a = document.createElement('a');
+      a.download = `submittal-${id}-qr.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    };
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+  }, [id]);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -158,6 +185,9 @@ const SubmittalDetail: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
+          <button className="btn btn-secondary" onClick={() => setShowQR(true)}>
+            QR Code
+          </button>
           {!isEditing && (
             <button className="btn btn-primary" onClick={() => setIsEditing(true)}>
               Edit
@@ -165,6 +195,51 @@ const SubmittalDetail: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* QR Code Modal */}
+      {showQR && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowQR(false)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 12, padding: '2rem', maxWidth: 380, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>
+                Submittal #{submittal?.number} — QR Code
+              </h3>
+              <button onClick={() => setShowQR(false)} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#6b7280', lineHeight: 1 }}>×</button>
+            </div>
+
+            <div ref={qrRef} style={{ display: 'flex', justifyContent: 'center', padding: '1rem', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: '1rem' }}>
+              <QRCode value={submittalUrl} size={220} />
+            </div>
+
+            <p style={{ fontSize: '0.75rem', color: '#6b7280', wordBreak: 'break-all', marginBottom: '1.25rem', textAlign: 'center' }}>
+              {submittalUrl}
+            </p>
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
+                onClick={() => navigator.clipboard.writeText(submittalUrl)}
+              >
+                Copy Link
+              </button>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                onClick={downloadQR}
+              >
+                Download PNG
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         {isEditing ? (
