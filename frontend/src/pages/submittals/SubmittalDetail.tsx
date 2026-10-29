@@ -214,7 +214,7 @@ const SubmittalDetail: React.FC = () => {
             <div className="sales-subtitle">{submittal.name || submittal.description}</div>
           </div>
         </div>
-        <div className="sales-header-actions">
+        <div className="sales-header-actions sales-header-actions--detail">
           <button className="btn btn-secondary" onClick={() => setShowQR(true)}>
             QR Code
           </button>
@@ -514,7 +514,10 @@ const SubmittalDetail: React.FC = () => {
                   <button
                     type="button"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '0.875rem', padding: 0 }}
-                    onClick={() => deleteAttachmentMutation.mutate(att.id)}
+                    onClick={async () => {
+                      const ok = await confirm({ message: `Remove "${att.original_name}"?`, danger: true });
+                      if (ok) deleteAttachmentMutation.mutate(att.id);
+                    }}
                   >
                     Remove
                   </button>

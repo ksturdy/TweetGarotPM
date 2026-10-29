@@ -1024,6 +1024,21 @@
     justify-content: center;
   }
 
+  /* Detail pages need all action buttons visible on mobile */
+  .sales-header-actions--detail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .sales-header-actions--detail > * {
+    display: flex !important;
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+  }
+
   .projects-page-actions {
     display: none;
   }
