@@ -952,6 +952,9 @@ class Team {
     const values = [];
     if ('goal' in data) { fields.push(`goal = $${fields.length + 1}`); values.push(data.goal ?? null); }
     if ('lower_is_better' in data) { fields.push(`lower_is_better = $${fields.length + 1}`); values.push(!!data.lower_is_better); }
+    if ('label' in data) { fields.push(`label = $${fields.length + 1}`); values.push(data.label); }
+    if ('member_user_id' in data) { fields.push(`member_user_id = $${fields.length + 1}`); values.push(data.member_user_id ?? null); }
+    if ('member_team_id' in data) { fields.push(`member_team_id = $${fields.length + 1}`); values.push(data.member_team_id ?? null); }
     if (fields.length === 0) return null;
     values.push(configId, teamId, tenantId);
     const result = await db.query(`
@@ -968,7 +971,7 @@ class Team {
     const r = await db.query(`
       SELECT * FROM team_metric_settings WHERE team_id = $1 AND tenant_id = $2
     `, [teamId, tenantId]);
-    return r.rows[0] || { team_id: teamId, snapshot_day_of_week: 1, snapshot_hour: 18 };
+    return r.rows[0] || { team_id: teamId, snapshot_day_of_week: 0, snapshot_hour: 22 };
   }
 
   static async upsertSnapshotSettings(teamId, tenantId, { snapshot_day_of_week, snapshot_hour }) {
@@ -988,7 +991,7 @@ class Team {
 
   static async getMetricSnapshots(teamId, tenantId, weeks = 12) {
     const result = await db.query(`
-      SELECT member_user_id, member_team_id, metric_key, week_start, value
+      SELECT member_user_id, member_team_id, metric_key, week_start::text as week_start, value
       FROM team_metric_snapshots
       WHERE team_id = $1 AND tenant_id = $2
         AND week_start >= (

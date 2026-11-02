@@ -223,6 +223,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     onError: () => toast.error('Failed to save goal'),
   });
 
+  const scopeMutation = useMutation({
+    mutationFn: ({ configId, member_user_id, member_team_id, label }: { configId: number; member_user_id: number | null; member_team_id: number | null; label: string }) =>
+      teamsApi.updateMetricConfig(teamId, configId, { member_user_id, member_team_id, label }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-metric-configs', teamId] });
+      queryClient.invalidateQueries({ queryKey: ['team-metric-snapshots', teamId] });
+      toast.success('Scope updated');
+    },
+    onError: () => toast.error('Failed to update scope'),
+  });
+
+  const handleScopeChange = (cfg: TeamMetricConfig, newScopeVal: string) => {
+    const opt = memberOptions.find(o => o.value === newScopeVal);
+    if (!opt) return;
+    const def = METRIC_DEFINITIONS.find(d => d.key === cfg.metric_key)!;
+    scopeMutation.mutate({
+      configId: cfg.id,
+      member_user_id: opt.member_user_id,
+      member_team_id: opt.member_team_id,
+      label: `${opt.label} – ${def.label}`,
+    });
+  };
+
   const libMutation = useMutation({
     mutationFn: ({ configId, lower_is_better }: { configId: number; lower_is_better: boolean }) =>
       teamsApi.updateMetricConfig(teamId, configId, { lower_is_better }),
@@ -502,8 +525,8 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
   });
   const snapshotSettings: TeamSnapshotSettings = settingsRes?.data.data ?? {
     team_id: teamId,
-    snapshot_day_of_week: 1,
-    snapshot_hour: 18,
+    snapshot_day_of_week: 0,
+    snapshot_hour: 22,
   };
 
   const { data: allTeamsRes } = useQuery({

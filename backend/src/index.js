@@ -33,6 +33,7 @@ const { runTradeShowAutoComplete } = require('./jobs/tradeShowAutoComplete');
 const { runOpportunityReminders } = require('./jobs/opportunityReminders');
 const { runStaleOpportunityStartDate } = require('./jobs/staleOpportunityStartDate');
 const { runPhaseProductionSnapshot } = require('./jobs/phaseProductionSnapshot');
+const { captureTeamMetricSnapshots } = require('./jobs/teamMetricSnapshots');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -452,6 +453,14 @@ server.listen(config.port, () => {
   console.log(`  ${process.env.ANTHROPIC_API_KEY ? '✅' : '⚠️'} Anthropic API (AI features)`);
   console.log(`  ${config.r2.accountId ? '✅' : '⚠️'} Cloudflare R2 (cloud storage)`);
   console.log(`  ✅ Socket.IO ready (WebSocket + polling)`);
+
+  // Team metric snapshots - check every hour, fire for teams configured for this day+hour ET
+  cron.schedule('0 * * * *', () => {
+    captureTeamMetricSnapshots().catch(err => {
+      console.error('[Cron] Team metric snapshot job failed:', err);
+    });
+  }, { timezone: 'America/New_York' });
+  console.log(`  ✅ Team metric snapshot cron scheduled (hourly)`);
 
   // Weekly financial snapshots - every Thursday at 6:00 PM ET
   cron.schedule('0 18 * * 4', () => {
