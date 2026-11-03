@@ -588,6 +588,7 @@ const TeamDetailPage: React.FC = () => {
                 Add Member
               </button>
             </div>
+            <div className="sales-table-scroll-wrapper">
             <table className="sales-table">
               <thead>
                 <tr>
@@ -667,6 +668,7 @@ const TeamDetailPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+            </div>
           </>
         )}
 
