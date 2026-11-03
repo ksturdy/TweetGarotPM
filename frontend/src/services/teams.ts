@@ -213,6 +213,18 @@ export interface TeamAnnualGoal {
   margin_goal: number | null;
 }
 
+export interface TeamRevenuePipelineRow {
+  secured: number;
+  awarded_not_in_vista: number;
+  goal: number | null;
+  needed: number | null;
+}
+
+export interface TeamRevenuePipeline {
+  rolling12: TeamRevenuePipelineRow;
+  by_year: Array<{ year: number } & TeamRevenuePipelineRow>;
+}
+
 export interface TeamSnapshotSettings {
   team_id: number;
   snapshot_day_of_week: number;
@@ -316,4 +328,7 @@ export const teamsApi = {
 
   updateAnnualGoal: (id: number, year: number, data: { revenue_goal?: number | null; margin_goal?: number | null }) =>
     api.put<{ data: TeamAnnualGoal }>(`/teams/${id}/annual-goals/${year}`, data),
+
+  getRevenuePipeline: (id: number) =>
+    api.get<{ data: TeamRevenuePipeline }>(`/teams/${id}/revenue-pipeline`),
 };

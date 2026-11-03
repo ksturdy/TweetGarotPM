@@ -13,7 +13,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
-import { teamsApi, TeamFinancials, TeamProject, TeamAnnualGoal } from '../../services/teams';
+import { teamsApi, TeamFinancials, TeamProject, TeamAnnualGoal, TeamRevenuePipeline } from '../../services/teams';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend);
 
@@ -143,6 +143,121 @@ function pivotToLineChart(
     })),
   };
 }
+
+// ── Revenue Pipeline Card ─────────────────────────────────────────────────────
+
+const RevenuePipelineCard: React.FC<{ teamId: number }> = ({ teamId }) => {
+  const { data: res, isLoading } = useQuery({
+    queryKey: ['team-revenue-pipeline', teamId],
+    queryFn: () => teamsApi.getRevenuePipeline(teamId),
+  });
+  const pipeline: TeamRevenuePipeline | undefined = res?.data.data;
+
+  const currentYear = new Date().getFullYear();
+
+  const rows: Array<{ label: string; isRolling12?: boolean } & (TeamRevenuePipeline['rolling12'] | (TeamRevenuePipeline['by_year'][number]))> = pipeline
+    ? [
+        { label: 'Rolling 12', isRolling12: true, ...pipeline.rolling12 },
+        ...pipeline.by_year.map(r => ({ label: String(r.year), isRolling12: false, ...r })),
+      ]
+    : [];
+
+  const maxBar = Math.max(
+    ...rows.map(r => Math.max(r.goal ?? 0, r.secured + r.awarded_not_in_vista)),
+    1,
+  );
+
+  const cellSt: React.CSSProperties = { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '0.8125rem', verticalAlign: 'middle' };
+
+  if (isLoading) {
+    return <Card title="Revenue Pipeline"><div style={{ padding: '1rem', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div></Card>;
+  }
+
+  return (
+    <Card title="Revenue Pipeline">
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+        <thead>
+          <tr style={{ background: '#f8fafc' }}>
+            <th style={{ ...cellSt, textAlign: 'left', fontWeight: 700, color: '#374151', width: 90 }}>Period</th>
+            <th style={{ ...cellSt, textAlign: 'right', fontWeight: 600, color: '#64748b', width: 110 }}>Goal</th>
+            <th style={{ ...cellSt, fontWeight: 600, color: '#64748b' }}>Progress</th>
+            <th style={{ ...cellSt, textAlign: 'right', fontWeight: 600, color: '#166534', width: 110 }}>Secured</th>
+            <th style={{ ...cellSt, textAlign: 'right', fontWeight: 600, color: '#1d4ed8', width: 130 }}>Awarded (not Vista)</th>
+            <th style={{ ...cellSt, textAlign: 'right', fontWeight: 600, color: '#64748b', width: 110 }}>Needed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => {
+            const total = row.secured + row.awarded_not_in_vista;
+            const goal = row.goal;
+            const needed = row.needed;
+            const pctSecured  = goal ? Math.min((row.secured / goal) * 100, 100) : 0;
+            const pctAwarded  = goal ? Math.min((row.awarded_not_in_vista / goal) * 100, 100 - pctSecured) : 0;
+            const pctTotal    = pctSecured + pctAwarded;
+            const isMet       = goal !== null && total >= goal;
+            const isCurrentYear = !row.isRolling12 && (row as any).year === currentYear;
+
+            return (
+              <tr key={row.label} style={{ background: row.isRolling12 ? '#f0fdf4' : isCurrentYear ? '#fffbeb' : 'white' }}>
+                <td style={{ ...cellSt, fontWeight: 700, color: '#0f172a' }}>
+                  {row.label}
+                  {row.isRolling12 && <span style={{ marginLeft: 6, fontSize: '0.65rem', background: '#dcfce7', color: '#166534', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>R12</span>}
+                  {isCurrentYear && <span style={{ marginLeft: 6, fontSize: '0.65rem', background: '#fef3c7', color: '#92400e', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>YTD</span>}
+                </td>
+
+                <td style={{ ...cellSt, textAlign: 'right', color: '#374151', fontWeight: 600 }}>
+                  {goal !== null ? fmtM(goal) : <span style={{ color: '#d1d5db' }}>—</span>}
+                </td>
+
+                {/* Stacked progress bar */}
+                <td style={{ ...cellSt, minWidth: 140 }}>
+                  {goal !== null ? (
+                    <div style={{ position: 'relative' }}>
+                      <div style={{ height: 10, background: '#f1f5f9', borderRadius: 6, overflow: 'hidden', display: 'flex' }}>
+                        <div style={{ width: `${pctSecured}%`, background: '#10b981', transition: 'width 0.3s' }} />
+                        <div style={{ width: `${pctAwarded}%`, background: '#3b82f6', transition: 'width 0.3s' }} />
+                      </div>
+                      {isMet && (
+                        <span style={{ position: 'absolute', right: 0, top: -1, fontSize: '0.65rem', color: '#166534', fontWeight: 700 }}>✓</span>
+                      )}
+                      <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: 2 }}>
+                        {pctTotal.toFixed(0)}% covered
+                      </div>
+                    </div>
+                  ) : (
+                    <span style={{ color: '#d1d5db', fontSize: '0.75rem' }}>Set a goal to track</span>
+                  )}
+                </td>
+
+                <td style={{ ...cellSt, textAlign: 'right', fontWeight: 600, color: '#166534' }}>
+                  {fmtM(row.secured)}
+                </td>
+
+                <td style={{ ...cellSt, textAlign: 'right', fontWeight: 600, color: '#1d4ed8' }}>
+                  {row.awarded_not_in_vista > 0 ? fmtM(row.awarded_not_in_vista) : <span style={{ color: '#d1d5db' }}>—</span>}
+                </td>
+
+                <td style={{ ...cellSt, textAlign: 'right', fontWeight: 700 }}>
+                  {needed === null
+                    ? <span style={{ color: '#d1d5db' }}>—</span>
+                    : needed <= 0
+                      ? <span style={{ color: '#166534' }}>On track</span>
+                      : <span style={{ color: '#dc2626' }}>{fmtM(needed)}</span>
+                  }
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div style={{ display: 'flex', gap: 16, padding: '8px 12px 4px', fontSize: '0.7rem', color: '#94a3b8' }}>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#10b981', borderRadius: 2, marginRight: 4 }} />Secured (Vista backlog)</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#3b82f6', borderRadius: 2, marginRight: 4 }} />Awarded not in Vista</span>
+        <span>Goals set in Annual Goals section below.</span>
+      </div>
+    </Card>
+  );
+};
 
 // ── Annual Goals Card ─────────────────────────────────────────────────────────
 
@@ -491,6 +606,9 @@ const TeamFinancialsTab: React.FC<Props> = ({ teamId, teamColor, selectedStatuse
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+      {/* Revenue Pipeline */}
+      <RevenuePipelineCard teamId={teamId} />
 
       {/* Annual Goals */}
       <AnnualGoalsCard teamId={teamId} byYear={fin?.by_year ?? []} />

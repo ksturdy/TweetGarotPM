@@ -609,6 +609,160 @@ router.put('/:id/snapshot-settings', async (req, res) => {
   }
 });
 
+// ── Revenue Pipeline ─────────────────────────────────────────────────────────
+
+router.get('/:id/revenue-pipeline', async (req, res) => {
+  try {
+    const db = require('../config/database');
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+
+    // Member employee IDs (for projects) and user IDs (for opportunities)
+    const membersRes = await db.query(`
+      SELECT e.id AS employee_id, e.user_id
+      FROM team_members tm
+      JOIN employees e ON tm.employee_id = e.id
+      WHERE tm.team_id = $1
+    `, [req.params.id]);
+
+    const employeeIds = membersRes.rows.map(r => r.employee_id);
+    const userIds     = membersRes.rows.map(r => r.user_id).filter(Boolean);
+
+    if (employeeIds.length === 0) {
+      const empty = { secured: 0, awarded_not_in_vista: 0, goal: null, needed: null };
+      return res.json({ data: { rolling12: empty, by_year: [] } });
+    }
+
+    const today       = new Date();
+    const currentYear = today.getFullYear();
+    const years       = [currentYear, currentYear + 1, currentYear + 2, currentYear + 3];
+
+    // ── 1. Backlog: rolling-12 secured ───────────────────────────────────────
+    const backlogRes = await db.query(`
+      SELECT COALESCE(SUM(backlog_val), 0) AS total_backlog
+      FROM (
+        SELECT DISTINCT ON (p.id)
+          CASE WHEN vc.id IS NOT NULL
+            THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0)
+            ELSE COALESCE(p.backlog, 0)
+          END AS backlog_val
+        FROM projects p
+        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+        WHERE p.tenant_id = $1 AND p.manager_id = ANY($2) AND p.status = 'Open'
+        ORDER BY p.id, vc.id DESC NULLS LAST
+      ) sub
+    `, [req.tenantId, employeeIds]);
+    const totalBacklog = Number(backlogRes.rows[0].total_backlog);
+
+    // ── 2. Secured by calendar year (contract value by project start year) ───
+    const securedYearRes = await db.query(`
+      SELECT year, SUM(contract_value)::numeric AS secured
+      FROM (
+        SELECT DISTINCT ON (p.id)
+          EXTRACT(YEAR FROM COALESCE(p.start_date, p.created_at))::int AS year,
+          COALESCE(vc.contract_amount, p.contract_value, 0)::numeric    AS contract_value
+        FROM projects p
+        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+        WHERE p.tenant_id = $1 AND p.manager_id = ANY($2)
+          AND p.status = ANY(ARRAY['Open','Soft-Closed'])
+        ORDER BY p.id, vc.id DESC NULLS LAST
+      ) sub
+      GROUP BY year
+    `, [req.tenantId, employeeIds]);
+    const securedByYear = {};
+    for (const r of securedYearRes.rows) securedByYear[r.year] = Number(r.secured);
+
+    // ── 3. Annual goals ──────────────────────────────────────────────────────
+    const goalsRes = await db.query(`
+      SELECT year, revenue_goal FROM team_annual_goals
+      WHERE team_id = $1 AND tenant_id = $2
+    `, [req.params.id, req.tenantId]);
+    const goalsByYear = {};
+    for (const r of goalsRes.rows) {
+      goalsByYear[r.year] = r.revenue_goal !== null ? Number(r.revenue_goal) : null;
+    }
+
+    // ── 4. Awarded Not in Vista (stage=Awarded, awarded_status IS NULL) ──────
+    // Per-year grouping (null start date → current year)
+    // Rolling 12 = any opp with start_date within next 12 months OR no start date
+    const rolling12End = new Date(today);
+    rolling12End.setFullYear(rolling12End.getFullYear() + 1);
+
+    let awardedByYear = {};
+    let rolling12Awarded = 0;
+
+    if (userIds.length > 0) {
+      const awardedYearRes = await db.query(`
+        SELECT
+          COALESCE(EXTRACT(YEAR FROM estimated_start_date)::int, $3) AS year,
+          SUM(COALESCE(estimated_value, 0))::numeric AS total_value
+        FROM opportunities o
+        JOIN pipeline_stages ps ON o.stage_id = ps.id
+        WHERE o.tenant_id = $1
+          AND ps.name = 'Awarded'
+          AND o.awarded_status IS NULL
+          AND o.assigned_to = ANY($2)
+        GROUP BY COALESCE(EXTRACT(YEAR FROM estimated_start_date)::int, $3)
+      `, [req.tenantId, userIds, currentYear]);
+      for (const r of awardedYearRes.rows) awardedByYear[r.year] = Number(r.total_value);
+
+      const awardedR12Res = await db.query(`
+        SELECT SUM(COALESCE(estimated_value, 0))::numeric AS total_value
+        FROM opportunities o
+        JOIN pipeline_stages ps ON o.stage_id = ps.id
+        WHERE o.tenant_id = $1
+          AND ps.name = 'Awarded'
+          AND o.awarded_status IS NULL
+          AND o.assigned_to = ANY($2)
+          AND (estimated_start_date IS NULL OR estimated_start_date <= $3)
+      `, [req.tenantId, userIds, rolling12End]);
+      rolling12Awarded = Number(awardedR12Res.rows[0]?.total_value ?? 0);
+    }
+
+    // ── 5. Rolling-12 prorated goal ──────────────────────────────────────────
+    const yearEnd      = new Date(currentYear, 11, 31);
+    const nextYearDate = new Date(rolling12End);
+    const daysRemCY    = Math.max(0, Math.round((yearEnd - today)   / 86400000));
+    const daysInNY     = Math.max(0, Math.round((nextYearDate - new Date(currentYear + 1, 0, 1)) / 86400000));
+
+    const cyGoal = goalsByYear[currentYear]        ?? null;
+    const nyGoal = goalsByYear[currentYear + 1]    ?? null;
+    let rolling12Goal = null;
+    if (cyGoal !== null && nyGoal !== null) {
+      rolling12Goal = Math.round((daysRemCY / 365) * cyGoal + (daysInNY / 365) * nyGoal);
+    } else if (cyGoal !== null) {
+      rolling12Goal = Math.round((daysRemCY / 365) * cyGoal);
+    }
+
+    // ── 6. Assemble response ─────────────────────────────────────────────────
+    const rolling12Needed = rolling12Goal !== null
+      ? rolling12Goal - totalBacklog - rolling12Awarded : null;
+
+    const byYear = years.map(year => {
+      const secured  = securedByYear[year]    ?? 0;
+      const awarded  = awardedByYear[year]    ?? 0;
+      const goal     = goalsByYear[year]      ?? null;
+      const needed   = goal !== null ? goal - secured - awarded : null;
+      return { year, secured, awarded_not_in_vista: awarded, goal, needed };
+    });
+
+    res.json({
+      data: {
+        rolling12: {
+          secured: Math.round(totalBacklog),
+          awarded_not_in_vista: Math.round(rolling12Awarded),
+          goal: rolling12Goal,
+          needed: rolling12Needed !== null ? Math.round(rolling12Needed) : null,
+        },
+        by_year: byYear,
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching revenue pipeline:', error);
+    res.status(500).json({ error: 'Failed to fetch revenue pipeline' });
+  }
+});
+
 // ── Annual Goals ──────────────────────────────────────────────────────────────
 
 router.get('/:id/annual-goals', async (req, res) => {
