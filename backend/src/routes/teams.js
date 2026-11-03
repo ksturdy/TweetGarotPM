@@ -691,7 +691,7 @@ router.get('/:id/revenue-pipeline', async (req, res) => {
     let awardedByYear = {};
     let rolling12Awarded = 0;
 
-    if (userIds.length > 0) {
+    if (employeeIds.length > 0) {
       const awardedYearRes = await db.query(`
         SELECT
           COALESCE(EXTRACT(YEAR FROM estimated_start_date)::int, $3) AS year,
@@ -703,7 +703,7 @@ router.get('/:id/revenue-pipeline', async (req, res) => {
           AND o.awarded_status IS NULL
           AND o.assigned_to = ANY($2)
         GROUP BY COALESCE(EXTRACT(YEAR FROM estimated_start_date)::int, $3)
-      `, [req.tenantId, userIds, currentYear]);
+      `, [req.tenantId, employeeIds, currentYear]);
       for (const r of awardedYearRes.rows) awardedByYear[r.year] = Number(r.total_value);
 
       const awardedR12Res = await db.query(`
@@ -715,7 +715,7 @@ router.get('/:id/revenue-pipeline', async (req, res) => {
           AND o.awarded_status IS NULL
           AND o.assigned_to = ANY($2)
           AND (estimated_start_date IS NULL OR estimated_start_date <= $3)
-      `, [req.tenantId, userIds, rolling12End]);
+      `, [req.tenantId, employeeIds, rolling12End]);
       rolling12Awarded = Number(awardedR12Res.rows[0]?.total_value ?? 0);
     }
 
