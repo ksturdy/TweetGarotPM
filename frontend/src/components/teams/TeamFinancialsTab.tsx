@@ -184,6 +184,7 @@ const RevenuePipelineCard: React.FC<{ teamId: number }> = ({ teamId }) => {
             <th style={{ ...cellSt, textAlign: 'right', fontWeight: 600, color: '#166534', width: 110 }}>Secured</th>
             <th style={{ ...cellSt, textAlign: 'right', fontWeight: 600, color: '#1d4ed8', width: 130 }}>Awarded (not Vista)</th>
             <th style={{ ...cellSt, textAlign: 'right', fontWeight: 600, color: '#64748b', width: 110 }}>Needed</th>
+            <th style={{ ...cellSt, textAlign: 'right', fontWeight: 600, color: '#7c3aed', width: 90 }}>SWAG%</th>
           </tr>
         </thead>
         <tbody>
@@ -241,8 +242,20 @@ const RevenuePipelineCard: React.FC<{ teamId: number }> = ({ teamId }) => {
                   {needed === null
                     ? <span style={{ color: '#d1d5db' }}>—</span>
                     : needed <= 0
-                      ? <span style={{ color: '#166534' }}>On track</span>
+                      ? <span style={{ color: '#166534' }}>{fmtM(needed)}</span>
                       : <span style={{ color: '#dc2626' }}>{fmtM(needed)}</span>
+                  }
+                </td>
+
+                {/* SWAG% — % of goal still needed */}
+                <td style={{ ...cellSt, textAlign: 'right', fontWeight: 700 }}>
+                  {needed !== null && goal !== null && goal > 0
+                    ? (() => {
+                        const swag = (needed / goal) * 100;
+                        const color = swag <= 0 ? '#166534' : swag <= 25 ? '#92400e' : '#dc2626';
+                        return <span style={{ color }}>{swag.toFixed(0)}%</span>;
+                      })()
+                    : <span style={{ color: '#d1d5db' }}>—</span>
                   }
                 </td>
               </tr>
