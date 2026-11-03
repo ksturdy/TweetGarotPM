@@ -282,7 +282,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
   // filter correctly updates the chart and footer totals. The backend already
   // returns labor-only items (cost_types includes 1).
   const items = useMemo(() => {
-    let base = data?.items ?? [];
+    let base = externalItems ?? data?.items ?? [];
     if (hideNoQty) base = base.filter(item => parseNum(item.quantity) > 0);
     if (ctFilter.size > 0) {
       base = base.filter(item => item.cost_types?.some(ct => ctFilter.has(ct)));
