@@ -1077,6 +1077,31 @@ class Team {
     return map[key] ? map[key]() : null;
   }
 
+  // ── Annual Goals ─────────────────────────────────────────────────────────────
+
+  static async getAnnualGoals(teamId, tenantId) {
+    const r = await db.query(`
+      SELECT year, revenue_goal, margin_goal
+      FROM team_annual_goals
+      WHERE team_id = $1 AND tenant_id = $2
+      ORDER BY year ASC
+    `, [teamId, tenantId]);
+    return r.rows;
+  }
+
+  static async upsertAnnualGoal(teamId, tenantId, year, { revenue_goal, margin_goal }) {
+    const r = await db.query(`
+      INSERT INTO team_annual_goals (team_id, tenant_id, year, revenue_goal, margin_goal, updated_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      ON CONFLICT (team_id, year) DO UPDATE
+        SET revenue_goal = EXCLUDED.revenue_goal,
+            margin_goal  = EXCLUDED.margin_goal,
+            updated_at   = NOW()
+      RETURNING year, revenue_goal, margin_goal
+    `, [teamId, tenantId, year, revenue_goal ?? null, margin_goal ?? null]);
+    return r.rows[0];
+  }
+
   // Compute live metrics for a scope: sub-team, individual, or whole parent team
   static async _computeCurrentMetrics(teamId, tenantId, memberId, memberTeamId) {
     const statuses = ['Open'];

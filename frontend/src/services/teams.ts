@@ -207,6 +207,12 @@ export interface TeamMetricCurrent {
   value: number | null;
 }
 
+export interface TeamAnnualGoal {
+  year: number;
+  revenue_goal: number | null;
+  margin_goal: number | null;
+}
+
 export interface TeamSnapshotSettings {
   team_id: number;
   snapshot_day_of_week: number;
@@ -304,4 +310,10 @@ export const teamsApi = {
 
   updateSnapshotSettings: (id: number, data: Omit<TeamSnapshotSettings, 'team_id'>) =>
     api.put<{ data: TeamSnapshotSettings }>(`/teams/${id}/snapshot-settings`, data),
+
+  getAnnualGoals: (id: number) =>
+    api.get<{ data: TeamAnnualGoal[] }>(`/teams/${id}/annual-goals`),
+
+  updateAnnualGoal: (id: number, year: number, data: { revenue_goal?: number | null; margin_goal?: number | null }) =>
+    api.put<{ data: TeamAnnualGoal }>(`/teams/${id}/annual-goals/${year}`, data),
 };

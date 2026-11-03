@@ -609,4 +609,30 @@ router.put('/:id/snapshot-settings', async (req, res) => {
   }
 });
 
+// ── Annual Goals ──────────────────────────────────────────────────────────────
+
+router.get('/:id/annual-goals', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const goals = await Team.getAnnualGoals(req.params.id, req.tenantId);
+    res.json({ data: goals });
+  } catch (error) {
+    console.error('Error fetching annual goals:', error);
+    res.status(500).json({ error: 'Failed to fetch annual goals' });
+  }
+});
+
+router.put('/:id/annual-goals/:year', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const goal = await Team.upsertAnnualGoal(req.params.id, req.tenantId, req.params.year, req.body);
+    res.json({ data: goal });
+  } catch (error) {
+    console.error('Error saving annual goal:', error);
+    res.status(500).json({ error: 'Failed to save annual goal' });
+  }
+});
+
 module.exports = router;

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Chart as ChartJS,
@@ -13,7 +13,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
-import { teamsApi, TeamFinancials, TeamProject } from '../../services/teams';
+import { teamsApi, TeamFinancials, TeamProject, TeamAnnualGoal } from '../../services/teams';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend);
 
@@ -143,6 +143,178 @@ function pivotToLineChart(
     })),
   };
 }
+
+// ── Annual Goals Card ─────────────────────────────────────────────────────────
+
+interface AnnualGoalsCardProps {
+  teamId: number;
+  byYear: Array<{ year: number; contract_value: number; gm_pct: number | null }>;
+}
+
+const AnnualGoalsCard: React.FC<AnnualGoalsCardProps> = ({ teamId, byYear }) => {
+  const queryClient = useQueryClient();
+  const currentYear = new Date().getFullYear();
+  const years = [currentYear, currentYear + 1, currentYear + 2, currentYear + 3];
+
+  const { data: goalsRes } = useQuery({
+    queryKey: ['team-annual-goals', teamId],
+    queryFn: () => teamsApi.getAnnualGoals(teamId),
+  });
+  const goals: TeamAnnualGoal[] = goalsRes?.data.data ?? [];
+
+  // editing state: `${year}_revenue` | `${year}_margin` → raw string
+  const [editing, setEditing] = useState<{ key: string; value: string } | null>(null);
+
+  const saveMutation = useMutation({
+    mutationFn: ({ year, data }: { year: number; data: { revenue_goal?: number | null; margin_goal?: number | null } }) =>
+      teamsApi.updateAnnualGoal(teamId, year, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['team-annual-goals', teamId] }),
+  });
+
+  const getGoal = (year: number): TeamAnnualGoal =>
+    goals.find(g => g.year === year) ?? { year, revenue_goal: null, margin_goal: null };
+
+  const getActual = (year: number) => byYear.find(r => r.year === year);
+
+  const commitEdit = (year: number, field: 'revenue' | 'margin') => {
+    if (!editing) return;
+    const raw = editing.value.trim().replace(/[$,%]/g, '');
+    const parsed = raw === '' ? null : parseFloat(raw);
+    if (parsed !== null && isNaN(parsed)) { setEditing(null); return; }
+    setEditing(null);
+    saveMutation.mutate({
+      year,
+      data: field === 'revenue'
+        ? { revenue_goal: parsed, margin_goal: getGoal(year).margin_goal }
+        : { revenue_goal: getGoal(year).revenue_goal, margin_goal: parsed },
+    });
+  };
+
+  const fmtDelta = (actual: number, goal: number, isPercent: boolean) => {
+    const diff = actual - goal;
+    const pct = goal !== 0 ? (diff / Math.abs(goal)) * 100 : 0;
+    const sign = diff >= 0 ? '+' : '';
+    const color = diff >= 0 ? '#166534' : '#dc2626';
+    const label = isPercent
+      ? `${sign}${diff.toFixed(1)}pp`
+      : `${sign}${pct.toFixed(0)}%`;
+    return <span style={{ color, fontWeight: 700, fontSize: '0.75rem' }}>{label}</span>;
+  };
+
+  const cellStyle: React.CSSProperties = {
+    padding: '9px 12px', borderBottom: '1px solid #f1f5f9',
+    fontSize: '0.8125rem', verticalAlign: 'middle',
+  };
+  const editableCell = (
+    year: number, field: 'revenue' | 'margin',
+    displayVal: string, placeholder: string,
+  ) => {
+    const key = `${year}_${field}`;
+    const isEditing = editing?.key === key;
+    return (
+      <td style={{ ...cellStyle, textAlign: 'right', minWidth: 110 }}>
+        {isEditing ? (
+          <input
+            autoFocus
+            type="text"
+            value={editing.value}
+            onChange={e => setEditing({ key, value: e.target.value })}
+            onBlur={() => commitEdit(year, field)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              if (e.key === 'Escape') setEditing(null);
+            }}
+            style={{
+              width: 90, padding: '3px 7px', borderRadius: 5,
+              border: '1px solid #d97706', fontSize: '0.8rem',
+              textAlign: 'right', background: 'white', outline: 'none',
+            }}
+          />
+        ) : (
+          <span
+            onClick={() => setEditing({ key, value: displayVal !== '—' ? displayVal.replace(/[$M%]/g, '') : '' })}
+            title="Click to edit"
+            style={{
+              cursor: 'text', borderBottom: '1px dashed #d97706',
+              paddingBottom: 1, color: displayVal === '—' ? '#d1d5db' : '#92400e',
+              fontWeight: displayVal === '—' ? 400 : 600,
+            }}
+          >
+            {displayVal}
+          </span>
+        )}
+      </td>
+    );
+  };
+
+  return (
+    <Card title="Annual Revenue & Margin Goals">
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+        <thead>
+          <tr style={{ background: '#f8fafc' }}>
+            <th style={{ ...cellStyle, textAlign: 'left', fontWeight: 700, color: '#374151', width: 60 }}>Year</th>
+            <th style={{ ...cellStyle, textAlign: 'right', fontWeight: 600, color: '#64748b' }}>Revenue Goal</th>
+            <th style={{ ...cellStyle, textAlign: 'right', fontWeight: 600, color: '#64748b' }}>Actual</th>
+            <th style={{ ...cellStyle, textAlign: 'right', fontWeight: 600, color: '#64748b' }}>vs Goal</th>
+            <th style={{ ...cellStyle, textAlign: 'right', fontWeight: 600, color: '#64748b' }}>Margin Goal</th>
+            <th style={{ ...cellStyle, textAlign: 'right', fontWeight: 600, color: '#64748b' }}>Actual GM%</th>
+            <th style={{ ...cellStyle, textAlign: 'right', fontWeight: 600, color: '#64748b' }}>vs Goal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {years.map(year => {
+            const goal = getGoal(year);
+            const actual = getActual(year);
+            const isFuture = year > currentYear;
+
+            const revGoalDisplay = goal.revenue_goal !== null ? fmtM(Number(goal.revenue_goal)) : '—';
+            const revActual = actual ? fmtM(actual.contract_value) : '—';
+            const gmGoalDisplay = goal.margin_goal !== null ? `${Number(goal.margin_goal).toFixed(1)}%` : '—';
+            const gmActual = actual?.gm_pct != null ? `${Number(actual.gm_pct).toFixed(1)}%` : '—';
+
+            return (
+              <tr key={year} style={{ background: year === currentYear ? '#fffbeb' : 'white' }}>
+                <td style={{ ...cellStyle, fontWeight: 700, color: year === currentYear ? '#92400e' : '#0f172a' }}>
+                  {year}
+                  {year === currentYear && (
+                    <span style={{ marginLeft: 6, fontSize: '0.65rem', background: '#fef3c7', color: '#92400e', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>YTD</span>
+                  )}
+                </td>
+
+                {editableCell(year, 'revenue', revGoalDisplay, 'e.g. 120M')}
+
+                <td style={{ ...cellStyle, textAlign: 'right', color: '#0f172a', fontWeight: isFuture ? 400 : 600 }}>
+                  {revActual}
+                </td>
+
+                <td style={{ ...cellStyle, textAlign: 'right' }}>
+                  {!isFuture && actual && goal.revenue_goal !== null
+                    ? fmtDelta(actual.contract_value, Number(goal.revenue_goal), false)
+                    : <span style={{ color: '#d1d5db' }}>—</span>}
+                </td>
+
+                {editableCell(year, 'margin', gmGoalDisplay, 'e.g. 15.5')}
+
+                <td style={{ ...cellStyle, textAlign: 'right', color: '#0f172a', fontWeight: isFuture ? 400 : 600 }}>
+                  {gmActual}
+                </td>
+
+                <td style={{ ...cellStyle, textAlign: 'right' }}>
+                  {!isFuture && actual?.gm_pct != null && goal.margin_goal !== null
+                    ? fmtDelta(Number(actual.gm_pct), Number(goal.margin_goal), true)
+                    : <span style={{ color: '#d1d5db' }}>—</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div style={{ fontSize: '0.7rem', color: '#94a3b8', padding: '8px 12px 4px' }}>
+        Click any goal cell to edit. Revenue in millions (e.g. 120 = $120M). Margin as percent (e.g. 15.5 = 15.5%).
+      </div>
+    </Card>
+  );
+};
 
 interface Props {
   teamId: number;
@@ -319,6 +491,9 @@ const TeamFinancialsTab: React.FC<Props> = ({ teamId, teamColor, selectedStatuse
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+      {/* Annual Goals */}
+      <AnnualGoalsCard teamId={teamId} byYear={fin?.by_year ?? []} />
 
       {/* Market + Manager */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
