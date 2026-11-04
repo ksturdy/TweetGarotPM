@@ -234,6 +234,24 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
   // Optimistic local qty overrides: key = `${itemId}-${weekEnding}`
   const [localQty, setLocalQty] = useState<Record<string, number>>({});
   const savingRef = useRef<Set<string>>(new Set());
+  // Tracks values typed but not yet blur-saved, so unmount/navigation can flush them
+  const pendingEditsRef = useRef<Record<string, { itemId: number; week: string; rawValue: string }>>({});
+
+  useEffect(() => {
+    const flushPending = () => {
+      Object.values(pendingEditsRef.current).forEach(({ itemId, week, rawValue }) => {
+        const qty = parseFloat(rawValue);
+        const newQty = isNaN(qty) || qty < 0 ? 0 : qty;
+        upsertWeeklyEntry(projectId, itemId, week, newQty); // fire-and-forget
+      });
+      pendingEditsRef.current = {};
+    };
+    window.addEventListener('beforeunload', flushPending);
+    return () => {
+      window.removeEventListener('beforeunload', flushPending);
+      flushPending(); // flush on SPA navigation (component unmount)
+    };
+  }, [projectId]);
 
   // Resizable frozen column widths (px)
   const [colWidths, setColWidths] = useState({
@@ -521,6 +539,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
 
   const handleCellBlur = useCallback(async (item: WeeklyProductionItem, week: string, rawValue: string) => {
     const key = `${item.id}-${week}`;
+    delete pendingEditsRef.current[key]; // blur is handling this save now
     const qty = parseFloat(rawValue);
     const newQty = isNaN(qty) || qty < 0 ? 0 : qty;
     const prev = entryMap[key] ?? null;
@@ -973,6 +992,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
                               placeholder={isPast && schedQtyW > 0 ? '0' : ''}
                               defaultValue={hasEntry && val > 0 ? val : ''}
                               key={`${item.id}-${w}-${val}`}
+                              onChange={e => { pendingEditsRef.current[`${item.id}-${w}`] = { itemId: item.id, week: w, rawValue: e.target.value }; }}
                               onBlur={e => handleCellBlur(item, w, e.target.value)}
                               onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                               style={{
