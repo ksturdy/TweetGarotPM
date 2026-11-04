@@ -17,6 +17,7 @@ import SetGoalsDialog from '../../components/projects/SetGoalsDialog';
 import { format } from 'date-fns';
 import '../../styles/SalesPipeline.css';
 import { MARKETS as MARKET_OPTIONS } from '../../constants/markets';
+import SyncFolderButton from '../../components/common/SyncFolderButton';
 
 // ── Formatting helpers ──────────────────────────────────────────────
 
@@ -262,16 +263,19 @@ const ProjectDetail: React.FC = () => {
           }}>
             {project.status}
           </span>
-          <button
-            onClick={() => setShowGoalsDialog(true)}
-            style={{
-              marginLeft: 'auto', background: 'none', border: '1px solid #d1d5db',
-              padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.75rem',
-              color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem',
-            }}
-          >
-            <span style={{ fontSize: '0.85rem' }}>&#9881;</span> Set Goals
-          </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <SyncFolderButton projectId={Number(id)} projectName={project.name} />
+            <button
+              onClick={() => setShowGoalsDialog(true)}
+              style={{
+                background: 'none', border: '1px solid #d1d5db',
+                padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.75rem',
+                color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem',
+              }}
+            >
+              <span style={{ fontSize: '0.85rem' }}>&#9881;</span> Set Goals
+            </button>
+          </div>
         </div>
         <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.15rem' }}>
           {project.number} &middot; {project.client || 'No client'} &middot; {project.manager_name || 'No PM'}

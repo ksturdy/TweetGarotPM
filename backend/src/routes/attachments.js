@@ -1,9 +1,12 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const { createUploadMiddleware } = require('../middleware/uploadHandler');
-const { deleteFile, getFileUrl, getFileInfo } = require('../utils/fileStorage');
+const { deleteFile, getFileUrl, getFileInfo, getFileStream } = require('../utils/fileStorage');
+const { isR2Enabled } = require('../config/r2Client');
 
 const router = express.Router();
 
@@ -25,6 +28,118 @@ const upload = createUploadMiddleware({
     'application/msword', // .doc
   ],
   maxSize: 20 * 1024 * 1024, // 20MB
+});
+
+// Get all attachments for a project, grouped by entity — for local folder sync
+router.get('/project/:projectId', async (req, res, next) => {
+  try {
+    const { projectId } = req.params;
+
+    const attResult = await db.query(`
+      WITH project_entities AS (
+        SELECT 'rfi' AS entity_type, id AS entity_id,
+               'RFIs' AS folder_name,
+               LPAD(number::text, 3, '0') || ' - ' || COALESCE(subject, 'RFI') AS entity_label
+        FROM rfis WHERE project_id = $1
+
+        UNION ALL
+
+        SELECT 'submittal', id, 'Submittals',
+               LPAD(number::text, 3, '0') || ' - ' || spec_section || ' ' || description
+        FROM submittals WHERE project_id = $1
+
+        UNION ALL
+
+        SELECT 'change_order', id, 'Change Orders',
+               'CO-' || LPAD(number::text, 3, '0') || ' - ' || COALESCE(title, 'Change Order')
+        FROM change_orders WHERE project_id = $1
+
+        UNION ALL
+
+        SELECT 'daily_report', id, 'Daily Reports',
+               TO_CHAR(report_date, 'YYYY-MM-DD')
+        FROM daily_reports WHERE project_id = $1
+
+        UNION ALL
+
+        SELECT 'field_issue', id, 'Field Issues',
+               'Issue-' || LPAD(number::text, 3, '0') || ' - ' || COALESCE(title, 'Field Issue')
+        FROM field_issues WHERE project_id = $1
+
+        UNION ALL
+
+        SELECT 'safety_observation', id, 'Safety Observations',
+               'Safety-' || LPAD(number::text, 3, '0') || ' - ' || TO_CHAR(date_of_observation, 'YYYY-MM-DD')
+        FROM safety_observations WHERE project_id = $1
+      )
+      SELECT a.*, pe.folder_name, pe.entity_label
+      FROM attachments a
+      JOIN project_entities pe ON pe.entity_type = a.entity_type AND pe.entity_id = a.entity_id
+      ORDER BY pe.folder_name, pe.entity_label, a.created_at
+    `, [projectId]);
+
+    const attachments = await Promise.all(
+      attResult.rows.map(async (att) => ({
+        ...att,
+        url: await getFileUrl(att.filename),
+      }))
+    );
+
+    // Drawings live in their own table with file_path, served via the drawings download endpoint
+    const drawResult = await db.query(`
+      SELECT id, drawing_number, title, discipline, file_name, file_type, file_size
+      FROM drawings
+      WHERE project_id = $1 AND file_path IS NOT NULL AND is_latest = true
+      ORDER BY COALESCE(discipline, 'General'), drawing_number
+    `, [projectId]);
+
+    const drawings = drawResult.rows.map((d) => ({
+      id: d.id,
+      entity_type: 'drawing',
+      entity_id: d.id,
+      filename: d.file_name || `${d.drawing_number}.pdf`,
+      original_name: d.file_name || `${d.drawing_number}.pdf`,
+      mime_type: d.file_type || 'application/pdf',
+      size: d.file_size || 0,
+      url: `/api/drawings/${d.id}/download`,
+      folder_name: 'Drawings',
+      entity_label: d.discipline || 'General',
+    }));
+
+    res.json([...attachments, ...drawings]);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Stream attachment file through backend — avoids CORS issues when fetching from R2 directly
+router.get('/:id/download', async (req, res, next) => {
+  try {
+    const result = await db.query('SELECT * FROM attachments WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Attachment not found' });
+
+    const att = result.rows[0];
+
+    if (isR2Enabled()) {
+      const { stream, contentType, contentLength } = await getFileStream(att.filename);
+      res.setHeader('Content-Type', contentType || att.mime_type || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${att.original_name}"`);
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+      stream.pipe(res);
+      return;
+    }
+
+    const filePath = path.isAbsolute(att.filename)
+      ? att.filename
+      : path.join(__dirname, '../../', att.filename);
+
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+
+    res.setHeader('Content-Disposition', `attachment; filename="${att.original_name}"`);
+    res.sendFile(filePath);
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Get single attachment by ID with URL — must be before /:entityType/:entityId to avoid shadowing
