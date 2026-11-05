@@ -2,6 +2,8 @@ import React, { useState, useMemo, useDeferredValue, useRef, useEffect, useCallb
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersApi, User, UpdateUserData } from '../services/users';
+import { dmApi, UserPresence } from '../services/directMessages';
+import PresenceDot from '../components/messaging/PresenceDot';
 import securityApi from '../services/security';
 import { useAuth } from '../context/AuthContext';
 import { useTitanFeedback } from '../context/TitanFeedbackContext';
@@ -114,6 +116,17 @@ const UserManagement: React.FC = () => {
     retry: false,
   });
   const users: User[] = Array.isArray(usersRaw) ? usersRaw : [];
+
+  const { data: presenceData } = useQuery({
+    queryKey: ['presence'],
+    queryFn: () => dmApi.getPresence().then((res) => res.data),
+    refetchInterval: 30000,
+  });
+  const presenceMap = useMemo(() => {
+    const map: Record<number, UserPresence> = {};
+    presenceData?.forEach((p) => { map[p.user_id] = p; });
+    return map;
+  }, [presenceData]);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateUserData }) =>
@@ -544,8 +557,11 @@ const UserManagement: React.FC = () => {
                   2FA
                   <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('twoFa', e)} />
                 </th>
+                <th style={{ textAlign: 'center' }}>
+                  Online
+                </th>
                 <th>
-                  Status
+                  Account
                   <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('status', e)} />
                 </th>
                 <th onClick={() => handleSort('last_active')} style={{ cursor: 'pointer', userSelect: 'none' }}>
@@ -637,14 +653,17 @@ const UserManagement: React.FC = () => {
                           </span>
                         )}
                       </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <PresenceDot status={presenceMap[user.id]?.status ?? 'offline'} size={10} />
+                      </td>
                       <td>
                         <select
-                          value={formData.is_active ? 'active' : 'inactive'}
-                          onChange={(e) => setFormData({ ...formData, is_active: e.target.value === 'active' })}
+                          value={formData.is_active ? 'enabled' : 'disabled'}
+                          onChange={(e) => setFormData({ ...formData, is_active: e.target.value === 'enabled' })}
                           style={{ width: '100%', padding: '6px 10px', fontSize: '14px', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--bg-dark)', cursor: 'pointer' }}
                         >
-                          <option value="active">Active</option>
-                          <option value="inactive">Inactive</option>
+                          <option value="enabled">Enabled</option>
+                          <option value="disabled">Disabled</option>
                         </select>
                       </td>
                       <td>{formatLastActive(user.last_seen_at)}</td>
@@ -706,10 +725,13 @@ const UserManagement: React.FC = () => {
                           </span>
                         )}
                       </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <PresenceDot status={presenceMap[user.id]?.status ?? 'offline'} size={10} />
+                      </td>
                       <td>
                         <span className={`sales-stage-badge ${user.is_active ? 'awarded' : 'closed'}`}>
                           <span className="sales-stage-dot"></span>
-                          {user.is_active ? 'Active' : 'Inactive'}
+                          {user.is_active ? 'Enabled' : 'Disabled'}
                         </span>
                       </td>
                       <td>{formatLastActive(user.last_seen_at)}</td>
