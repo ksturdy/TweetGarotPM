@@ -163,17 +163,14 @@
   object-fit: contain;
 }
 
-/* Company logo — always pinned to the top-right corner of the header */
+/* Company logo — last item in header-right flex row */
 .company-logo-image {
-  position: absolute;
-  right: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
   height: 36px;
   max-width: 140px;
   object-fit: contain;
   filter: brightness(0) invert(1);
   pointer-events: none;
+  flex-shrink: 0;
 }
 
 /* Layout Body - Sidebar + Main */
