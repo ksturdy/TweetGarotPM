@@ -20,8 +20,19 @@ const INTERVAL_OPTIONS = [
   { value: 60, label: 'Auto: 1h'  },
 ];
 
+function formatSyncTime(date: Date): string {
+  const now = Date.now();
+  const diff = now - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export default function SyncFolderButton({ projectId, projectName }: Props) {
-  const { sync, changeFolder, state, progress, supported, hasHandle, autoInterval, setAutoInterval } =
+  const { sync, changeFolder, state, progress, supported, hasHandle, lastSynced, autoInterval, setAutoInterval } =
     useLocalSync(projectId, projectName);
 
   if (!supported) return null;
@@ -33,8 +44,16 @@ export default function SyncFolderButton({ projectId, projectName }: Props) {
   const borderColor = isError ? '#ef4444' : isDone ? '#10b981' : '#d1d5db';
   const textColor   = isError ? '#ef4444' : isDone ? '#10b981' : '#6b7280';
 
+  const infoLine = (() => {
+    const parts: string[] = [];
+    if (lastSynced) parts.push(`Last synced: ${formatSyncTime(lastSynced)}`);
+    if (autoInterval > 0) parts.push('auto-syncs while tab is open');
+    return parts.join(' · ');
+  })();
+
   return (
-    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+    <div style={{ position: 'relative', display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
       <button
         onClick={isActive ? undefined : sync}
         disabled={isActive}
@@ -128,6 +147,13 @@ export default function SyncFolderButton({ projectId, projectName }: Props) {
           {progress.current}
         </div>
       )}
+    </div>
+
+    {infoLine && (
+      <div style={{ fontSize: '0.65rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+        {infoLine}
+      </div>
+    )}
     </div>
   );
 }

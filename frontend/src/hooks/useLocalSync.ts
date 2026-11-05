@@ -11,12 +11,17 @@ import {
 
 export type SyncState = 'idle' | 'syncing' | 'done' | 'error';
 
-const INTERVAL_KEY = (id: number) => `sync_interval_${id}`;
+const INTERVAL_KEY   = (id: number) => `sync_interval_${id}`;
+const LAST_SYNC_KEY  = (id: number) => `sync_last_${id}`;
 
 export function useLocalSync(projectId: number, projectName: string) {
   const [state, setState] = useState<SyncState>('idle');
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [hasHandle, setHasHandle] = useState(false);
+  const [lastSynced, setLastSynced] = useState<Date | null>(() => {
+    const stored = localStorage.getItem(LAST_SYNC_KEY(projectId));
+    return stored ? new Date(stored) : null;
+  });
   const [autoInterval, setAutoIntervalState] = useState<number>(
     () => Number(localStorage.getItem(INTERVAL_KEY(projectId)) ?? 0)
   );
@@ -44,6 +49,9 @@ export function useLocalSync(projectId: number, projectName: string) {
       handleRef.current = usedHandle;
       setHasHandle(true);
       await saveHandle(projectId, usedHandle);
+      const now = new Date();
+      setLastSynced(now);
+      localStorage.setItem(LAST_SYNC_KEY(projectId), now.toISOString());
       setState('done');
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -105,5 +113,5 @@ export function useLocalSync(projectId: number, projectName: string) {
     }
   }, [supported, projectId]);
 
-  return { sync, changeFolder, state, progress, supported, hasHandle, autoInterval, setAutoInterval };
+  return { sync, changeFolder, state, progress, supported, hasHandle, lastSynced, autoInterval, setAutoInterval };
 }
