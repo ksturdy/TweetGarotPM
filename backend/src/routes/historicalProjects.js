@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const HistoricalProject = require('../models/HistoricalProject');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorizePlatformAdmin } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 
 // Apply auth and tenant middleware to all routes
@@ -317,9 +317,13 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-// Update historical project (no tenant filtering - table doesn't have tenant_id)
+// Update historical project — admin only (shared table, no tenant_id)
 router.put('/:id', async (req, res, next) => {
   try {
+    if (req.user.role !== 'admin' && !req.user.isPlatformAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
     const project = await HistoricalProject.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
@@ -332,13 +336,10 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// Delete all historical projects (admin only - for re-importing)
+// Delete all historical projects — platform admin only (shared table, affects all tenants)
 // IMPORTANT: This route must come BEFORE /:id route to avoid route conflict
-router.delete('/all', async (req, res, next) => {
+router.delete('/all', authorizePlatformAdmin, async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
     await HistoricalProject.deleteAll();
     res.json({ message: 'All historical projects deleted' });
   } catch (error) {
@@ -346,9 +347,13 @@ router.delete('/all', async (req, res, next) => {
   }
 });
 
-// Delete single historical project (no tenant filtering - table doesn't have tenant_id)
+// Delete single historical project — admin only (shared table, no tenant_id)
 router.delete('/:id', async (req, res, next) => {
   try {
+    if (req.user.role !== 'admin' && !req.user.isPlatformAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
     const project = await HistoricalProject.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });

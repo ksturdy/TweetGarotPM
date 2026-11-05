@@ -115,7 +115,10 @@ router.get('/project/:projectId', async (req, res, next) => {
 // Stream attachment file through backend — avoids CORS issues when fetching from R2 directly
 router.get('/:id/download', async (req, res, next) => {
   try {
-    const result = await db.query('SELECT * FROM attachments WHERE id = $1', [req.params.id]);
+    const result = await db.query(
+      'SELECT a.* FROM attachments a JOIN users u ON u.id = a.uploaded_by WHERE a.id = $1 AND u.tenant_id = $2',
+      [req.params.id, req.tenantId]
+    );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Attachment not found' });
 
     const att = result.rows[0];
@@ -133,10 +136,16 @@ router.get('/:id/download', async (req, res, next) => {
       ? att.filename
       : path.join(__dirname, '../../', att.filename);
 
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+    const uploadRoot = path.resolve(path.join(__dirname, '../../uploads'));
+    const resolvedPath = path.resolve(filePath);
+    if (!resolvedPath.startsWith(uploadRoot + path.sep) && resolvedPath !== uploadRoot) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (!fs.existsSync(resolvedPath)) return res.status(404).json({ error: 'File not found' });
 
     res.setHeader('Content-Disposition', `attachment; filename="${att.original_name}"`);
-    res.sendFile(filePath);
+    res.sendFile(resolvedPath);
   } catch (error) {
     next(error);
   }
@@ -145,7 +154,10 @@ router.get('/:id/download', async (req, res, next) => {
 // Get single attachment by ID with URL — must be before /:entityType/:entityId to avoid shadowing
 router.get('/id/:id', async (req, res, next) => {
   try {
-    const result = await db.query('SELECT * FROM attachments WHERE id = $1', [req.params.id]);
+    const result = await db.query(
+      'SELECT a.* FROM attachments a JOIN users u ON u.id = a.uploaded_by WHERE a.id = $1 AND u.tenant_id = $2',
+      [req.params.id, req.tenantId]
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Attachment not found' });
     }
@@ -215,7 +227,10 @@ router.post('/:entityType/:entityId', upload.single('file'), async (req, res, ne
 // Delete attachment
 router.delete('/:id', async (req, res, next) => {
   try {
-    const result = await db.query('SELECT * FROM attachments WHERE id = $1', [req.params.id]);
+    const result = await db.query(
+      'SELECT a.* FROM attachments a JOIN users u ON u.id = a.uploaded_by WHERE a.id = $1 AND u.tenant_id = $2',
+      [req.params.id, req.tenantId]
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Attachment not found' });
     }

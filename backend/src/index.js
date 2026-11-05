@@ -182,7 +182,7 @@ const corsOptions = {
       callback(null, true);
     } else {
       console.warn('CORS blocked origin:', origin);
-      callback(null, true); // Allow anyway but log it
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,

@@ -32,7 +32,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-// Update user - verify belongs to same tenant
+// Update user - verify belongs to same tenant; only admins may change role/hr_access/is_active
 router.put('/:id', async (req, res, next) => {
   try {
     // First verify the user belongs to the same tenant
@@ -41,7 +41,18 @@ router.put('/:id', async (req, res, next) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const { email, first_name, last_name, role, hr_access, is_active } = req.body;
+    const isAdmin = req.user.role === 'admin';
+    const { email, first_name, last_name } = req.body;
+
+    // Non-admins cannot change role, hr_access, or is_active
+    if (!isAdmin && (req.body.role !== undefined || req.body.hr_access !== undefined || req.body.is_active !== undefined)) {
+      return res.status(403).json({ error: 'Admin access required to change role or account status' });
+    }
+
+    const role = isAdmin ? req.body.role : existingUser.role;
+    const hr_access = isAdmin ? req.body.hr_access : existingUser.hr_access;
+    const is_active = isAdmin ? req.body.is_active : existingUser.is_active;
+
     const user = await User.update(req.params.id, {
       email,
       firstName: first_name,
