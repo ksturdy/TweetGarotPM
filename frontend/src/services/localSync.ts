@@ -50,6 +50,17 @@ export async function checkHandlePermission(handle: FileSystemDirectoryHandle): 
   }
 }
 
+// Must be called from a user gesture (button click). Shows a small browser permission
+// prompt instead of the full folder picker when the handle was saved from a previous session.
+export async function requestHandlePermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
+  try {
+    const perm = await (handle as any).requestPermission({ mode: 'readwrite' });
+    return perm === 'granted';
+  } catch {
+    return false;
+  }
+}
+
 // ── Core types ───────────────────────────────────────────────────────
 
 export interface ProjectAttachment {

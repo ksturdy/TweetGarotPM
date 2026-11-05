@@ -6,6 +6,7 @@ import {
   saveHandle,
   loadHandle,
   checkHandlePermission,
+  requestHandlePermission,
 } from '../services/localSync';
 
 export type SyncState = 'idle' | 'syncing' | 'done' | 'error';
@@ -22,16 +23,16 @@ export function useLocalSync(projectId: number, projectName: string) {
   const supported = isFileSystemAccessSupported();
   const handleRef = useRef<FileSystemDirectoryHandle | null>(null);
 
-  // On mount, restore handle from IndexedDB and check if permission is still active
+  // On mount, restore handle from IndexedDB — just having it stored means the user
+  // has synced before, so we enable the auto dropdown. Permission is re-requested
+  // lazily on the next sync click (requires user gesture anyway).
   useEffect(() => {
     if (!supported) return;
     loadHandle(projectId).then(async (stored) => {
       if (!stored) return;
-      const ok = await checkHandlePermission(stored);
-      if (ok) {
-        handleRef.current = stored;
-        setHasHandle(true);
-      }
+      handleRef.current = stored;
+      setHasHandle(true);
+      // If permission is already active (same browser session), nothing extra needed
     }).catch(() => {});
   }, [projectId, supported]);
 
@@ -53,13 +54,25 @@ export function useLocalSync(projectId: number, projectName: string) {
     }
   }, [projectId, projectName]);
 
-  // Manual sync — always shows the folder picker if no handle stored
   const sync = useCallback(async () => {
     if (!supported) return;
-    await runSync(handleRef.current ?? undefined);
+
+    let handle = handleRef.current;
+
+    if (handle) {
+      // Check if permission is still active; if not, request it via a small browser
+      // prompt (requires user gesture — the button click qualifies)
+      const active = await checkHandlePermission(handle);
+      if (!active) {
+        const granted = await requestHandlePermission(handle);
+        if (!granted) handle = null; // permission denied — fall back to full folder picker
+      }
+    }
+
+    await runSync(handle ?? undefined);
   }, [supported, runSync]);
 
-  // Auto-sync timer — only fires when a handle is available and permission is still active
+  // Auto-sync timer — fires only when a handle exists and permission is still active
   useEffect(() => {
     if (!autoInterval || !supported) return;
 
@@ -67,7 +80,7 @@ export function useLocalSync(projectId: number, projectName: string) {
     const timer = setInterval(async () => {
       if (!handleRef.current) return;
       const ok = await checkHandlePermission(handleRef.current);
-      if (!ok) return;
+      if (!ok) return; // permission expired — wait for next manual sync
       if (state === 'syncing') return;
       await runSync(handleRef.current);
     }, intervalMs);
@@ -80,10 +93,5 @@ export function useLocalSync(projectId: number, projectName: string) {
     localStorage.setItem(INTERVAL_KEY(projectId), String(minutes));
   }, [projectId]);
 
-  const reset = useCallback(() => {
-    setState('idle');
-    setProgress(null);
-  }, []);
-
-  return { sync, reset, state, progress, supported, hasHandle, autoInterval, setAutoInterval };
+  return { sync, state, progress, supported, hasHandle, autoInterval, setAutoInterval };
 }

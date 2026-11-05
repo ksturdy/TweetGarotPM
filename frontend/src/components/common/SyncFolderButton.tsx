@@ -21,7 +21,7 @@ const INTERVAL_OPTIONS = [
 ];
 
 export default function SyncFolderButton({ projectId, projectName }: Props) {
-  const { sync, reset, state, progress, supported, hasHandle, autoInterval, setAutoInterval } =
+  const { sync, state, progress, supported, hasHandle, autoInterval, setAutoInterval } =
     useLocalSync(projectId, projectName);
 
   if (!supported) return null;
@@ -36,7 +36,7 @@ export default function SyncFolderButton({ projectId, projectName }: Props) {
   return (
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
       <button
-        onClick={isDone || isError ? reset : sync}
+        onClick={isActive ? undefined : sync}
         disabled={isActive}
         title={
           isDone && progress
