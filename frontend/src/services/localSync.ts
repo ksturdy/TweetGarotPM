@@ -88,7 +88,17 @@ export const isFileSystemAccessSupported = (): boolean =>
   typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
 function sanitizeName(name: string, maxLen = 60): string {
-  return name.replace(/[/\\:*?"<>|]/g, '-').substring(0, maxLen).trim();
+  return name.replace(/[/\\:*?"<>|]/g, '-').substring(0, maxLen).trim().replace(/[.\s]+$/, '');
+}
+
+// Sanitize a filename: strip invalid chars, cap the base at maxBaseLen to stay within
+// Windows MAX_PATH (260 chars). Extension is preserved as-is.
+function sanitizeFilename(name: string, maxBaseLen = 80): string {
+  const dotIdx = name.lastIndexOf('.');
+  const ext  = dotIdx > 0 ? name.substring(dotIdx)  : '';
+  const base = dotIdx > 0 ? name.substring(0, dotIdx) : name;
+  const clean = base.replace(/[/\\:*?"<>|]/g, '-').substring(0, maxBaseLen).trim().replace(/[.\s]+$/, '');
+  return clean + ext;
 }
 
 async function fileExists(dir: FileSystemDirectoryHandle, name: string): Promise<boolean> {
@@ -104,10 +114,12 @@ async function writeAttachment(
   attachment: ProjectAttachment,
   projectDir: FileSystemDirectoryHandle
 ): Promise<'written' | 'skipped'> {
-  const folderDir = await projectDir.getDirectoryHandle(attachment.folder_name, { create: true });
-  const entityDir = await folderDir.getDirectoryHandle(sanitizeName(attachment.entity_label), { create: true });
+  const folderDir  = await projectDir.getDirectoryHandle(attachment.folder_name, { create: true });
+  // Cap entity label at 25 chars — deeper levels eat into Windows MAX_PATH (260 chars)
+  const entityDir  = await folderDir.getDirectoryHandle(sanitizeName(attachment.entity_label, 25), { create: true });
+  const safeFilename = sanitizeFilename(attachment.original_name);
 
-  if (await fileExists(entityDir, attachment.original_name)) {
+  if (await fileExists(entityDir, safeFilename)) {
     return 'skipped';
   }
 
@@ -123,7 +135,7 @@ async function writeAttachment(
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
   const blob = await response.blob();
-  const fileHandle = await entityDir.getFileHandle(attachment.original_name, { create: true });
+  const fileHandle = await entityDir.getFileHandle(safeFilename, { create: true });
   const writable = await fileHandle.createWritable();
   await writable.write(blob);
   await writable.close();
@@ -144,7 +156,9 @@ export async function syncProjectToFolder(
   existingHandle?: FileSystemDirectoryHandle
 ): Promise<SyncResult> {
   const rootDir = existingHandle ?? await (window as any).showDirectoryPicker({ mode: 'readwrite' });
-  const projectDir = await rootDir.getDirectoryHandle(sanitizeName(projectName), { create: true });
+  // Keep project folder short — combined with entity label and filename, long names
+  // push total path over Windows MAX_PATH (260 chars)
+  const projectDir = await rootDir.getDirectoryHandle(sanitizeName(projectName, 30), { create: true });
 
   const { data: attachments } = await api.get<ProjectAttachment[]>(`/attachments/project/${projectId}`);
 
