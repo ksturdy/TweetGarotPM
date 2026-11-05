@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLocalSync, SyncState } from '../../hooks/useLocalSync';
 
 interface Props {
@@ -21,8 +21,7 @@ const INTERVAL_OPTIONS = [
 ];
 
 function formatSyncTime(date: Date): string {
-  const now = Date.now();
-  const diff = now - date.getTime();
+  const diff = Date.now() - date.getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
@@ -34,126 +33,189 @@ function formatSyncTime(date: Date): string {
 export default function SyncFolderButton({ projectId, projectName }: Props) {
   const { sync, changeFolder, state, progress, supported, hasHandle, lastSynced, autoInterval, setAutoInterval } =
     useLocalSync(projectId, projectName);
+  const [showErrors, setShowErrors] = useState(false);
 
   if (!supported) return null;
 
-  const isActive = state === 'syncing';
-  const isDone   = state === 'done';
-  const isError  = state === 'error';
+  const isActive  = state === 'syncing';
+  const isDone    = state === 'done';
+  const isError   = state === 'error';
+  const hasErrors = isDone && progress && progress.errors.length > 0;
 
   const borderColor = isError ? '#ef4444' : isDone ? '#10b981' : '#d1d5db';
   const textColor   = isError ? '#ef4444' : isDone ? '#10b981' : '#6b7280';
 
-  const infoLine = (() => {
-    const parts: string[] = [];
-    if (lastSynced) parts.push(`Last synced: ${formatSyncTime(lastSynced)}`);
-    if (autoInterval > 0) parts.push('auto-syncs while tab is open');
-    return parts.join(' · ');
-  })();
+  const subText = isActive && progress?.current
+    ? progress.current
+    : (() => {
+        const parts: string[] = [];
+        if (lastSynced) parts.push(`Last synced: ${formatSyncTime(lastSynced)}`);
+        if (autoInterval > 0) parts.push('auto-syncs while this tab is open');
+        return parts.join(' · ');
+      })();
 
   return (
-    <div style={{ position: 'relative', display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-      <button
-        onClick={isActive ? undefined : sync}
-        disabled={isActive}
-        title={
-          isDone && progress
-            ? `${progress.completed - progress.skipped} downloaded, ${progress.skipped} already up to date${progress.errors.length ? `, ${progress.errors.length} error(s)` : ''}`
-            : 'Download all project attachments to a local folder'
-        }
-        style={{
-          background: 'none',
-          border: `1px solid ${borderColor}`,
-          padding: '0.25rem 0.65rem',
-          borderRadius: '6px',
-          fontSize: '0.75rem',
-          color: textColor,
-          cursor: isActive ? 'default' : 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.3rem',
-          opacity: isActive ? 0.7 : 1,
-          transition: 'border-color 0.15s, color 0.15s',
-        }}
-      >
-        <span style={{ fontSize: '0.85rem' }}>
-          {isActive ? '⟳' : isDone ? '✓' : isError ? '✕' : '⤓'}
-        </span>
-        {LABELS[state]}
-        {isActive && progress && progress.total > 0 && (
-          <span style={{ color: '#94a3b8' }}>
-            ({progress.completed}/{progress.total})
-          </span>
-        )}
-      </button>
+    // position:relative + display:inline-block keeps the sub-row from affecting
+    // the parent flex alignment with the Set Goals button
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
 
-      {hasHandle && (
+        {/* Main sync button */}
         <button
-          onClick={changeFolder}
+          onClick={isActive ? undefined : sync}
           disabled={isActive}
-          title="Change sync folder"
+          title="Download all project attachments to a local folder"
           style={{
             background: 'none',
-            border: '1px solid #d1d5db',
+            border: `1px solid ${borderColor}`,
+            padding: '0.25rem 0.65rem',
             borderRadius: '6px',
-            padding: '0.22rem 0.45rem',
-            fontSize: '0.78rem',
-            color: '#6b7280',
+            fontSize: '0.75rem',
+            color: textColor,
             cursor: isActive ? 'default' : 'pointer',
-            lineHeight: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.3rem',
+            opacity: isActive ? 0.7 : 1,
+            transition: 'border-color 0.15s, color 0.15s',
           }}
         >
-          📁
+          <span style={{ fontSize: '0.85rem' }}>
+            {isActive ? '⟳' : isDone ? '✓' : isError ? '✕' : '⤓'}
+          </span>
+          {LABELS[state]}
+          {isActive && progress && progress.total > 0 && (
+            <span style={{ color: '#94a3b8' }}>
+              ({progress.completed}/{progress.total})
+            </span>
+          )}
         </button>
-      )}
 
-      <select
-        value={autoInterval}
-        onChange={(e) => setAutoInterval(Number(e.target.value))}
-        disabled={!hasHandle}
-        title={hasHandle ? 'Auto-sync interval' : 'Sync once manually first to enable auto-sync'}
-        style={{
-          border: '1px solid #d1d5db',
-          borderRadius: '6px',
-          fontSize: '0.7rem',
-          color: hasHandle ? '#6b7280' : '#94a3b8',
-          padding: '0.22rem 0.4rem',
-          background: 'none',
-          cursor: hasHandle ? 'pointer' : 'default',
-        }}
-      >
-        {INTERVAL_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+        {/* Error indicator — only shown when sync finished with errors */}
+        {hasErrors && progress && (
+          <button
+            onClick={() => setShowErrors((v) => !v)}
+            title="Show sync errors"
+            style={{
+              background: 'none',
+              border: '1px solid #f59e0b',
+              borderRadius: '6px',
+              padding: '0.22rem 0.45rem',
+              fontSize: '0.7rem',
+              color: '#f59e0b',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ⚠ {progress.errors.length} error{progress.errors.length > 1 ? 's' : ''}
+          </button>
+        )}
 
-      {isActive && progress && progress.current && (
+        {/* Change folder */}
+        {hasHandle && (
+          <button
+            onClick={changeFolder}
+            disabled={isActive}
+            title="Change sync folder"
+            style={{
+              background: 'none',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              padding: '0.22rem 0.45rem',
+              fontSize: '0.78rem',
+              color: '#6b7280',
+              cursor: isActive ? 'default' : 'pointer',
+              lineHeight: 1,
+            }}
+          >
+            📁
+          </button>
+        )}
+
+        {/* Auto-sync interval */}
+        <select
+          value={autoInterval}
+          onChange={(e) => setAutoInterval(Number(e.target.value))}
+          disabled={!hasHandle}
+          title={hasHandle ? 'Auto-sync interval (tab must stay open)' : 'Sync once manually first to enable auto-sync'}
+          style={{
+            border: '1px solid #d1d5db',
+            borderRadius: '6px',
+            fontSize: '0.7rem',
+            color: hasHandle ? '#6b7280' : '#94a3b8',
+            padding: '0.22rem 0.4rem',
+            background: 'none',
+            cursor: hasHandle ? 'pointer' : 'default',
+          }}
+        >
+          {INTERVAL_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Sub-row: last synced / auto note / current file — absolutely positioned so it
+          doesn't add height to the flex row, keeping Set Goals vertically aligned */}
+      {subText && (
         <div style={{
           position: 'absolute',
-          top: '110%',
+          top: '100%',
           right: 0,
-          background: '#1e293b',
+          marginTop: '0.15rem',
+          fontSize: '0.65rem',
           color: '#94a3b8',
-          fontSize: '0.7rem',
-          padding: '0.25rem 0.5rem',
-          borderRadius: '4px',
           whiteSpace: 'nowrap',
-          zIndex: 50,
-          maxWidth: '220px',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
+          pointerEvents: 'none',
         }}>
-          {progress.current}
+          {subText}
         </div>
       )}
-    </div>
 
-    {infoLine && (
-      <div style={{ fontSize: '0.65rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-        {infoLine}
-      </div>
-    )}
+      {/* Error list dropdown */}
+      {showErrors && progress && progress.errors.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          right: 0,
+          marginTop: '1.4rem',
+          background: '#1e293b',
+          border: '1px solid #f59e0b40',
+          borderRadius: '6px',
+          padding: '0.5rem 0.75rem',
+          zIndex: 100,
+          minWidth: '260px',
+          maxWidth: '360px',
+        }}>
+          <div style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: 600, marginBottom: '0.4rem' }}>
+            Files that failed to download
+          </div>
+          {progress.errors.map((e, i) => (
+            <div key={i} style={{
+              fontSize: '0.68rem',
+              color: '#94a3b8',
+              padding: '0.2rem 0',
+              borderTop: i > 0 ? '1px solid #334155' : 'none',
+              wordBreak: 'break-word',
+            }}>
+              {e}
+            </div>
+          ))}
+          <button
+            onClick={() => setShowErrors(false)}
+            style={{
+              marginTop: '0.5rem',
+              background: 'none',
+              border: 'none',
+              fontSize: '0.65rem',
+              color: '#64748b',
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
     </div>
   );
 }
