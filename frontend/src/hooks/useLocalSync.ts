@@ -93,5 +93,17 @@ export function useLocalSync(projectId: number, projectName: string) {
     localStorage.setItem(INTERVAL_KEY(projectId), String(minutes));
   }, [projectId]);
 
-  return { sync, state, progress, supported, hasHandle, autoInterval, setAutoInterval };
+  const changeFolder = useCallback(async () => {
+    if (!supported) return;
+    try {
+      const rootDir = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+      handleRef.current = rootDir;
+      setHasHandle(true);
+      await saveHandle(projectId, rootDir);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+    }
+  }, [supported, projectId]);
+
+  return { sync, changeFolder, state, progress, supported, hasHandle, autoInterval, setAutoInterval };
 }

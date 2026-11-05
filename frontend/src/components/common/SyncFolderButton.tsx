@@ -21,7 +21,7 @@ const INTERVAL_OPTIONS = [
 ];
 
 export default function SyncFolderButton({ projectId, projectName }: Props) {
-  const { sync, state, progress, supported, hasHandle, autoInterval, setAutoInterval } =
+  const { sync, changeFolder, state, progress, supported, hasHandle, autoInterval, setAutoInterval } =
     useLocalSync(projectId, projectName);
 
   if (!supported) return null;
@@ -68,6 +68,26 @@ export default function SyncFolderButton({ projectId, projectName }: Props) {
           </span>
         )}
       </button>
+
+      {hasHandle && (
+        <button
+          onClick={changeFolder}
+          disabled={isActive}
+          title="Change sync folder"
+          style={{
+            background: 'none',
+            border: '1px solid #d1d5db',
+            borderRadius: '6px',
+            padding: '0.22rem 0.45rem',
+            fontSize: '0.78rem',
+            color: '#6b7280',
+            cursor: isActive ? 'default' : 'pointer',
+            lineHeight: 1,
+          }}
+        >
+          📁
+        </button>
+      )}
 
       <select
         value={autoInterval}
