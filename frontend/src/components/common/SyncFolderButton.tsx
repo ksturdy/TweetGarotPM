@@ -9,24 +9,32 @@ interface Props {
 const LABELS: Record<SyncState, string> = {
   idle: 'Sync to Folder',
   syncing: 'Syncing…',
-  done: 'Sync Complete',
+  done: 'Synced',
   error: 'Sync Failed',
 };
 
+const INTERVAL_OPTIONS = [
+  { value: 0,  label: 'Auto: Off' },
+  { value: 15, label: 'Auto: 15m' },
+  { value: 30, label: 'Auto: 30m' },
+  { value: 60, label: 'Auto: 1h'  },
+];
+
 export default function SyncFolderButton({ projectId, projectName }: Props) {
-  const { sync, reset, state, progress, supported } = useLocalSync(projectId, projectName);
+  const { sync, reset, state, progress, supported, hasHandle, autoInterval, setAutoInterval } =
+    useLocalSync(projectId, projectName);
 
   if (!supported) return null;
 
   const isActive = state === 'syncing';
-  const isDone = state === 'done';
-  const isError = state === 'error';
+  const isDone   = state === 'done';
+  const isError  = state === 'error';
 
   const borderColor = isError ? '#ef4444' : isDone ? '#10b981' : '#d1d5db';
-  const textColor = isError ? '#ef4444' : isDone ? '#10b981' : '#6b7280';
+  const textColor   = isError ? '#ef4444' : isDone ? '#10b981' : '#6b7280';
 
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
+    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
       <button
         onClick={isDone || isError ? reset : sync}
         disabled={isActive}
@@ -60,6 +68,26 @@ export default function SyncFolderButton({ projectId, projectName }: Props) {
           </span>
         )}
       </button>
+
+      <select
+        value={autoInterval}
+        onChange={(e) => setAutoInterval(Number(e.target.value))}
+        disabled={!hasHandle}
+        title={hasHandle ? 'Auto-sync interval' : 'Sync once manually first to enable auto-sync'}
+        style={{
+          border: '1px solid #d1d5db',
+          borderRadius: '6px',
+          fontSize: '0.7rem',
+          color: hasHandle ? '#6b7280' : '#94a3b8',
+          padding: '0.22rem 0.4rem',
+          background: 'none',
+          cursor: hasHandle ? 'pointer' : 'default',
+        }}
+      >
+        {INTERVAL_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
 
       {isActive && progress && progress.current && (
         <div style={{

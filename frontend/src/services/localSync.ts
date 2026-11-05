@@ -8,6 +8,50 @@ function resolveUrl(url: string): string {
   return `${API_ORIGIN}${url}`;
 }
 
+// ── IndexedDB handle persistence ────────────────────────────────────
+// FileSystemDirectoryHandle can be stored in IDB and reused within a browser session.
+// Permission does NOT survive a browser restart, but queryPermission() lets us check first.
+
+function openSyncDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('titan-sync', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function saveHandle(projectId: number, handle: FileSystemDirectoryHandle): Promise<void> {
+  const db = await openSyncDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').put(handle, `project_${projectId}`);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function loadHandle(projectId: number): Promise<FileSystemDirectoryHandle | null> {
+  const db = await openSyncDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readonly');
+    const req = tx.objectStore('handles').get(`project_${projectId}`);
+    req.onsuccess = () => resolve((req.result as FileSystemDirectoryHandle) ?? null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function checkHandlePermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
+  try {
+    const perm = await (handle as any).queryPermission({ mode: 'readwrite' });
+    return perm === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+// ── Core types ───────────────────────────────────────────────────────
+
 export interface ProjectAttachment {
   id: number;
   entity_type: string;
@@ -75,13 +119,20 @@ async function writeAttachment(
   return 'written';
 }
 
+// ── Main sync function ───────────────────────────────────────────────
+
+export interface SyncResult {
+  progress: SyncProgress;
+  handle: FileSystemDirectoryHandle;
+}
+
 export async function syncProjectToFolder(
   projectId: number,
   projectName: string,
-  onProgress: (p: SyncProgress) => void
-): Promise<SyncProgress> {
-  // Prompt user to pick a root folder
-  const rootDir = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+  onProgress: (p: SyncProgress) => void,
+  existingHandle?: FileSystemDirectoryHandle
+): Promise<SyncResult> {
+  const rootDir = existingHandle ?? await (window as any).showDirectoryPicker({ mode: 'readwrite' });
   const projectDir = await rootDir.getDirectoryHandle(sanitizeName(projectName), { create: true });
 
   const { data: attachments } = await api.get<ProjectAttachment[]>(`/attachments/project/${projectId}`);
@@ -113,5 +164,5 @@ export async function syncProjectToFolder(
 
   progress.current = '';
   onProgress({ ...progress });
-  return progress;
+  return { progress, handle: rootDir };
 }
