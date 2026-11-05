@@ -13,6 +13,7 @@ import type { Project } from '../../services/projects';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
+import { CopyChartCard } from '../../components/shared/CopyChartCard';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend);
 
@@ -1360,104 +1361,92 @@ const CostTypeSchedule: React.FC<Props> = ({
 
           {/* ── Manpower chart (middle) ── */}
           {laborDatasets.length > 0 && (
-            <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Remaining Labor Resources by Month
-              </div>
-              <div style={{ height: 200, position: 'relative' }}>
-                <Line
-                  data={{
-                    labels: chartLabels,
-                    datasets: laborDatasets.map(ds => ({
-                      label: ds.label,
-                      data: ds.data,
-                      borderColor: ds.color,
-                      backgroundColor: ds.color + '18',
-                      tension: 0.4,
-                      pointRadius: 0,
-                      pointHoverRadius: 5,
-                      borderWidth: 2,
-                      fill: false,
-                    })),
-                  }}
-                  options={{
-                    maintainAspectRatio: false,
-                    responsive: true,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                      legend: {
-                        display: laborDatasets.length > 1,
-                        position: 'top',
-                        labels: { boxWidth: 12, boxHeight: 2, font: { size: 10 }, padding: 8, usePointStyle: true, pointStyleWidth: 12 },
-                      },
-                      tooltip: {
-                        callbacks: {
-                          label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers`,
-                        },
+            <CopyChartCard title="Remaining Labor Resources by Month" height={200}>
+              <Line
+                data={{
+                  labels: chartLabels,
+                  datasets: laborDatasets.map(ds => ({
+                    label: ds.label,
+                    data: ds.data,
+                    borderColor: ds.color,
+                    backgroundColor: ds.color + '18',
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    borderWidth: 2,
+                    fill: false,
+                  })),
+                }}
+                options={{
+                  maintainAspectRatio: false,
+                  responsive: true,
+                  interaction: { mode: 'index', intersect: false },
+                  plugins: {
+                    legend: {
+                      display: laborDatasets.length > 1,
+                      position: 'top',
+                      labels: { boxWidth: 12, boxHeight: 2, font: { size: 10 }, padding: 8, usePointStyle: true, pointStyleWidth: 12 },
+                    },
+                    tooltip: {
+                      callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers`,
                       },
                     },
-                    scales: {
-                      ...chartScales,
-                      y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', stepSize: 1, callback: (v) => `${v}` } },
-                    },
-                  }}
-                />
-              </div>
-            </div>
+                  },
+                  scales: {
+                    ...chartScales,
+                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', stepSize: 1, callback: (v) => `${v}` } },
+                  },
+                }}
+              />
+            </CopyChartCard>
           )}
 
           {/* ── Revenue chart ── */}
           {monthlyRevenue.some(v => v > 0) && (
-            <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                Revenue by Month
-                {gmPct === 0 && (
-                  <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-                    (set GM% on project to enable)
-                  </span>
-                )}
-              </div>
-              <div style={{ height: 200, position: 'relative' }}>
-                <Bar
-                  data={{
-                    labels: chartLabels,
-                    datasets: [{
-                      label: 'Revenue',
-                      data: monthlyRevenue,
-                      backgroundColor: '#10b981' + '70',
-                      borderColor: '#10b981',
-                      borderWidth: 1,
-                      borderRadius: 2,
-                    }],
-                  }}
-                  options={{
-                    maintainAspectRatio: false,
-                    responsive: true,
-                    plugins: {
-                      legend: { display: false },
-                      tooltip: {
-                        callbacks: {
-                          label: ctx => {
-                            const rev  = ctx.parsed.y ?? 0;
-                            const cost = monthlyTotalCost[ctx.dataIndex] ?? 0;
-                            const gm   = rev - cost;
-                            return [
-                              `Revenue: ${fmtCompact(rev)}`,
-                              `Cost:    ${fmtCompact(cost)}`,
-                              `GM$:     ${fmtCompact(gm)}`,
-                            ];
-                          },
+            <CopyChartCard
+              title={<>Revenue by Month{gmPct === 0 && <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '0.35rem' }}>(set GM% on project to enable)</span>}</>}
+              height={200}
+            >
+              <Bar
+                data={{
+                  labels: chartLabels,
+                  datasets: [{
+                    label: 'Revenue',
+                    data: monthlyRevenue,
+                    backgroundColor: '#10b981' + '70',
+                    borderColor: '#10b981',
+                    borderWidth: 1,
+                    borderRadius: 2,
+                  }],
+                }}
+                options={{
+                  maintainAspectRatio: false,
+                  responsive: true,
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      callbacks: {
+                        label: ctx => {
+                          const rev  = ctx.parsed.y ?? 0;
+                          const cost = monthlyTotalCost[ctx.dataIndex] ?? 0;
+                          const gm   = rev - cost;
+                          return [
+                            `Revenue: ${fmtCompact(rev)}`,
+                            `Cost:    ${fmtCompact(cost)}`,
+                            `GM$:     ${fmtCompact(gm)}`,
+                          ];
                         },
                       },
                     },
-                    scales: {
-                      ...chartScales,
-                      y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: (v) => fmtCompact(v as number) } },
-                    },
-                  }}
-                />
-              </div>
-            </div>
+                  },
+                  scales: {
+                    ...chartScales,
+                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: (v) => fmtCompact(v as number) } },
+                  },
+                }}
+              />
+            </CopyChartCard>
           )}
 
         </div>

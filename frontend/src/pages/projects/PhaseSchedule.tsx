@@ -14,6 +14,7 @@ import { ContourType, contourOptions, getContourMultipliers, ContourVisual } fro
 import { format, addMonths, addDays, addWeeks, addQuarters, startOfMonth, startOfWeek, startOfQuarter, getQuarter, differenceInMonths, differenceInCalendarDays, startOfDay, eachDayOfInterval, isWeekend } from 'date-fns';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Filler, Tooltip, Legend } from 'chart.js';
 import { Line, Bar, Doughnut, Chart as ReactChart } from 'react-chartjs-2';
+import { CopyChartCard } from '../../components/shared/CopyChartCard';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
@@ -5142,50 +5143,40 @@ const PhaseSchedule: React.FC = () => {
             })}
           </div>
           {/* Labor Resources by Month */}
-          <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
-            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Labor Resources by Month
-            </div>
-            <div style={{ height: 160, position: 'relative' }}>
-              <Line
-                data={{ labels: chartData.labels, datasets: SEGMENT_DEFINITIONS.filter(d => d.isLabor && chartData.headcountBySegment[d.key]?.some(v => v > 0)).map(def => ({ label: def.label, data: chartData.headcountBySegment[def.key] ?? [], borderColor: LABOR_CHART_COLORS[def.key] ?? '#6b7280', backgroundColor: (LABOR_CHART_COLORS[def.key] ?? '#6b7280') + '18', tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2, fill: false })) }}
-                options={{
-                  maintainAspectRatio: false, responsive: true,
-                  interaction: { mode: 'index', intersect: false },
-                  plugins: {
-                    legend: { display: true, position: 'top', labels: { boxWidth: 12, boxHeight: 2, font: { size: 10 }, padding: 8, usePointStyle: true, pointStyleWidth: 12 } },
-                    tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } },
-                  },
-                  scales: {
-                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
-                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b' } },
-                  },
-                }}
-              />
-            </div>
-          </div>
+          <CopyChartCard title="Labor Resources by Month" height={160}>
+            <Line
+              data={{ labels: chartData.labels, datasets: SEGMENT_DEFINITIONS.filter(d => d.isLabor && chartData.headcountBySegment[d.key]?.some(v => v > 0)).map(def => ({ label: def.label, data: chartData.headcountBySegment[def.key] ?? [], borderColor: LABOR_CHART_COLORS[def.key] ?? '#6b7280', backgroundColor: (LABOR_CHART_COLORS[def.key] ?? '#6b7280') + '18', tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2, fill: false })) }}
+              options={{
+                maintainAspectRatio: false, responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                  legend: { display: true, position: 'top', labels: { boxWidth: 12, boxHeight: 2, font: { size: 10 }, padding: 8, usePointStyle: true, pointStyleWidth: 12 } },
+                  tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } },
+                },
+                scales: {
+                  x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
+                  y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b' } },
+                },
+              }}
+            />
+          </CopyChartCard>
           {/* Revenue by Month */}
-          <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
-            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              Revenue by Month
-              {!project?.projected_revenue && (
-                <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(projected cost — add revenue to project to scale)</span>
-              )}
-            </div>
-            <div style={{ height: 160, position: 'relative' }}>
-              <Bar
-                data={{ labels: chartData.labels, datasets: [{ label: project?.projected_revenue ? 'Revenue' : 'Projected Cost', data: chartData.revenueData, backgroundColor: '#10b98170', borderColor: '#10b981', borderWidth: 1, borderRadius: 2 }] }}
-                options={{
-                  maintainAspectRatio: false, responsive: true,
-                  plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const v = ctx.parsed.y ?? 0; if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`; if (v >= 1000) return `$${Math.round(v / 1000)}K`; return `$${Math.round(v)}`; } } } },
-                  scales: {
-                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
-                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: v => { const n = Number(v); if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`; if (n >= 1000) return `$${Math.round(n / 1000)}K`; return `$${n}`; } } },
-                  },
-                }}
-              />
-            </div>
-          </div>
+          <CopyChartCard
+            title={<>Revenue by Month{!project?.projected_revenue && <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '0.35rem' }}>(projected cost — add revenue to project to scale)</span>}</>}
+            height={160}
+          >
+            <Bar
+              data={{ labels: chartData.labels, datasets: [{ label: project?.projected_revenue ? 'Revenue' : 'Projected Cost', data: chartData.revenueData, backgroundColor: '#10b98170', borderColor: '#10b981', borderWidth: 1, borderRadius: 2 }] }}
+              options={{
+                maintainAspectRatio: false, responsive: true,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const v = ctx.parsed.y ?? 0; if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`; if (v >= 1000) return `$${Math.round(v / 1000)}K`; return `$${Math.round(v)}`; } } } },
+                scales: {
+                  x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
+                  y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: v => { const n = Number(v); if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`; if (n >= 1000) return `$${Math.round(n / 1000)}K`; return `$${n}`; } } },
+                },
+              }}
+            />
+          </CopyChartCard>
         </div>
       ) : gridMode === 'billable' && chartData ? (
         <div style={{ display: 'flex', gap: '0.875rem', alignItems: 'flex-start', marginBottom: '0.6rem' }}>
@@ -5254,139 +5245,136 @@ const PhaseSchedule: React.FC = () => {
             </div>
           </div>
           {/* Monthly Billable & Margin (combined) */}
-          <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
-            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Monthly Billable &amp; Margin</div>
-            <div style={{ height: 160, position: 'relative' }}>
-              <ReactChart
-                type="bar"
-                data={{ labels: chartData.labels, datasets: [
-                  { type: 'bar' as const, label: 'Billable', data: chartData.periodBillable, backgroundColor: '#db277740', borderColor: '#db2777', borderWidth: 1, borderRadius: 2, order: 2 },
-                  { type: 'line' as const, label: 'Margin', data: chartData.marginData, borderColor: '#10b981', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.3, order: 1 },
-                ] }}
-                options={{
-                  maintainAspectRatio: false, responsive: true,
-                  plugins: { legend: { display: true, position: 'top' as const, labels: { font: { size: 9 }, boxWidth: 10, padding: 6, usePointStyle: true } }, tooltip: { mode: 'index' as const, intersect: false, callbacks: { label: (ctx: any) => { const v = ctx.parsed.y ?? 0; const lbl = ctx.dataset.label || ''; if (Math.abs(v) >= 1e6) return `${lbl}: $${(v/1e6).toFixed(1)}M`; if (Math.abs(v) >= 1e3) return `${lbl}: $${Math.round(v/1000)}K`; return `${lbl}: $${Math.round(v)}`; } } } },
-                  scales: {
-                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
-                    y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, color: '#64748b', callback: (v: any) => { const n = Number(v); if (Math.abs(n) >= 1e6) return `$${(n/1e6).toFixed(1)}M`; if (Math.abs(n) >= 1e3) return `$${Math.round(n/1000)}K`; return `$${n}`; } } },
-                  },
-                }}
-              />
-            </div>
-          </div>
+          <CopyChartCard title="Monthly Billable &amp; Margin" height={160}>
+            <ReactChart
+              type="bar"
+              data={{ labels: chartData.labels, datasets: [
+                { type: 'bar' as const, label: 'Billable', data: chartData.periodBillable, backgroundColor: '#db277740', borderColor: '#db2777', borderWidth: 1, borderRadius: 2, order: 2 },
+                { type: 'line' as const, label: 'Margin', data: chartData.marginData, borderColor: '#10b981', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.3, order: 1 },
+              ] }}
+              options={{
+                maintainAspectRatio: false, responsive: true,
+                plugins: { legend: { display: true, position: 'top' as const, labels: { font: { size: 9 }, boxWidth: 10, padding: 6, usePointStyle: true } }, tooltip: { mode: 'index' as const, intersect: false, callbacks: { label: (ctx: any) => { const v = ctx.parsed.y ?? 0; const lbl = ctx.dataset.label || ''; if (Math.abs(v) >= 1e6) return `${lbl}: $${(v/1e6).toFixed(1)}M`; if (Math.abs(v) >= 1e3) return `${lbl}: $${Math.round(v/1000)}K`; return `${lbl}: $${Math.round(v)}`; } } } },
+                scales: {
+                  x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
+                  y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, color: '#64748b', callback: (v: any) => { const n = Number(v); if (Math.abs(n) >= 1e6) return `$${(n/1e6).toFixed(1)}M`; if (Math.abs(n) >= 1e3) return `$${Math.round(n/1000)}K`; return `$${n}`; } } },
+                },
+              }}
+            />
+          </CopyChartCard>
           {/* Cumulative Billable vs Cost */}
-          <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
-            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cumulative Billable vs Cost</div>
-            <div style={{ height: 160, position: 'relative' }}>
-              <Line
-                data={{ labels: chartData.labels, datasets: [
-                  { label: 'Billable', data: chartData.cumulativeBillableTotal, borderColor: '#db2777', backgroundColor: '#db277718', fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2 },
-                  { label: 'Cost', data: chartData.cumulativeCostTotal, borderColor: '#64748b', backgroundColor: 'transparent', fill: false, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 1.5, borderDash: [5, 3] },
-                ] }}
-                options={{
-                  maintainAspectRatio: false, responsive: true,
-                  interaction: { mode: 'index', intersect: false },
-                  plugins: { legend: { display: true, position: 'top', labels: { font: { size: 9 }, boxWidth: 10, padding: 6, usePointStyle: true } }, tooltip: { callbacks: { label: ctx => { const v = ctx.parsed.y ?? 0; const lbl = ctx.dataset.label || ''; if (v >= 1e6) return `${lbl}: $${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `${lbl}: $${Math.round(v/1000)}K`; return `${lbl}: $${Math.round(v)}`; } } } },
-                  scales: {
-                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
-                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: v => { const n = Number(v); if (n >= 1e6) return `$${(n/1e6).toFixed(1)}M`; if (n >= 1e3) return `$${Math.round(n/1000)}K`; return `$${n}`; } } },
-                  },
-                }}
-              />
-            </div>
-          </div>
+          <CopyChartCard title="Cumulative Billable vs Cost" height={160}>
+            <Line
+              data={{ labels: chartData.labels, datasets: [
+                { label: 'Billable', data: chartData.cumulativeBillableTotal, borderColor: '#db2777', backgroundColor: '#db277718', fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2 },
+                { label: 'Cost', data: chartData.cumulativeCostTotal, borderColor: '#64748b', backgroundColor: 'transparent', fill: false, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 1.5, borderDash: [5, 3] },
+              ] }}
+              options={{
+                maintainAspectRatio: false, responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { display: true, position: 'top', labels: { font: { size: 9 }, boxWidth: 10, padding: 6, usePointStyle: true } }, tooltip: { callbacks: { label: ctx => { const v = ctx.parsed.y ?? 0; const lbl = ctx.dataset.label || ''; if (v >= 1e6) return `${lbl}: $${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `${lbl}: $${Math.round(v/1000)}K`; return `${lbl}: $${Math.round(v)}`; } } } },
+                scales: {
+                  x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
+                  y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: v => { const n = Number(v); if (n >= 1e6) return `$${(n/1e6).toFixed(1)}M`; if (n >= 1e3) return `$${Math.round(n/1000)}K`; return `$${n}`; } } },
+                },
+              }}
+            />
+          </CopyChartCard>
           {/* Margin by Cost Type (doughnut) */}
-          <div style={{ flex: 0.6, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
-            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Margin by Cost Type</div>
-            <div style={{ height: 160, position: 'relative' }}>
-              {(() => {
-                const entries = Object.entries(chartData.marginByCt)
-                  .map(([ct, v]) => ({ ct: Number(ct), v }))
-                  .filter(e => Math.abs(e.v) > 0.5);
-                if (entries.length === 0) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: '0.75rem' }}>No data</div>;
-                const fmtV = (v: number) => Math.abs(v) >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : Math.abs(v) >= 1e3 ? `$${Math.round(v/1000)}K` : `$${Math.round(v)}`;
-                return (
-                  <Doughnut
-                    data={{
-                      labels: entries.map(e => CT_LABELS[e.ct] || `CT${e.ct}`),
-                      datasets: [{ data: entries.map(e => Math.abs(e.v)), backgroundColor: entries.map(e => e.v >= 0 ? (CT_COLORS[e.ct] || '#64748b') + 'bb' : '#ef444488'), borderColor: entries.map(e => e.v >= 0 ? (CT_COLORS[e.ct] || '#64748b') : '#ef4444'), borderWidth: 1.5 }],
-                    }}
-                    options={{
-                      maintainAspectRatio: false, responsive: true, cutout: '60%',
-                      plugins: {
-                        legend: { display: true, position: 'right' as const, labels: { font: { size: 9 }, boxWidth: 10, padding: 4, usePointStyle: true, generateLabels: chart => chart.data.labels!.map((lbl, i) => ({ text: `${lbl}: ${fmtV(entries[i].v)}`, fillStyle: (chart.data.datasets[0].backgroundColor as string[])[i], strokeStyle: (chart.data.datasets[0].borderColor as string[])[i], lineWidth: 1.5, hidden: false, index: i })) } },
-                        tooltip: { callbacks: { label: ctx => { const e = entries[ctx.dataIndex]; return `${CT_LABELS[e.ct] || `CT${e.ct}`}: ${fmtV(e.v)}${e.v < 0 ? ' (loss)' : ''}`; } } },
-                      },
-                    }}
-                  />
-                );
-              })()}
-            </div>
-          </div>
+          <CopyChartCard title="Margin by Cost Type" height={160} flex={0.6}>
+            {(() => {
+              const entries = Object.entries(chartData.marginByCt)
+                .map(([ct, v]) => ({ ct: Number(ct), v }))
+                .filter(e => Math.abs(e.v) > 0.5);
+              if (entries.length === 0) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: '0.75rem' }}>No data</div>;
+              const fmtV = (v: number) => Math.abs(v) >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : Math.abs(v) >= 1e3 ? `$${Math.round(v/1000)}K` : `$${Math.round(v)}`;
+              return (
+                <Doughnut
+                  data={{
+                    labels: entries.map(e => CT_LABELS[e.ct] || `CT${e.ct}`),
+                    datasets: [{ data: entries.map(e => Math.abs(e.v)), backgroundColor: entries.map(e => e.v >= 0 ? (CT_COLORS[e.ct] || '#64748b') + 'bb' : '#ef444488'), borderColor: entries.map(e => e.v >= 0 ? (CT_COLORS[e.ct] || '#64748b') : '#ef4444'), borderWidth: 1.5 }],
+                  }}
+                  options={{
+                    maintainAspectRatio: false, responsive: true, cutout: '60%',
+                    plugins: {
+                      legend: { display: true, position: 'right' as const, labels: { font: { size: 9 }, boxWidth: 10, padding: 4, usePointStyle: true, generateLabels: chart => chart.data.labels!.map((lbl, i) => ({ text: `${lbl}: ${fmtV(entries[i].v)}`, fillStyle: (chart.data.datasets[0].backgroundColor as string[])[i], strokeStyle: (chart.data.datasets[0].borderColor as string[])[i], lineWidth: 1.5, hidden: false, index: i })) } },
+                      tooltip: { callbacks: { label: ctx => { const e = entries[ctx.dataIndex]; return `${CT_LABELS[e.ct] || `CT${e.ct}`}: ${fmtV(e.v)}${e.v < 0 ? ' (loss)' : ''}`; } } },
+                    },
+                  }}
+                />
+              );
+            })()}
+          </CopyChartCard>
         </div>
       ) : chartData ? (
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.6rem', alignItems: 'stretch' }}>
-          <div style={{ flex: 1, minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
-            <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Manpower (Workers)</div>
-            <div style={{ height: '110px' }}>
-              <Line
-                data={{ labels: chartData.labels, datasets: SEGMENT_DEFINITIONS.filter(d => d.isLabor && chartData.headcountBySegment[d.key]?.some(v => v > 0)).map(def => ({ label: def.label, data: chartData.headcountBySegment[def.key] ?? [], borderColor: LABOR_CHART_COLORS[def.key] ?? '#6b7280', backgroundColor: (LABOR_CHART_COLORS[def.key] ?? '#6b7280') + '18', tension: 0.4, pointRadius: 0, pointHitRadius: 8, borderWidth: 1.5, fill: false })) }}
-                options={{
-                  responsive: true, maintainAspectRatio: false,
-                  interaction: { mode: 'index', intersect: false },
-                  plugins: { legend: { display: true, position: 'top', labels: { font: { size: 7 }, boxWidth: 8, padding: 3, usePointStyle: true } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } },
-                  scales: {
-                    x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
-                    y: { ticks: { font: { size: 7 } }, grid: { color: '#f1f5f9' }, beginAtZero: true }
-                  }
-                }}
-              />
-            </div>
-          </div>
-          <div style={{ flex: 1, minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
-            <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Cashflow (Cumulative)</div>
-            <div style={{ height: '110px' }}>
-              <Line
-                data={{ labels: chartData.labels, datasets: [
-                  { label: 'Planned', data: chartData.cumulativeCost, borderColor: '#3b82f6', borderDash: [6, 3], backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 8, borderWidth: 1.5 },
-                  { label: 'Actual (JTD)', data: chartData.jtdLine, borderColor: '#10b981', backgroundColor: 'transparent', fill: false, tension: 0, pointRadius: 0, borderWidth: 1.5, spanGaps: false }
-                ] }}
-                options={{
-                  responsive: true, maintainAspectRatio: false,
-                  plugins: {
-                    legend: { display: true, position: 'top', labels: { font: { size: 7 }, boxWidth: 8, padding: 4 } },
-                    tooltip: { callbacks: { label: (ctx) => { const v = ctx.parsed.y ?? 0; const lbl = ctx.dataset.label || ''; if (v >= 1000000) return `${lbl}: $${(v / 1000000).toFixed(2)}M`; if (v >= 1000) return `${lbl}: $${(v / 1000).toFixed(0)}K`; return `${lbl}: $${v.toFixed(0)}`; } } }
-                  },
-                  scales: {
-                    x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
-                    y: { ticks: { font: { size: 7 }, callback: (v) => typeof v === 'number' ? (v >= 1000000 ? `$${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`) : v }, grid: { color: '#f1f5f9' } }
-                  }
-                }}
-              />
-            </div>
-          </div>
-          <div style={{ flex: 1, minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
-            <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Productivity Index (Labor)</div>
-            <div style={{ height: '110px' }}>
-              <Line
-                data={{ labels: chartData.labels, datasets: [
-                  { label: 'Estimated PI', data: chartData.estPiLine, borderColor: '#3b82f6', borderDash: [6, 3], backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 8, borderWidth: 1.5 },
-                  { label: 'Actual PI', data: chartData.actualPiLine, borderColor: '#10b981', backgroundColor: 'transparent', fill: false, tension: 0, pointRadius: 0, borderWidth: 2, spanGaps: false }
-                ] }}
-                options={{
-                  responsive: true, maintainAspectRatio: false,
-                  plugins: {
-                    legend: { display: true, position: 'top', labels: { font: { size: 7 }, boxWidth: 8, padding: 4 } },
-                    tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label || ''}: ${(ctx.parsed.y ?? 0).toFixed(2)} qty/hr` } }
-                  },
-                  scales: {
-                    x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
-                    y: { ticks: { font: { size: 7 }, callback: (v) => typeof v === 'number' ? v.toFixed(1) : v }, grid: { color: '#f1f5f9' }, beginAtZero: true }
-                  }
-                }}
-              />
-            </div>
-          </div>
+          <CopyChartCard
+            title="Manpower (Workers)"
+            height="110px"
+            cardStyle={{ background: 'white', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}
+            titleStyle={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', marginBottom: '0.2rem', letterSpacing: 0 }}
+          >
+            <Line
+              data={{ labels: chartData.labels, datasets: SEGMENT_DEFINITIONS.filter(d => d.isLabor && chartData.headcountBySegment[d.key]?.some(v => v > 0)).map(def => ({ label: def.label, data: chartData.headcountBySegment[def.key] ?? [], borderColor: LABOR_CHART_COLORS[def.key] ?? '#6b7280', backgroundColor: (LABOR_CHART_COLORS[def.key] ?? '#6b7280') + '18', tension: 0.4, pointRadius: 0, pointHitRadius: 8, borderWidth: 1.5, fill: false })) }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { display: true, position: 'top', labels: { font: { size: 7 }, boxWidth: 8, padding: 3, usePointStyle: true } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } },
+                scales: {
+                  x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
+                  y: { ticks: { font: { size: 7 } }, grid: { color: '#f1f5f9' }, beginAtZero: true }
+                }
+              }}
+            />
+          </CopyChartCard>
+          <CopyChartCard
+            title="Cashflow (Cumulative)"
+            height="110px"
+            cardStyle={{ background: 'white', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}
+            titleStyle={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', marginBottom: '0.2rem', letterSpacing: 0 }}
+          >
+            <Line
+              data={{ labels: chartData.labels, datasets: [
+                { label: 'Planned', data: chartData.cumulativeCost, borderColor: '#3b82f6', borderDash: [6, 3], backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 8, borderWidth: 1.5 },
+                { label: 'Actual (JTD)', data: chartData.jtdLine, borderColor: '#10b981', backgroundColor: 'transparent', fill: false, tension: 0, pointRadius: 0, borderWidth: 1.5, spanGaps: false }
+              ] }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: true, position: 'top', labels: { font: { size: 7 }, boxWidth: 8, padding: 4 } },
+                  tooltip: { callbacks: { label: (ctx) => { const v = ctx.parsed.y ?? 0; const lbl = ctx.dataset.label || ''; if (v >= 1000000) return `${lbl}: $${(v / 1000000).toFixed(2)}M`; if (v >= 1000) return `${lbl}: $${(v / 1000).toFixed(0)}K`; return `${lbl}: $${v.toFixed(0)}`; } } }
+                },
+                scales: {
+                  x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
+                  y: { ticks: { font: { size: 7 }, callback: (v) => typeof v === 'number' ? (v >= 1000000 ? `$${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`) : v }, grid: { color: '#f1f5f9' } }
+                }
+              }}
+            />
+          </CopyChartCard>
+          <CopyChartCard
+            title="Productivity Index (Labor)"
+            height="110px"
+            cardStyle={{ background: 'white', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}
+            titleStyle={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', marginBottom: '0.2rem', letterSpacing: 0 }}
+          >
+            <Line
+              data={{ labels: chartData.labels, datasets: [
+                { label: 'Estimated PI', data: chartData.estPiLine, borderColor: '#3b82f6', borderDash: [6, 3], backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 8, borderWidth: 1.5 },
+                { label: 'Actual PI', data: chartData.actualPiLine, borderColor: '#10b981', backgroundColor: 'transparent', fill: false, tension: 0, pointRadius: 0, borderWidth: 2, spanGaps: false }
+              ] }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: true, position: 'top', labels: { font: { size: 7 }, boxWidth: 8, padding: 4 } },
+                  tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label || ''}: ${(ctx.parsed.y ?? 0).toFixed(2)} qty/hr` } }
+                },
+                scales: {
+                  x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
+                  y: { ticks: { font: { size: 7 }, callback: (v) => typeof v === 'number' ? v.toFixed(1) : v }, grid: { color: '#f1f5f9' }, beginAtZero: true }
+                }
+              }}
+            />
+          </CopyChartCard>
         </div>
       ) : null}
       {/* Single horizontal toolbar: title · stats · view/mode/shift/zoom · spacer · actions */}
