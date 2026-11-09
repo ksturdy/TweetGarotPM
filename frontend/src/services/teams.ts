@@ -164,7 +164,7 @@ export const METRIC_DEFINITIONS = [
   { key: 'cash_flow_pct',      label: 'CF Positive %',       format: 'percent'  },
   { key: 'buyout_remaining',   label: 'Buyout Remaining',    format: 'currency' },
   { key: 'backlog_6mo',        label: 'Backlog 6 Mo Out',    format: 'currency' },
-  { key: 'backlog_r12',        label: 'Rolling 12 Backlog',  format: 'currency' },
+  { key: 'backlog_r12',        label: 'Backlog 12 Mo Out',   format: 'currency' },
   { key: 'swag_amount',        label: 'SWAG $',              format: 'currency' },
   { key: 'swag_pct',          label: 'SWAG %',              format: 'percent'  },
 ] as const;

@@ -1121,7 +1121,7 @@ class Team {
 
     const amount = rolling12Goal !== null ? rolling12Goal - totalBacklog - rolling12Awarded : null;
     const pct    = rolling12Goal !== null && rolling12Goal > 0 ? (amount / rolling12Goal) * 100 : null;
-    return { amount, pct, r12Backlog: totalBacklog };
+    return { amount, pct };
   }
 
   static async _computeBacklog6mo(tenantId, managerIds) {
@@ -1180,7 +1180,10 @@ class Team {
       return (!st.includes('open') && !st.includes('soft')) ? s : s + (parseFloat(c.backlog) || 0);
     }, 0));
 
-    return snapshot.backlog_6mo + nonVpBacklog;
+    return {
+      backlog6mo:  snapshot.backlog_6mo  + nonVpBacklog,
+      backlog12mo: snapshot.backlog_12mo + nonVpBacklog,
+    };
   }
 
   static _extractMetricValue(metrics, key) {
@@ -1199,10 +1202,10 @@ class Team {
         return (Number(metrics.cashFlow?.positive_count ?? 0) / total) * 100;
       },
       buyout_remaining:   () => Number(metrics.buyout?.total_buyout_remaining ?? 0),
-      backlog_6mo:        () => Number(metrics.backlog6mo ?? 0),
-      swag_amount:        () => metrics.swagAmount !== undefined ? metrics.swagAmount : null,
-      swag_pct:           () => metrics.swagPct    !== undefined ? metrics.swagPct    : null,
-      backlog_r12:        () => metrics.backlogR12 !== undefined ? metrics.backlogR12 : null,
+      backlog_6mo:        () => metrics.backlog6mo  !== undefined ? metrics.backlog6mo  : null,
+      backlog_r12:        () => metrics.backlog12mo !== undefined ? metrics.backlog12mo : null,
+      swag_amount:        () => metrics.swagAmount  !== undefined ? metrics.swagAmount  : null,
+      swag_pct:           () => metrics.swagPct     !== undefined ? metrics.swagPct     : null,
     };
     return map[key] ? map[key]() : null;
   }
@@ -1238,22 +1241,22 @@ class Team {
 
     if (memberTeamId) {
       const employeeIds = await this.getMemberEmployeeIds(memberTeamId, tenantId);
-      const [metrics, backlog6mo, swag] = await Promise.all([
+      const [metrics, backlogs, swag] = await Promise.all([
         this.getDashboardMetrics(memberTeamId, tenantId, statuses),
         this._computeBacklog6mo(tenantId, employeeIds),
         this._computeSwagAmount(memberTeamId, tenantId, employeeIds),
       ]);
-      return { ...metrics, backlog6mo, swagAmount: swag.amount, swagPct: swag.pct, backlogR12: swag.r12Backlog };
+      return { ...metrics, backlog6mo: backlogs.backlog6mo, backlog12mo: backlogs.backlog12mo, swagAmount: swag.amount, swagPct: swag.pct };
     }
 
     if (!memberId) {
       const employeeIds = await this.getMemberEmployeeIds(teamId, tenantId);
-      const [metrics, backlog6mo, swag] = await Promise.all([
+      const [metrics, backlogs, swag] = await Promise.all([
         this.getDashboardMetrics(teamId, tenantId, statuses),
         this._computeBacklog6mo(tenantId, employeeIds),
         this._computeSwagAmount(teamId, tenantId, employeeIds),
       ]);
-      return { ...metrics, backlog6mo, swagAmount: swag.amount, swagPct: swag.pct, backlogR12: swag.r12Backlog };
+      return { ...metrics, backlog6mo: backlogs.backlog6mo, backlog12mo: backlogs.backlog12mo, swagAmount: swag.amount, swagPct: swag.pct };
     }
 
     // Individual member: look up their employee_id via user_id
@@ -1331,10 +1334,10 @@ class Team {
       projects:      projects.rows[0],
       cashFlow:      cashFlow.rows[0],
       buyout:        buyout.rows[0],
-      backlog6mo,
-      swagAmount: null,
-      swagPct:    null,
-      backlogR12: null,
+      backlog6mo:  null,
+      backlog12mo: null,
+      swagAmount:  null,
+      swagPct:     null,
     };
   }
 }
