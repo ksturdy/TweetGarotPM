@@ -888,10 +888,12 @@ class Team {
     const result = await db.query(`
       SELECT tmc.*,
              u.first_name || ' ' || u.last_name as member_name,
-             t.name as member_team_name
+             t.name as member_team_name,
+             ou.first_name || ' ' || ou.last_name as owner_name
       FROM team_metric_configs tmc
       LEFT JOIN users u ON tmc.member_user_id = u.id
       LEFT JOIN teams t ON tmc.member_team_id = t.id
+      LEFT JOIN users ou ON tmc.owner_user_id = ou.id
       WHERE tmc.team_id = $1 AND tmc.tenant_id = $2
       ORDER BY tmc.display_order ASC, tmc.id ASC
     `, [teamId, tenantId]);
@@ -955,6 +957,7 @@ class Team {
     if ('label' in data) { fields.push(`label = $${fields.length + 1}`); values.push(data.label); }
     if ('member_user_id' in data) { fields.push(`member_user_id = $${fields.length + 1}`); values.push(data.member_user_id ?? null); }
     if ('member_team_id' in data) { fields.push(`member_team_id = $${fields.length + 1}`); values.push(data.member_team_id ?? null); }
+    if ('owner_user_id' in data) { fields.push(`owner_user_id = $${fields.length + 1}`); values.push(data.owner_user_id ?? null); }
     if (fields.length === 0) return null;
     values.push(configId, teamId, tenantId);
     const result = await db.query(`
@@ -1057,6 +1060,129 @@ class Team {
     return saved;
   }
 
+  static async _computeSwagAmount(teamId, tenantId, employeeIds) {
+    if (!employeeIds || employeeIds.length === 0) return null;
+
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const rolling12End = new Date(today);
+    rolling12End.setFullYear(rolling12End.getFullYear() + 1);
+
+    const [backlogRes, awardedRes, goalsRes] = await Promise.all([
+      db.query(`
+        SELECT COALESCE(SUM(backlog_val), 0) AS total_backlog
+        FROM (
+          SELECT DISTINCT ON (p.id)
+            CASE WHEN vc.id IS NOT NULL
+              THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0)
+              ELSE COALESCE(p.backlog, 0)
+            END AS backlog_val
+          FROM projects p
+          LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+          WHERE p.tenant_id = $1 AND p.manager_id = ANY($2) AND p.status = 'Open'
+          ORDER BY p.id, vc.id DESC NULLS LAST
+        ) sub
+      `, [tenantId, employeeIds]),
+
+      db.query(`
+        SELECT COALESCE(SUM(COALESCE(o.estimated_value, 0)), 0)::numeric AS total_value
+        FROM opportunities o
+        JOIN pipeline_stages ps ON o.stage_id = ps.id
+        WHERE o.tenant_id = $1
+          AND ps.name = 'Awarded'
+          AND o.awarded_status IS NULL
+          AND o.assigned_to = ANY($2)
+          AND (o.estimated_start_date IS NULL OR o.estimated_start_date <= $3)
+      `, [tenantId, employeeIds, rolling12End]),
+
+      db.query(`
+        SELECT year, revenue_goal FROM team_annual_goals
+        WHERE team_id = $1 AND tenant_id = $2 AND year IN ($3, $4)
+      `, [teamId, tenantId, currentYear, currentYear + 1]),
+    ]);
+
+    const totalBacklog    = Number(backlogRes.rows[0].total_backlog);
+    const rolling12Awarded = Number(awardedRes.rows[0].total_value);
+    const goalsByYear     = {};
+    for (const r of goalsRes.rows) goalsByYear[r.year] = r.revenue_goal !== null ? Number(r.revenue_goal) : null;
+
+    const yearEnd  = new Date(currentYear, 11, 31);
+    const daysRemCY = Math.max(0, Math.round((yearEnd        - today)                              / 86400000));
+    const daysInNY  = Math.max(0, Math.round((rolling12End   - new Date(currentYear + 1, 0, 1))   / 86400000));
+
+    const cyGoal = goalsByYear[currentYear]     ?? null;
+    const nyGoal = goalsByYear[currentYear + 1] ?? null;
+    let rolling12Goal = null;
+    if (cyGoal !== null && nyGoal !== null) {
+      rolling12Goal = Math.round((daysRemCY / 365) * cyGoal + (daysInNY / 365) * nyGoal);
+    } else if (cyGoal !== null) {
+      rolling12Goal = Math.round((daysRemCY / 365) * cyGoal);
+    }
+
+    const amount = rolling12Goal !== null ? rolling12Goal - totalBacklog - rolling12Awarded : null;
+    const pct    = rolling12Goal !== null && rolling12Goal > 0 ? (amount / rolling12Goal) * 100 : null;
+    return { amount, pct, r12Backlog: totalBacklog };
+  }
+
+  static async _computeBacklog6mo(tenantId, managerIds) {
+    if (managerIds && managerIds.length === 0) return 0;
+    const { calcBacklogSnapshot } = require('../utils/backlogFitCalculator');
+    const VistaData = require('./VistaData');
+
+    const managerFilter = managerIds ? ` AND p.manager_id = ANY($2::int[])` : '';
+    const qParams = managerIds ? [tenantId, managerIds] : [tenantId];
+
+    const [contracts, overrideRows, backlogResult, projectIdsResult] = await Promise.all([
+      VistaData.getAllContracts({ status: '' }, tenantId),
+      db.query(
+        `SELECT vc.id AS contract_id, p.override_gm_percent
+         FROM projects p
+         JOIN vp_contracts vc ON vc.linked_project_id = p.id
+         WHERE p.tenant_id = $1 AND p.override_gm_percent IS NOT NULL${managerFilter}`,
+        qParams
+      ),
+      db.query(`
+        SELECT COALESCE(SUM(
+          CASE WHEN vc.id IS NOT NULL
+            THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0)
+            ELSE p.backlog
+          END
+        ), 0)::numeric AS total_backlog
+        FROM projects p
+        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+        WHERE p.tenant_id = $1
+          AND (CASE WHEN vc.id IS NOT NULL
+               THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0)
+               ELSE p.backlog END) > 0
+          AND p.status NOT IN ('completed', 'cancelled', 'Hard-Closed')${managerFilter}
+      `, qParams),
+      managerIds
+        ? db.query(
+            `SELECT id FROM projects WHERE tenant_id = $1 AND manager_id = ANY($2::int[]) AND status NOT IN ('completed', 'cancelled', 'Hard-Closed')`,
+            [tenantId, managerIds]
+          )
+        : Promise.resolve(null),
+    ]);
+
+    const overrideMap = {};
+    for (const r of overrideRows.rows) overrideMap[r.contract_id] = parseFloat(r.override_gm_percent);
+
+    let scopedContracts = contracts;
+    if (projectIdsResult) {
+      const scopedIds = new Set(projectIdsResult.rows.map(r => r.id));
+      scopedContracts = contracts.filter(c => c.linked_project_id != null && scopedIds.has(c.linked_project_id));
+    }
+
+    const snapshot = calcBacklogSnapshot(scopedContracts, overrideMap);
+    const totalBacklog = parseFloat(backlogResult.rows[0]?.total_backlog) || 0;
+    const nonVpBacklog = Math.max(0, totalBacklog - scopedContracts.reduce((s, c) => {
+      const st = (c.status || '').toLowerCase();
+      return (!st.includes('open') && !st.includes('soft')) ? s : s + (parseFloat(c.backlog) || 0);
+    }, 0));
+
+    return snapshot.backlog_6mo + nonVpBacklog;
+  }
+
   static _extractMetricValue(metrics, key) {
     if (!metrics) return null;
     const map = {
@@ -1073,6 +1199,10 @@ class Team {
         return (Number(metrics.cashFlow?.positive_count ?? 0) / total) * 100;
       },
       buyout_remaining:   () => Number(metrics.buyout?.total_buyout_remaining ?? 0),
+      backlog_6mo:        () => Number(metrics.backlog6mo ?? 0),
+      swag_amount:        () => metrics.swagAmount !== undefined ? metrics.swagAmount : null,
+      swag_pct:           () => metrics.swagPct    !== undefined ? metrics.swagPct    : null,
+      backlog_r12:        () => metrics.backlogR12 !== undefined ? metrics.backlogR12 : null,
     };
     return map[key] ? map[key]() : null;
   }
@@ -1107,13 +1237,23 @@ class Team {
     const statuses = ['Open'];
 
     if (memberTeamId) {
-      // Sub-team aggregate: delegate to the sub-team's getDashboardMetrics
-      return this.getDashboardMetrics(memberTeamId, tenantId, statuses);
+      const employeeIds = await this.getMemberEmployeeIds(memberTeamId, tenantId);
+      const [metrics, backlog6mo, swag] = await Promise.all([
+        this.getDashboardMetrics(memberTeamId, tenantId, statuses),
+        this._computeBacklog6mo(tenantId, employeeIds),
+        this._computeSwagAmount(memberTeamId, tenantId, employeeIds),
+      ]);
+      return { ...metrics, backlog6mo, swagAmount: swag.amount, swagPct: swag.pct, backlogR12: swag.r12Backlog };
     }
 
     if (!memberId) {
-      // Whole parent team
-      return this.getDashboardMetrics(teamId, tenantId, statuses);
+      const employeeIds = await this.getMemberEmployeeIds(teamId, tenantId);
+      const [metrics, backlog6mo, swag] = await Promise.all([
+        this.getDashboardMetrics(teamId, tenantId, statuses),
+        this._computeBacklog6mo(tenantId, employeeIds),
+        this._computeSwagAmount(teamId, tenantId, employeeIds),
+      ]);
+      return { ...metrics, backlog6mo, swagAmount: swag.amount, swagPct: swag.pct, backlogR12: swag.r12Backlog };
     }
 
     // Individual member: look up their employee_id via user_id
@@ -1130,7 +1270,7 @@ class Team {
     const { employee_id } = memberInfo.rows[0];
     const employeeIds = [employee_id];
 
-    const [opps, projects, cashFlow, buyout] = await Promise.all([
+    const [opps, projects, cashFlow, buyout, backlog6mo] = await Promise.all([
       db.query(`
         SELECT
           COUNT(*) as total,
@@ -1181,7 +1321,9 @@ class Team {
             )
           GROUP BY p.id
         ) agg
-      `, [tenantId, employeeIds])
+      `, [tenantId, employeeIds]),
+
+      this._computeBacklog6mo(tenantId, employeeIds),
     ]);
 
     return {
@@ -1189,6 +1331,10 @@ class Team {
       projects:      projects.rows[0],
       cashFlow:      cashFlow.rows[0],
       buyout:        buyout.rows[0],
+      backlog6mo,
+      swagAmount: null,
+      swagPct:    null,
+      backlogR12: null,
     };
   }
 }

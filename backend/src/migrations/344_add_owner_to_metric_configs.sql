@@ -1,0 +1,2 @@
+ALTER TABLE team_metric_configs
+  ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;

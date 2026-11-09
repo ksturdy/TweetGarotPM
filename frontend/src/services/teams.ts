@@ -163,6 +163,10 @@ export const METRIC_DEFINITIONS = [
   { key: 'cash_flow',          label: 'Cash Flow',           format: 'currency' },
   { key: 'cash_flow_pct',      label: 'CF Positive %',       format: 'percent'  },
   { key: 'buyout_remaining',   label: 'Buyout Remaining',    format: 'currency' },
+  { key: 'backlog_6mo',        label: 'Backlog 6 Mo Out',    format: 'currency' },
+  { key: 'backlog_r12',        label: 'Rolling 12 Backlog',  format: 'currency' },
+  { key: 'swag_amount',        label: 'SWAG $',              format: 'currency' },
+  { key: 'swag_pct',          label: 'SWAG %',              format: 'percent'  },
 ] as const;
 
 export type MetricKey = typeof METRIC_DEFINITIONS[number]['key'];
@@ -180,6 +184,8 @@ export interface TeamMetricConfig {
   lower_is_better: boolean;
   member_name: string | null;
   member_team_name: string | null;
+  owner_user_id: number | null;
+  owner_name: string | null;
   created_at: string;
 }
 
@@ -299,7 +305,7 @@ export const teamsApi = {
   addMetricConfig: (id: number, data: TeamMetricConfigInput) =>
     api.post<{ data: TeamMetricConfig }>(`/teams/${id}/metric-configs`, data),
 
-  updateMetricConfig: (id: number, configId: number, data: { goal?: number | null; lower_is_better?: boolean; label?: string; member_user_id?: number | null; member_team_id?: number | null }) =>
+  updateMetricConfig: (id: number, configId: number, data: { goal?: number | null; lower_is_better?: boolean; label?: string; member_user_id?: number | null; member_team_id?: number | null; owner_user_id?: number | null }) =>
     api.patch<{ data: TeamMetricConfig }>(`/teams/${id}/metric-configs/${configId}`, data),
 
   deleteMetricConfig: (id: number, configId: number) =>

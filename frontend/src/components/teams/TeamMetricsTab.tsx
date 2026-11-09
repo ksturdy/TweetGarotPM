@@ -90,7 +90,7 @@ function getScopeLabel(cfg: TeamMetricConfig): string {
   return 'All Team';
 }
 
-type GroupMode = 'none' | 'member' | 'metric';
+type GroupMode = 'none' | 'owner' | 'metric';
 type SortDir = 'none' | 'asc' | 'desc';
 
 function computeTrend(values: (number | null)[]): { direction: 'up' | 'down' | 'flat' | 'none'; pct: number | null } {
@@ -275,7 +275,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       metric_key: metricKey,
       label: `${memberLabel} – ${def.label}`,
       display_order: configs.length,
-      lower_is_better: metricKey === 'buyout_remaining',
+      lower_is_better: metricKey === 'buyout_remaining' || metricKey === 'swag_amount' || metricKey === 'swag_pct',
     });
   };
 
@@ -416,7 +416,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Default View</div>
           <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Group rows by default when opening this tab.</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            {(['none', 'member', 'metric'] as GroupMode[]).map(mode => (
+            {(['none', 'owner', 'metric'] as GroupMode[]).map(mode => (
               <button
                 key={mode}
                 onClick={() => onGroupModeChange(mode)}
@@ -428,7 +428,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
                 }}
               >
-                {mode === 'none' ? 'None' : mode === 'member' ? 'By Member' : 'By Metric'}
+                {mode === 'none' ? 'None' : mode === 'owner' ? 'By Owner' : 'By Metric'}
               </button>
             ))}
           </div>
@@ -491,7 +491,7 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
   const [showSettings, setShowSettings] = useState(false);
   const groupModeKey = `team-metrics-group-${teamId}`;
   const [groupMode, setGroupModeState] = useState<GroupMode>(
-    () => (localStorage.getItem(groupModeKey) as GroupMode | null) ?? 'member'
+    () => (localStorage.getItem(groupModeKey) as GroupMode | null) ?? 'owner'
   );
   const setGroupMode = (mode: GroupMode) => {
     setGroupModeState(mode);
@@ -538,6 +538,22 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
     staleTime: 5 * 60 * 1000,
   });
   const allTeams: Team[] = allTeamsRes ?? [];
+
+  const ownerOptions = useMemo(() => [
+    { value: '', label: '— Unassigned —', user_id: null as number | null },
+    ...members
+      .filter(m => m.user_id != null)
+      .map(m => ({ value: String(m.user_id), label: `${m.first_name} ${m.last_name}`, user_id: m.user_id })),
+  ], [members]);
+
+  const ownerMutation = useMutation({
+    mutationFn: ({ configId, owner_user_id }: { configId: number; owner_user_id: number | null }) =>
+      teamsApi.updateMetricConfig(teamId, configId, { owner_user_id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-metric-configs', teamId] });
+    },
+    onError: () => toast.error('Failed to update owner'),
+  });
 
   // Inline goal editing: configId → raw string input
   const [editingGoal, setEditingGoal] = useState<{ configId: number; value: string } | null>(null);
@@ -625,10 +641,9 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
       let gKey: string;
       let gLabel: string;
       let gIsSubTeam = false;
-      if (groupMode === 'member') {
-        gKey = scopeKey(cfg.member_user_id, cfg.member_team_id);
-        gLabel = getScopeLabel(cfg);
-        gIsSubTeam = cfg.member_team_id !== null;
+      if (groupMode === 'owner') {
+        gKey = cfg.owner_user_id != null ? String(cfg.owner_user_id) : 'unassigned';
+        gLabel = cfg.owner_name ?? 'Unassigned';
       } else {
         gKey = cfg.metric_key;
         gLabel = METRIC_DEFINITIONS.find(d => d.key === cfg.metric_key)?.label ?? cfg.metric_key;
@@ -655,7 +670,7 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
         {/* Group By */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>Group by</span>
-          {(['none', 'member', 'metric'] as GroupMode[]).map(mode => (
+          {(['none', 'owner', 'metric'] as GroupMode[]).map(mode => (
             <button key={mode} onClick={() => setGroupMode(mode)} style={{
               padding: '5px 11px', borderRadius: 6, border: '1px solid',
               borderColor: groupMode === mode ? '#0f172a' : '#e2e8f0',
@@ -663,7 +678,7 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
               color: groupMode === mode ? 'white' : '#374151',
               fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
             }}>
-              {mode === 'none' ? 'None' : mode === 'member' ? 'Member' : 'Metric'}
+              {mode === 'none' ? 'None' : mode === 'owner' ? 'Owner' : 'Metric'}
             </button>
           ))}
           <span style={{ width: 1, height: 20, background: '#e2e8f0', margin: '0 4px' }} />
@@ -722,9 +737,10 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
             <thead>
               <tr style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f8fafc' }}>
                 <th style={thStyle(220, true)}>
-                  {groupMode === 'metric' ? 'Member / Team' : groupMode === 'member' ? 'Metric' : 'Metric'}
+                  {groupMode === 'metric' ? 'Owner' : 'Metric'}
                 </th>
-                <th style={{ ...thStyle(80), textAlign: 'right', background: '#fefce8', color: '#92400e' }}>Goal</th>
+                <th style={{ ...thStyle(150), textAlign: 'left' as const, position: 'sticky' as const, left: 220, zIndex: 11, background: '#f8fafc' }}>Owner</th>
+                <th style={{ ...thStyle(80), textAlign: 'right', background: '#fefce8', color: '#92400e', position: 'sticky' as const, left: 370, zIndex: 11, borderRight: '2px solid #e2e8f0' }}>Goal</th>
                 {weeks.map((w, wi) => (
                   <th key={w} style={thStyle(80)}>
                     <div style={{ fontWeight: wi === weeks.length - 1 ? 700 : 600 }}>{formatWeekStart(w)}</div>
@@ -738,22 +754,26 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
             </thead>
             <tbody>
               {groupedRows.map(group => {
-                const totalCols = weeks.length + 5; // label + goal + weeks + current + avg + trend
+                const totalCols = weeks.length + 6; // label + member + goal + weeks + current + avg + trend
                 return (
                   <React.Fragment key={group.key}>
                     {/* Group header */}
                     {group.label !== null && (
                       <tr>
                         <td colSpan={totalCols} style={{
-                          padding: '5px 12px', background: '#f1f5f9',
-                          fontWeight: 700, fontSize: '0.72rem', color: '#334155',
+                          padding: 0, background: '#f1f5f9',
                           borderTop: '2px solid #cbd5e1', borderBottom: '1px solid #e2e8f0',
-                          position: 'sticky', left: 0,
                         }}>
-                          {group.label}
-                          {group.isSubTeam && (
-                            <span style={{ marginLeft: 8, background: '#eff6ff', color: '#1d4ed8', borderRadius: 4, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 600 }}>TEAM</span>
-                          )}
+                          <div style={{
+                            position: 'sticky', left: 0, width: 'fit-content',
+                            padding: '5px 12px',
+                            fontWeight: 700, fontSize: '0.72rem', color: '#334155',
+                          }}>
+                            {group.label}
+                            {group.isSubTeam && (
+                              <span style={{ marginLeft: 8, background: '#eff6ff', color: '#1d4ed8', borderRadius: 4, padding: '1px 6px', fontSize: '0.65rem', fontWeight: 600 }}>TEAM</span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -776,10 +796,10 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
                       // Label: shorten when grouped
                       const primaryLabel = groupMode === 'metric'
                         ? getScopeLabel(cfg)
-                        : groupMode === 'member'
+                        : groupMode === 'owner'
                           ? (def?.label ?? cfg.metric_key)
                           : cfg.label;
-                      const showTeamBadge = isSubTeam && groupMode !== 'member';
+                      const showTeamBadge = isSubTeam && groupMode !== 'owner';
 
                       return (
                         <tr key={cfg.id} style={{ background: rowBg }}>
@@ -787,7 +807,7 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
                           <td style={{
                             padding: '5px 10px', borderBottom: '1px solid #f1f5f9',
                             position: 'sticky', left: 0, zIndex: 5,
-                            background: rowBg, borderRight: '2px solid #e2e8f0', minWidth: 180,
+                            background: rowBg, minWidth: 220,
                           }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <div style={{ width: 3, height: 22, borderRadius: 2, background: barColor, flexShrink: 0 }} />
@@ -800,10 +820,28 @@ const TeamMetricsTab: React.FC<TeamMetricsTabProps> = ({ teamId, members }) => {
                             </div>
                           </td>
 
+                          {/* Owner */}
+                          <td style={{ padding: '3px 6px', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap', position: 'sticky' as const, left: 220, zIndex: 5, background: rowBg, minWidth: 150, width: 150 }}>
+                            <select
+                              value={cfg.owner_user_id != null ? String(cfg.owner_user_id) : ''}
+                              onChange={e => ownerMutation.mutate({ configId: cfg.id, owner_user_id: e.target.value ? Number(e.target.value) : null })}
+                              style={{
+                                padding: '3px 6px', borderRadius: 6, border: '1px solid #e2e8f0',
+                                fontSize: '0.7rem', background: 'white', color: '#374151',
+                                cursor: 'pointer', width: '100%', maxWidth: 138,
+                              }}
+                            >
+                              {ownerOptions.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </td>
+
                           {/* Goal */}
                           <td style={{
                             padding: '3px 6px', borderBottom: '1px solid #f1f5f9',
                             textAlign: 'right', background: '#fefce8', whiteSpace: 'nowrap',
+                            position: 'sticky' as const, left: 370, zIndex: 5, borderRight: '2px solid #e2e8f0',
                           }}>
                             {editingGoal?.configId === cfg.id ? (
                               <input
