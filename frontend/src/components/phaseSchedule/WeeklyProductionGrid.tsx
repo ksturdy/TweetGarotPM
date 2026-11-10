@@ -332,7 +332,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
   const entryMap = useMemo(() => {
     const m: Record<string, number> = {};
     (data?.entries ?? []).forEach((e: WeeklyEntry) => {
-      m[`${e.phase_schedule_item_id}-${e.week_ending}`] = parseNum(e.qty_installed);
+      m[`${e.phase_schedule_item_id}-${String(e.week_ending).slice(0, 10)}`] = parseNum(e.qty_installed);
     });
     return m;
   }, [data]);
@@ -340,7 +340,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
   const snapshotMap = useMemo(() => {
     const m: Record<string, number> = {};
     (data?.snapshots ?? []).forEach((s: HourSnapshot) => {
-      m[`${s.phase_schedule_item_id}-${s.week_ending}`] = parseNum(s.jtd_hours);
+      m[`${s.phase_schedule_item_id}-${String(s.week_ending).slice(0, 10)}`] = parseNum(s.jtd_hours);
     });
     return m;
   }, [data]);
@@ -438,7 +438,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
   const snapshotCostMap = useMemo(() => {
     const m: Record<string, number> = {};
     (data?.snapshots ?? []).forEach((s: HourSnapshot) => {
-      m[`${s.phase_schedule_item_id}-${s.week_ending}`] = parseNum(s.jtd_cost);
+      m[`${s.phase_schedule_item_id}-${String(s.week_ending).slice(0, 10)}`] = parseNum(s.jtd_cost);
     });
     return m;
   }, [data]);
