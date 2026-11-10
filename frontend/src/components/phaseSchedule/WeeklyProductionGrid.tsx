@@ -325,7 +325,7 @@ export default function WeeklyProductionGrid({ projectId, projectStartDate, proj
       });
     }
     return base;
-  }, [data, hideNoQty, ctFilter, filterText, sortDir]);
+  }, [data, externalItems, hideNoQty, ctFilter, filterText, sortDir]);
 
   // ── derived data ─────────────────────────────────────────────────────────
 
