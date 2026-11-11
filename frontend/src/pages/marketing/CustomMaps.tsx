@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
@@ -112,11 +112,20 @@ const CustomMaps: React.FC = () => {
     queryFn: customMapLayerService.getAll,
   });
 
-  const { data: viewPins = [] } = useQuery({
+  const { data: viewPins = [], isLoading: pinsLoading } = useQuery({
     queryKey: ['custom-map-pins', viewLayer?.id],
     queryFn: () => customMapLayerService.getPins(viewLayer!.id),
     enabled: !!viewLayer,
   });
+
+  // Compute which states have at least one pin; undefined while loading so the mask
+  // doesn't flash all-gray before pins arrive.
+  const activePinStates = useMemo<Set<string> | undefined>(() => {
+    if (pinsLoading) return undefined;
+    const states = new Set<string>();
+    viewPins.forEach(p => { if (p.state) states.add(p.state.toUpperCase()); });
+    return states;
+  }, [viewPins, pinsLoading]);
 
   const createMutation = useMutation({
     mutationFn: (data: { name: string; pin_color: string }) => customMapLayerService.create(data),
@@ -371,10 +380,10 @@ const CustomMaps: React.FC = () => {
               key={viewLayer.id}
             >
               <TileLayer
-                attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
-                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+                attribution='Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
               />
-              <USBoundaryMask />
+              <USBoundaryMask activePinStates={activePinStates} />
               <PinMarkers pins={viewPins} color={viewLayer.pin_color} layerName={viewLayer.name} />
             </MapContainer>
           </div>

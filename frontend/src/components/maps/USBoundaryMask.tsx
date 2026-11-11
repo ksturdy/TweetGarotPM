@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -6,7 +6,26 @@ const GEOJSON_URL = 'https://raw.githubusercontent.com/PublicaMundi/MappingAPI/m
 
 let cachedGeoJSON: any = null;
 
-const USBoundaryMask: React.FC = () => {
+const STATE_NAME: Record<string, string> = {
+  AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
+  CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware', FL: 'Florida', GA: 'Georgia',
+  HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa',
+  KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland',
+  MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota', MS: 'Mississippi', MO: 'Missouri',
+  MT: 'Montana', NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey',
+  NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio',
+  OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina',
+  SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont',
+  VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
+  DC: 'District of Columbia',
+};
+
+interface Props {
+  /** State abbreviations (e.g. "WI") that have pins. When provided, states not in this set are grayed out. */
+  activePinStates?: Set<string>;
+}
+
+const USBoundaryMask: React.FC<Props> = ({ activePinStates }) => {
   const map = useMap();
   const [geoJSON, setGeoJSON] = useState<any>(cachedGeoJSON);
   const rendererRef = useRef<L.Canvas | null>(null);
@@ -22,23 +41,20 @@ const USBoundaryMask: React.FC = () => {
       .catch(err => console.error('Failed to load US boundaries:', err));
   }, []);
 
+  // Outer white mask — covers everything outside the US boundary
   useEffect(() => {
     if (!geoJSON) return;
 
-    // Set white background so areas outside tiles also show white
     map.getContainer().style.background = '#ffffff';
 
-    // Use Canvas renderer so html2canvas can capture it (SVG paths fail in html2canvas)
     if (!rendererRef.current) {
       rendererRef.current = L.canvas({ padding: 1 });
     }
 
-    // World outer ring — extend well beyond ±180 to cover wrapped tiles
     const worldOuter: L.LatLngExpression[] = [
       [-90, -360], [90, -360], [90, 360], [-90, 360],
     ];
 
-    // Collect every US state polygon boundary as a hole
     const holes: L.LatLngExpression[][] = [];
     for (const feature of geoJSON.features) {
       const { type, coordinates } = feature.geometry;
@@ -67,6 +83,58 @@ const USBoundaryMask: React.FC = () => {
     map.addLayer(mask);
     return () => { map.removeLayer(mask); };
   }, [map, geoJSON]);
+
+  // Gray overlay for states without pins (only when activePinStates is provided)
+  useEffect(() => {
+    if (!geoJSON || !activePinStates) return;
+
+    if (!rendererRef.current) {
+      rendererRef.current = L.canvas({ padding: 1 });
+    }
+
+    const activeNames = new Set<string>();
+    activePinStates.forEach(abbrev => {
+      const name = STATE_NAME[abbrev.toUpperCase()];
+      if (name) activeNames.add(name);
+    });
+
+    const grayLayers: L.Layer[] = [];
+
+    for (const feature of geoJSON.features) {
+      const stateName: string = feature.properties?.name ?? '';
+      if (activeNames.has(stateName)) continue;
+
+      const { type, coordinates } = feature.geometry;
+      const rings: L.LatLngExpression[][] = [];
+
+      if (type === 'Polygon') {
+        rings.push(
+          coordinates[0].map(([lng, lat]: [number, number]) => [lat, lng] as L.LatLngExpression)
+        );
+      } else if (type === 'MultiPolygon') {
+        for (const polygon of coordinates) {
+          rings.push(
+            polygon[0].map(([lng, lat]: [number, number]) => [lat, lng] as L.LatLngExpression)
+          );
+        }
+      }
+
+      for (const ring of rings) {
+        const grayPoly = L.polygon(ring, {
+          fillColor: '#d1d5db',
+          fillOpacity: 0.88,
+          color: '#9ca3af',
+          weight: 0.5,
+          interactive: false,
+          renderer: rendererRef.current,
+        });
+        map.addLayer(grayPoly);
+        grayLayers.push(grayPoly);
+      }
+    }
+
+    return () => { grayLayers.forEach(l => map.removeLayer(l)); };
+  }, [map, geoJSON, activePinStates]);
 
   return null;
 };
