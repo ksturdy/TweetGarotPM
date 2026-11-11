@@ -13,7 +13,7 @@ import '../../styles/SalesPipeline.css';
 
 const DEFAULT_LIMITS: Required<ResumeTemplateSectionLimits> = {
   summary_chars: 600,
-  projects: 5,
+  projects: 10,
   certifications: 6,
   skills: 12,
   languages: 4,
@@ -33,10 +33,10 @@ const DEFAULT_VISIBILITY: Required<ResumeTemplateSectionVisibility> = {
 };
 
 const SECTION_OPTIONS: { key: keyof ResumeTemplateSectionVisibility; label: string; column: 'sidebar' | 'main' }[] = [
+  { key: 'summary', label: 'Bio', column: 'sidebar' },
   { key: 'contact', label: 'Contact Info', column: 'sidebar' },
   { key: 'references', label: 'References', column: 'sidebar' },
   { key: 'hobbies', label: 'Hobbies & Interests', column: 'sidebar' },
-  { key: 'summary', label: 'About Me / Summary', column: 'main' },
   { key: 'projects', label: 'Project Experience', column: 'main' },
   { key: 'education', label: 'Education & Certifications', column: 'main' },
   { key: 'skills', label: 'Skills & Specializations', column: 'main' },
@@ -471,7 +471,7 @@ const ResumeTemplateForm: React.FC = () => {
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem' }}>
-              <LimitField label="Summary chars" value={limits.summary_chars} onChange={v => handleLimitChange('summary_chars', v)} hint="Truncates About Me text" />
+              <LimitField label="Summary chars" value={limits.summary_chars} onChange={v => handleLimitChange('summary_chars', v)} hint="Truncates Bio text" />
               <LimitField label="Projects" value={limits.projects} onChange={v => handleLimitChange('projects', v)} />
               <LimitField label="Certifications" value={limits.certifications} onChange={v => handleLimitChange('certifications', v)} />
               <LimitField label="Skills" value={limits.skills} onChange={v => handleLimitChange('skills', v)} />
@@ -583,6 +583,8 @@ const ResumeTemplateForm: React.FC = () => {
                 border: '1px solid #d1d5db',
                 overflow: 'hidden',
                 flexShrink: 0,
+                padding: 48,
+                boxSizing: 'border-box',
               } as React.CSSProperties}
             >
               <ResumeTemplatePreview template={previewTemplate} />

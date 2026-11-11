@@ -546,6 +546,7 @@ router.post('/:id/projects', async (req, res, next) => {
       description: req.body.description,
       square_footage: req.body.square_footage ? parseInt(req.body.square_footage) : null,
       location: req.body.location,
+      markets: req.body.markets || null,
       display_order: req.body.display_order !== undefined ? parseInt(req.body.display_order) : 0
     };
 
@@ -581,6 +582,7 @@ router.put('/:resumeId/projects/:projectId', async (req, res, next) => {
       description: req.body.description,
       square_footage: req.body.square_footage !== undefined ? (req.body.square_footage ? parseInt(req.body.square_footage) : null) : undefined,
       location: req.body.location,
+      markets: req.body.markets !== undefined ? (req.body.markets || null) : undefined,
       display_order: req.body.display_order !== undefined ? parseInt(req.body.display_order) : undefined
     };
 

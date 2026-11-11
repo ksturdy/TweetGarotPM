@@ -17,6 +17,7 @@ const ResumeProject = {
       description,
       square_footage,
       location,
+      markets,
       display_order = 0
     } = data;
 
@@ -24,13 +25,13 @@ const ResumeProject = {
       `INSERT INTO resume_projects (
         resume_id, tenant_id, project_id, project_name, project_role,
         customer_name, project_value, start_date, end_date, description,
-        square_footage, location, display_order
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        square_footage, location, markets, display_order
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
       [
         resume_id, tenantId, project_id, project_name, project_role,
         customer_name, project_value, start_date, end_date, description,
-        square_footage, location, display_order
+        square_footage, location, markets, display_order
       ]
     );
     return result.rows[0];
@@ -82,6 +83,7 @@ const ResumeProject = {
       description,
       square_footage,
       location,
+      markets,
       display_order
     } = data;
 
@@ -97,14 +99,15 @@ const ResumeProject = {
         description = COALESCE($8, description),
         square_footage = COALESCE($9, square_footage),
         location = COALESCE($10, location),
-        display_order = COALESCE($11, display_order),
+        markets = COALESCE($11, markets),
+        display_order = COALESCE($12, display_order),
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $12 AND tenant_id = $13
+       WHERE id = $13 AND tenant_id = $14
        RETURNING *`,
       [
         project_id, project_name, project_role, customer_name,
         project_value, start_date, end_date, description,
-        square_footage, location, display_order, id, tenantId
+        square_footage, location, markets, display_order, id, tenantId
       ]
     );
     return result.rows[0];

@@ -80,6 +80,7 @@ const ResumePreviewModal: React.FC<ResumePreviewModalProps> = ({
       .years-experience { font-size: 9pt; color: #b0b0b0; }
       .resume-sidebar-section { margin-bottom: 1.5rem; }
       .resume-sidebar-title { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 2px solid rgba(255,255,255,0.3); }
+      .sidebar-bio-text { font-size: 9pt; line-height: 1.6; color: white; margin: 0; }
 
       .contact-list { display: flex; flex-direction: column; gap: 0.35rem; }
       .contact-item { display: flex; align-items: center; gap: 0.5rem; font-size: 8.5pt; line-height: 1.3; word-break: break-word; overflow-wrap: anywhere; }
@@ -99,7 +100,7 @@ const ResumePreviewModal: React.FC<ResumePreviewModalProps> = ({
       .resume-main-content { background-color: white; padding: 2rem; }
       .resume-section { margin-bottom: 1.1rem; }
       .resume-section-title { font-size: 12pt; font-weight: bold; color: ${sidebarColor}; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 0.5rem; padding-bottom: 0.3rem; border-bottom: 3px solid ${sidebarColor}; }
-      .summary-text { font-size: 10pt; line-height: 1.6; text-align: justify; }
+      .summary-text { font-size: 9pt; line-height: 1.6; color: white; text-align: left; margin: 0; }
 
       .project-item { margin-bottom: 0.6rem; padding-bottom: 0.6rem; border-bottom: 1px solid #e0e0e0; page-break-inside: avoid; }
       .project-item:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }

@@ -37,7 +37,7 @@ function escapeHtml(str) {
 
 const DEFAULT_LIMITS = {
   summary_chars: 600,
-  projects: 5,
+  projects: 10,
   certifications: 6,
   skills: 12,
   languages: 4,
@@ -144,6 +144,15 @@ function generateResumeHtml(resume, projects = [], photoBase64 = '', template = 
   const mainSections = [];
 
   // Generate sidebar content (respects per-section visibility)
+  if (sections.summary && cappedSummary) {
+    sidebarSections.push(`
+      <div class="sidebar-section">
+        <h3 class="sidebar-title">Bio</h3>
+        <p class="sidebar-bio-text">${escapeHtml(cappedSummary)}</p>
+      </div>
+    `);
+  }
+
   if (sections.contact) {
     const contactHtml = generateContactSection(phone, email, address);
     if (contactHtml) sidebarSections.push(contactHtml);
@@ -160,14 +169,6 @@ function generateResumeHtml(resume, projects = [], photoBase64 = '', template = 
   }
 
   // Generate main content
-  if (sections.summary && cappedSummary) {
-    mainSections.push(`
-      <div class="section">
-        <h2 class="section-title">About Me</h2>
-        <p class="summary-text">${escapeHtml(cappedSummary)}</p>
-      </div>
-    `);
-  }
 
   if (sections.projects) {
     const projectsHtml = generateProjectsSection(cappedProjects);
@@ -314,6 +315,7 @@ function generateProjectsSection(projects) {
           <p class="project-client">${clientLine}</p>
           ${dateRange ? `<p class="project-dates">${dateRange}</p>` : ''}
         </div>` : ''}
+        ${proj.markets ? `<p class="project-client" style="margin-top:0.1rem">Market: ${escapeHtml(proj.markets)}</p>` : ''}
       </div>
     `;
   }).join('');
@@ -482,6 +484,13 @@ function getResumeStyles(layout = DEFAULT_LAYOUT) {
       margin-bottom: 0.75rem;
       padding-bottom: 0.5rem;
       border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .sidebar-bio-text {
+      font-size: 9pt;
+      line-height: 1.6;
+      color: white;
+      margin: 0;
     }
 
     .contact-list {

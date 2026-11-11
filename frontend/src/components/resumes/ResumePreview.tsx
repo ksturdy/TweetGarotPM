@@ -12,7 +12,7 @@ interface ResumePreviewProps {
 
 const DEFAULT_LIMITS = {
   summary_chars: 600,
-  projects: 5,
+  projects: 10,
   certifications: 6,
   skills: 12,
   languages: 4,
@@ -115,6 +115,13 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, projects, photoPr
           )}
         </div>
 
+        {visibility.summary && cappedSummary && (
+          <div className="resume-sidebar-section">
+            <h3 className="resume-sidebar-title">Bio</h3>
+            <p className="summary-text" style={{ color: 'white', textAlign: 'left', fontSize: '9pt' }}>{cappedSummary}</p>
+          </div>
+        )}
+
         {visibility.contact && (resume.phone || resume.email) && (
           <div className="resume-sidebar-section">
             <h3 className="resume-sidebar-title">Contact</h3>
@@ -167,13 +174,6 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, projects, photoPr
 
       {/* Main Content Area */}
       <div className="resume-main-content">
-        {visibility.summary && cappedSummary && (
-          <div className="resume-section">
-            <h2 className="resume-section-title">About Me</h2>
-            <p className="summary-text">{cappedSummary}</p>
-          </div>
-        )}
-
         {visibility.projects && cappedProjects.length > 0 && (
           <div className="resume-section">
             <h2 className="resume-section-title">Project Experience</h2>
@@ -198,6 +198,9 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, projects, photoPr
                         </p>
                       )}
                     </div>
+                  )}
+                  {proj.markets && (
+                    <p className="project-client" style={{ marginTop: '0.1rem' }}>Market: {proj.markets}</p>
                   )}
                 </div>
               );

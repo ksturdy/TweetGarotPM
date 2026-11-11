@@ -8,7 +8,7 @@ import {
 
 const DEFAULT_LIMITS: Required<ResumeTemplateSectionLimits> = {
   summary_chars: 600,
-  projects: 5,
+  projects: 10,
   certifications: 6,
   skills: 12,
   languages: 4,
@@ -91,6 +91,7 @@ const SAMPLE_PROJECTS = [
     project_value: 12500000,
     start_date: '2024-03-15',
     end_date: '2025-08-30',
+    markets: 'Healthcare',
     description:
       'Led mechanical scope for an 85,000 sq ft hospital expansion. Delivered 30 days ahead of schedule and $400K under budget through prefab and tight trade coordination.',
   },
@@ -102,6 +103,7 @@ const SAMPLE_PROJECTS = [
     project_value: 9800000,
     start_date: '2023-01-08',
     end_date: '2024-02-22',
+    markets: 'Industrial',
     description:
       'Process piping and HVAC for greenfield manufacturing plant. Coordinated with 6 contractors and met aggressive owner-required commissioning dates.',
   },
@@ -113,6 +115,7 @@ const SAMPLE_PROJECTS = [
     project_value: 6400000,
     start_date: '2022-05-02',
     end_date: '2022-08-19',
+    markets: 'Education',
     description:
       'Summer-window mechanical retrofit across four buildings. Phased crew loading kept all schools open for fall start.',
   },
@@ -124,6 +127,7 @@ const SAMPLE_PROJECTS = [
     project_value: 4200000,
     start_date: '2021-09-15',
     end_date: '2022-04-30',
+    markets: 'Commercial',
     description:
       'Tenant fit-out and mechanical modernization for a 12-story office tower. Maintained occupancy in floors below active work.',
   },
@@ -135,6 +139,7 @@ const SAMPLE_PROJECTS = [
     project_value: 3100000,
     start_date: '2020-11-01',
     end_date: '2021-07-12',
+    markets: 'Senior Living',
     description:
       'New construction mechanical scope for memory-care facility. Special focus on quiet operation and resident safety.',
   },
@@ -241,6 +246,12 @@ const ResumeTemplatePreview: React.FC<Props> = ({ template }) => {
           )}
         </div>
 
+        {layout.sections.summary && summary && (
+          <SidebarSection title="Bio">
+            <p style={{ fontSize: '9pt', lineHeight: 1.6, margin: 0 }}>{summary}</p>
+          </SidebarSection>
+        )}
+
         {layout.sections.contact && (
           <SidebarSection title="Contact">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
@@ -286,12 +297,6 @@ const ResumeTemplatePreview: React.FC<Props> = ({ template }) => {
 
       {/* Main content */}
       <div style={{ backgroundColor: 'white', padding: '2rem', boxSizing: 'border-box', overflow: 'hidden' }}>
-        {layout.sections.summary && summary && (
-          <MainSection title="About Me" accent={sidebarColor}>
-            <p style={{ fontSize: '10pt', lineHeight: 1.6, textAlign: 'justify', margin: 0 }}>{summary}</p>
-          </MainSection>
-        )}
-
         {layout.sections.projects && projects.length > 0 && (
           <MainSection title="Project Experience" accent={sidebarColor}>
             {projects.map((proj, idx) => (
@@ -323,6 +328,9 @@ const ResumeTemplatePreview: React.FC<Props> = ({ template }) => {
                     {formatDate(proj.start_date)} - {formatDate(proj.end_date)}
                   </p>
                 </div>
+                {proj.markets && (
+                  <p style={{ fontSize: '8.5pt', color: '#555', margin: '0.1rem 0 0' }}>Market: {proj.markets}</p>
+                )}
               </div>
             ))}
           </MainSection>

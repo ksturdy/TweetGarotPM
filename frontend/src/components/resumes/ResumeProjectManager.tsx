@@ -251,6 +251,7 @@ const ResumeProjectManager: React.FC<Props> = ({ employeeId, value, onChange, li
       description: '',
       square_footage: project.square_footage || 0,
       location: project.address || '',
+      markets: project.market || '',
       display_order: value.length,
     };
 
@@ -280,6 +281,7 @@ const ResumeProjectManager: React.FC<Props> = ({ employeeId, value, onChange, li
       description: '',
       square_footage: rec.square_footage || 0,
       location: rec.project_address || '',
+      markets: rec.market || '',
       display_order: value.length,
     };
 
@@ -461,6 +463,10 @@ const ResumeProjectManager: React.FC<Props> = ({ employeeId, value, onChange, li
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem', color: '#374151' }}>Location</label>
                   <input className="input" style={{ width: '100%' }} value={editDraft.location ?? ''} onChange={e => setEditDraft(d => ({ ...d, location: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem', color: '#374151' }}>Markets</label>
+                  <input className="input" style={{ width: '100%' }} value={editDraft.markets ?? ''} onChange={e => setEditDraft(d => ({ ...d, markets: e.target.value }))} placeholder="e.g. Healthcare, Industrial" />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem', color: '#374151' }}>Sq Footage</label>

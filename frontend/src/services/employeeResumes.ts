@@ -63,6 +63,7 @@ export interface ResumeProject {
   description?: string;
   square_footage?: number;
   location?: string;
+  markets?: string;
   display_order: number;
   created_at: string;
   updated_at: string;
