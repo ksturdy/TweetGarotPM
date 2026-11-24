@@ -1,0 +1,2 @@
+ALTER TABLE safety_team_members
+  ADD COLUMN color VARCHAR(7) NOT NULL DEFAULT '#6b7280';

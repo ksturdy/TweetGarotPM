@@ -123,6 +123,10 @@ const SafetyDashboard: React.FC = () => {
               <span className="action-icon">⚠️</span>
               Report Near-Miss
             </button>
+            <button className="action-btn action-btn-primary" onClick={() => navigate('/safety/calendar')}>
+              <span className="action-icon">📅</span>
+              Safety Calendar
+            </button>
             <button className="action-btn action-btn-primary" onClick={() => navigate('/field')}>
               <span className="action-icon">📝</span>
               Submit Safety Observation

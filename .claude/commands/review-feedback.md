@@ -115,7 +115,7 @@ node -e "require('dotenv').config(); const {Pool}=require('pg'); const p=new Poo
 
 ### Comment text guidelines
 
-- For **completed** items: summarize what was fixed, which files changed, and when it will be deployed. Be concise but specific. Example: "Fixed the board scrolling issue by overriding the `.sales-container` height constraint that was incorrectly applied from the shared SalesPipeline.css stylesheet. The Labor Board table now fills the available viewport correctly. Deployed with the next push."
+- For **completed** items: summarize what was fixed, which files changed, and when it will be deployed. Be concise but specific. Always end with: "Please allow up to 15 minutes for the fix to appear after the push." Example: "Fixed the board scrolling issue by overriding the `.sales-container` height constraint that was incorrectly applied from the shared SalesPipeline.css stylesheet. The Labor Board table now fills the available viewport correctly. Deployed with the next push — please allow up to 15 minutes for the fix to appear."
 - For **on_hold** items: explain clearly what is blocking it and what would need to happen for it to become active. Example: "This feature requires integration with the Vista ERP API endpoint that is not yet available in the development environment. Placed on hold until the Vista sync layer supports this data. Will revisit when the Vista connection is extended."
 
 ---

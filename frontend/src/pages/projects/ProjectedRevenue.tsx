@@ -480,38 +480,20 @@ const ProjectedRevenue: React.FC = () => {
     }
   }, [projectFilter, projectOptions]);
 
-  // Generate column headers (next 12 months + years until 2030)
   const columns = useMemo(() => {
     const cols: { key: string; label: string; isYear: boolean }[] = [];
     const now = startOfMonth(new Date());
-    const twelveMonthsOut = addMonths(now, 11); // Last month shown individually
-
-    // Next 12 months
+    const twelveMonthsOut = addMonths(now, 11);
     for (let i = 0; i < 12; i++) {
-      const date = addMonths(now, i);
-      cols.push({
-        key: format(date, 'yyyy-MM'),
-        label: format(date, 'MMM yy'),
-        isYear: false,
-      });
+      const d = addMonths(now, i);
+      cols.push({ key: format(d, 'yyyy-MM'), label: format(d, 'MMM yy'), isYear: false });
     }
-
-    // Years after the 12-month view, cap at 3 years out (36 months total)
-    // Include a year if ANY of its months are AFTER the 12-month individual view
     const currentYear = now.getFullYear();
-    const maxYear = currentYear + 3; // 3 years max
-    for (let year = currentYear; year <= maxYear; year++) {
-      // Check if the last month of this year (Dec) is after the 12-month view
-      const lastMonthOfYear = new Date(year, 11, 1); // Dec 1 of the year
-      if (lastMonthOfYear > twelveMonthsOut) {
-        cols.push({
-          key: String(year),
-          label: String(year),
-          isYear: true,
-        });
+    for (let year = currentYear; year <= currentYear + 3; year++) {
+      if (new Date(year, 11, 1) > twelveMonthsOut) {
+        cols.push({ key: String(year), label: String(year), isYear: true });
       }
     }
-
     return cols;
   }, []);
 
@@ -604,18 +586,26 @@ const ProjectedRevenue: React.FC = () => {
 
       const pctComplete = projectedRevenue > 0 ? (earnedRevenue / projectedRevenue) * 100 : 0;
       const pct = pctComplete / 100;
+      const autoContour = getDefaultContour(pctComplete);
+
+      // For cost-type projects: per-segment windows for composite distribution
+      type SegWindow = { sOff: number; months: number; contour: ContourType };
+      let costTypeSegWindows: SegWindow[] | null = null;
 
       if (schedMode === 'cost_type' && linkedProjId && segmentsByProject) {
         const segs: ScheduleSegment[] = segmentsByProject[linkedProjId] ?? [];
         const datedSegs = segs.filter(s => s.start_date);
         if (datedSegs.length > 0) {
-          const starts = datedSegs.map(s => Math.max(0, dateToMonthOffset(s.start_date) ?? 0));
-          const ends = datedSegs.map(s => {
+          costTypeSegWindows = datedSegs.map(s => {
+            const sOff = Math.max(0, dateToMonthOffset(s.start_date) ?? 0);
             const eOff = s.end_date ? dateToMonthOffset(s.end_date) : null;
-            return eOff != null ? eOff + 1 : Math.max(...starts) + 3;
+            const endOff = eOff != null ? eOff + 1 : sOff + 3;
+            const months = Math.max(1, Math.min(36, endOff - sOff));
+            return { sOff, months, contour: (s.contour_type as ContourType) || autoContour };
           });
-          startOffset = Math.min(...starts);
-          const endOffset = Math.max(startOffset + 1, Math.min(36, Math.max(...ends)));
+          // Overall window for display (Start/End columns, projected end date)
+          startOffset = Math.min(...costTypeSegWindows.map(w => w.sOff));
+          const endOffset = Math.max(startOffset + 1, Math.min(36, Math.max(...costTypeSegWindows.map(w => w.sOff + w.months))));
           remainingMonths = endOffset - startOffset;
         } else {
           startOffset = 0;
@@ -653,36 +643,34 @@ const ProjectedRevenue: React.FC = () => {
 
       // Generate monthly revenue projections
       const monthlyRevenue = new Map<string, number>();
-      const twelveMonthsOut = addMonths(now, 11); // Last month shown individually
 
       // Contour: locked projects always use auto-contour; summary respects user override
       const userSelectedContour = !isLocked ? selectedContours[contract.id] : undefined;
-      const autoContour = getDefaultContour(pctComplete);
       const contour = userSelectedContour || autoContour;
       const isAutoContour = !userSelectedContour;
 
-      if (backlog > 0 && remainingMonths > 0) {
-        // Get contour multipliers for distributing revenue
-        const multipliers = getContourMultipliers(remainingMonths, contour);
-        // Base monthly amount if evenly distributed
-        const baseMonthly = backlog / remainingMonths;
+      const distributeRevenue = (amount: number, sOff: number, months: number, c: ContourType) => {
+        if (amount <= 0 || months <= 0) return;
+        const mults = getContourMultipliers(months, c);
+        const base = amount / months;
+        for (let i = 0; i < months; i++) {
+          const monthDate = addMonths(now, sOff + i);
+          const rev = base * mults[i];
+          monthlyRevenue.set(format(monthDate, 'yyyy-MM'), (monthlyRevenue.get(format(monthDate, 'yyyy-MM')) || 0) + rev);
+          monthlyRevenue.set(String(monthDate.getFullYear()), (monthlyRevenue.get(String(monthDate.getFullYear())) || 0) + rev);
+        }
+      };
 
-        for (let i = 0; i < remainingMonths; i++) {
-          const monthDate = addMonths(now, startOffset + i);
-          const monthKey = format(monthDate, 'yyyy-MM');
-          const yearKey = String(monthDate.getFullYear());
-
-          // Apply contour multiplier to get weighted monthly revenue
-          const monthRevenue = baseMonthly * multipliers[i];
-
-          // Add to monthly bucket (for individual month columns)
-          monthlyRevenue.set(monthKey, (monthlyRevenue.get(monthKey) || 0) + monthRevenue);
-
-          // Only add to year bucket for months AFTER the 12-month individual view
-          // This prevents double-counting in the totals
-          if (monthDate > twelveMonthsOut) {
-            monthlyRevenue.set(yearKey, (monthlyRevenue.get(yearKey) || 0) + monthRevenue);
+      if (backlog > 0) {
+        if (costTypeSegWindows && costTypeSegWindows.length > 0) {
+          // Cost-type: distribute backlog proportionally across segments by duration
+          const totalDuration = costTypeSegWindows.reduce((s, w) => s + w.months, 0);
+          for (const { sOff, months, contour: segContour } of costTypeSegWindows) {
+            distributeRevenue(backlog * (months / totalDuration), sOff, months, segContour);
           }
+        } else if (remainingMonths > 0) {
+          // Summary / phase / fallback: single window + contour
+          distributeRevenue(backlog, startOffset, remainingMonths, contour);
         }
       }
 
@@ -752,7 +740,6 @@ const ProjectedRevenue: React.FC = () => {
     if (oppMode === 'off' || !opportunitiesWithEstimates) return [];
 
     const now = startOfMonth(new Date());
-    const twelveMonthsOut = addMonths(now, 11);
     const pursuitRules = forecastRules?.pursuitRules || defaultPursuitRules;
     const workRules = forecastRules?.workDurationRules || defaultWorkDurationRules;
 
@@ -838,9 +825,7 @@ const ProjectedRevenue: React.FC = () => {
         const yearKey = String(monthDate.getFullYear());
         const monthRevenue = baseMonthly * multipliers[i];
         monthlyRevenue.set(monthKey, (monthlyRevenue.get(monthKey) || 0) + monthRevenue);
-        if (monthDate > twelveMonthsOut) {
-          monthlyRevenue.set(yearKey, (monthlyRevenue.get(yearKey) || 0) + monthRevenue);
-        }
+        monthlyRevenue.set(yearKey, (monthlyRevenue.get(yearKey) || 0) + monthRevenue);
       }
 
       results.push({

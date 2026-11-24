@@ -146,7 +146,6 @@ const ProjectCashFlow: React.FC = () => {
     enabled: !!projectId,
   });
 
-  // Same 12-month + year column structure used across all finance tables
   const columns = useMemo(() => {
     const now = startOfMonth(new Date());
     const twelveOut = addMonths(now, 11);
@@ -185,7 +184,7 @@ const ProjectCashFlow: React.FC = () => {
         )));
 
     const now = startOfMonth(new Date());
-    const twelveOut = addMonths(now, 11);
+    const currentYear = now.getFullYear();
 
     // ── Helper: distribute a cost amount over a window ─────────────
     const distribute = (
@@ -325,7 +324,7 @@ const ProjectCashFlow: React.FC = () => {
       const yrNL: Partial<Record<NonLaborKey, number>> = {};
       for (let m = 0; m < 12; m++) {
         const md = new Date(parseInt(col.key), m, 1);
-        if (md <= twelveOut) continue;
+        if (md.getFullYear() <= currentYear) continue; // skip months already shown as individual columns
         const mk = format(md, 'yyyy-MM');
         yrRev   += monthlyRevenue.get(mk) ?? 0;
         yrLabor += monthlyLaborCost.get(mk) ?? 0;
@@ -363,7 +362,7 @@ const ProjectCashFlow: React.FC = () => {
       let yrBill = 0, yrColl = 0;
       for (let m = 0; m < 12; m++) {
         const md = new Date(parseInt(col.key), m, 1);
-        if (md <= twelveOut) continue;
+        if (md.getFullYear() <= currentYear) continue; // skip months already shown as individual columns
         const mk = format(md, 'yyyy-MM');
         yrBill += monthlyBillings.get(mk) ?? 0;
         yrColl += monthlyCollections.get(mk) ?? 0;

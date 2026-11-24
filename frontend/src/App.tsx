@@ -141,6 +141,8 @@ import Campaigns from './pages/Campaigns';
 import CampaignCreate from './pages/CampaignCreate';
 import CampaignDetail from './pages/CampaignDetail';
 import SafetyDashboard from './pages/safety/SafetyDashboard';
+import SafetyCalendar from './pages/safety/SafetyCalendar';
+import SafetyTeamSetup from './pages/safety/SafetyTeamSetup';
 import CompanyHealthReport from './pages/reports/CompanyHealthReport';
 import ExecutiveReport from './pages/reports/ExecutiveReport';
 import OpportunityProjectedRevenue from './pages/opportunities/OpportunityProjectedRevenue';
@@ -540,6 +542,8 @@ const App: React.FC = () => {
                 <Route path="/labor/nominations" element={<LaborNominations />} />
                 <Route path="/labor/employee/:id" element={<LaborEmployeeDetail />} />
                 <Route path="/safety" element={<SafetyDashboard />} />
+                <Route path="/safety/calendar" element={<SafetyCalendar />} />
+                <Route path="/safety/team" element={<SafetyTeamSetup />} />
                 <Route path="/users" element={<UserManagement />} />
                 <Route path="/roles" element={<RolesPermissions />} />
                 <Route path="/security" element={<SecuritySettings />} />

@@ -193,8 +193,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
     },
     {
       label: 'Safety',
-      path: '/safety',
       icon: <HealthAndSafetyIcon />,
+      children: [
+        { label: 'Dashboard', path: '/safety' },
+        { label: 'Calendar', path: '/safety/calendar' },
+        { label: 'Team Setup', path: '/safety/team' },
+      ],
     },
     {
       label: 'Risk Management',

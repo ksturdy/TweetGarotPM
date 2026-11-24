@@ -143,45 +143,62 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
     const projectedRevenue = parseNum(contract.projected_revenue);
     const backlog = parseNum(contract.backlog);
     const contractValue = parseNum(contract.contract_amount) || projectedRevenue;
-    const startOffset = startMonths ?? 0;
+    const pctCompletePct = projectedRevenue > 0 ? (earnedRevenue / projectedRevenue) * 100 : 0;
+    const pct = pctCompletePct / 100;
+    const autoContour = getDefaultContour(pctCompletePct);
 
+    let effectiveStartOffset: number;
     let remainingMonths = 0;
-    if (backlog > 0) {
+    let contour: ContourType;
+    let isAutoContour: boolean;
+
+    if (datesLocked && segments?.length) {
+      // Locked mode (cost_type/phase): derive from segment dates — same logic as global ProjectedRevenue page
+      const datedSegs = segments.filter(s => s.start_date);
+      if (datedSegs.length > 0) {
+        const starts = datedSegs.map(s => Math.max(0, dateToMonthOffset(s.start_date) ?? 0));
+        const ends = datedSegs.map(s => {
+          const eOff = s.end_date ? dateToMonthOffset(s.end_date) : null;
+          return eOff != null ? eOff + 1 : Math.max(...starts) + 3;
+        });
+        effectiveStartOffset = Math.min(...starts);
+        const endOffset = Math.max(effectiveStartOffset + 1, Math.min(36, Math.max(...ends)));
+        remainingMonths = endOffset - effectiveStartOffset;
+      } else {
+        effectiveStartOffset = 0;
+        remainingMonths = Math.max(1, Math.min(36, Math.ceil(defaultDurationForValue(contractValue) * (1 - pct))));
+      }
+      contour = autoContour;
+      isAutoContour = true;
+    } else {
+      // Summary mode: use user-adjusted dates from state
+      effectiveStartOffset = startMonths ?? 0;
       if (endMonths != null) {
         const endMonthsFromNow = Math.max(1, Math.min(36, endMonths));
-        remainingMonths = Math.max(1, endMonthsFromNow - startOffset + 1);
+        remainingMonths = Math.max(1, endMonthsFromNow - effectiveStartOffset);
       } else {
-        const totalDuration = defaultDurationForValue(contractValue);
-        const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
-        const monthsRemaining = Math.ceil(totalDuration * (1 - pctComplete));
-        remainingMonths = Math.max(1, Math.min(36, monthsRemaining));
+        remainingMonths = Math.max(1, Math.min(36, Math.ceil(defaultDurationForValue(contractValue) * (1 - pct))));
       }
+      contour = contourOverride || autoContour;
+      isAutoContour = !contourOverride;
     }
-
-    const pctCompletePct = projectedRevenue > 0 ? (earnedRevenue / projectedRevenue) * 100 : 0;
-    const autoContour = getDefaultContour(pctCompletePct);
-    const contour: ContourType = contourOverride || autoContour;
-    const isAutoContour = !contourOverride;
 
     const monthlyRevenue = new Map<string, number>();
     if (backlog > 0 && remainingMonths > 0) {
       const multipliers = getContourMultipliers(remainingMonths, contour);
       const baseMonthly = backlog / remainingMonths;
-      const twelveMonthsOut = addMonths(now, 11);
       for (let i = 0; i < remainingMonths; i++) {
-        const monthDate = addMonths(now, startOffset + i);
+        const monthDate = addMonths(now, effectiveStartOffset + i);
         const monthKey = format(monthDate, 'yyyy-MM');
         const yearKey = String(monthDate.getFullYear());
         const monthRevenue = baseMonthly * multipliers[i];
         monthlyRevenue.set(monthKey, (monthlyRevenue.get(monthKey) || 0) + monthRevenue);
-        if (monthDate > twelveMonthsOut) {
-          monthlyRevenue.set(yearKey, (monthlyRevenue.get(yearKey) || 0) + monthRevenue);
-        }
+        monthlyRevenue.set(yearKey, (monthlyRevenue.get(yearKey) || 0) + monthRevenue);
       }
     }
 
     return {
-      startOffset,
+      startOffset: effectiveStartOffset,
       remainingMonths,
       contour,
       isAutoContour,
@@ -190,7 +207,7 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
       backlog,
     };
   }, [contract.earned_revenue, contract.projected_revenue, contract.backlog, contract.contract_amount,
-      startMonths, endMonths, contourOverride]);
+      startMonths, endMonths, contourOverride, datesLocked, segments]);
 
   // Cost-type mode: derive revenue from total cost profile, matching Schedule page's "Revenue By Month"
   const costTypeRevenue = useMemo(() => {
@@ -271,16 +288,13 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
 
     const revMultiplier = backlogVal / totalRemCost;
     const monthlyRevenue = new Map<string, number>();
-    const twelveOut = addMonths(now, 11);
 
     monthlyTotalCost.forEach((cost, mk) => {
       const rev = cost * revMultiplier;
       monthlyRevenue.set(mk, rev);
-      const md = parseISO(mk + '-01');
-      if (md > twelveOut) {
-        const yrKey = String(md.getFullYear());
-        monthlyRevenue.set(yrKey, (monthlyRevenue.get(yrKey) ?? 0) + rev);
-      }
+      // Always accumulate year key so year columns show the full calendar year total
+      const yrKey = String(parseISO(mk + '-01').getFullYear());
+      monthlyRevenue.set(yrKey, (monthlyRevenue.get(yrKey) ?? 0) + rev);
     });
 
     // Derive effective window for display
