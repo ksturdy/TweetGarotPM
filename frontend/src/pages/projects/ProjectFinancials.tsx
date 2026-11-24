@@ -400,10 +400,11 @@ const ProjectFinancials: React.FC = () => {
       const noSplit = estH > 0 && estHField === 0 && estHShop === 0;
       const fieldFrac = estH > 0 ? (noSplit ? 1 : estHField / estH) : 1;
       const shopFrac  = estH > 0 ? (noSplit ? 0 : estHShop  / estH) : 0;
+      const remSpend = Math.max(0, projC - jtdC);
       return {
         key, remaining,
         remainingField: remaining * fieldFrac, remainingShop: remaining * shopFrac,
-        rate,
+        rate, remSpend,
       };
     });
     const totalRem = tradeHours.reduce((s, t) => s + t.remaining, 0);
@@ -1024,7 +1025,7 @@ const ProjectFinancials: React.FC = () => {
                           >
                             <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600, color, position: 'sticky', left: 0, backgroundColor: 'inherit', zIndex: 1 }}>{label}</td>
                             <td style={tdStyle}>{fmtNum(t.remaining)}</td>
-                            <td style={{ ...tdStyle, color: '#64748b' }}>{t.rate > 0 ? fmtK(t.remaining * t.rate) : '—'}</td>
+                            <td style={{ ...tdStyle, color: '#64748b' }}>{t.remSpend > 0 ? fmtK(t.remSpend) : '—'}</td>
                             {laborForecastData.columns.map(col => {
                               if (col.isYear) return <td key={col.key} style={{ ...tdStyle, background: '#fafafa', color: '#cbd5e1' }}>—</td>;
                               const segKeys = TRADE_SEGS[key] ?? [];
@@ -1062,7 +1063,7 @@ const ProjectFinancials: React.FC = () => {
                       <td style={{ ...tfStyle, textAlign: 'left', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Totals</td>
                       <td style={tfStyle}>{fmtNum(laborForecastData.totalRem)}</td>
                       <td style={{ ...tfStyle, color: '#64748b', fontWeight: 600 }}>
-                        {fmtK(laborForecastData.tradeHours.reduce((s, t) => s + t.remaining * t.rate, 0))}
+                        {fmtK(laborForecastData.tradeHours.reduce((s, t) => s + t.remSpend, 0))}
                       </td>
                       {laborForecastData.columns.map(col => {
                         if (col.isYear) return <td key={col.key} style={{ ...tfStyle, background: '#f4f6f9', color: '#cbd5e1' }}>—</td>;
@@ -1083,7 +1084,7 @@ const ProjectFinancials: React.FC = () => {
                       <td style={{ ...tfStyle, textAlign: 'left', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Proj Monthly Cost</td>
                       <td style={{ ...tfStyle, color: '#94a3b8' }}>—</td>
                       <td style={{ ...tfStyle, color: '#64748b', fontWeight: 600 }}>
-                        {fmtK(laborForecastData.tradeHours.reduce((s, t) => s + t.remaining * t.rate, 0))}
+                        {fmtK(laborForecastData.tradeHours.reduce((s, t) => s + t.remSpend, 0))}
                       </td>
                       {laborForecastData.columns.map(col => {
                         if (col.isYear) {
