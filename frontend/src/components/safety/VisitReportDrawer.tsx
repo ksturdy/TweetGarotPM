@@ -305,7 +305,7 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
                     fontSize: '10px', background: 'rgba(109,40,217,0.2)', color: '#c4b5fd',
                     borderRadius: '10px', padding: '1px 8px', fontWeight: 700,
                   }}>
-                    ↻ {visit.series_frequency === 'biweekly' ? 'every 2 wks' : visit.series_frequency} · #{visit.series_position}
+                    ↻ {visit.series_frequency} · #{visit.series_position}
                   </span>
                 )}
                 {visit.is_out_of_state && <span style={{ fontSize: '14px' }} title="Out of state">✈</span>}
@@ -498,7 +498,7 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
               {visit.series_id && (
                 <div style={{ padding: '10px 14px', background: '#f5f3ff', borderRadius: '8px', fontSize: '12px', color: '#7c3aed', border: '1px solid #ede9fe' }}>
                   ↻ Visit {visit.series_position} in a recurring series
-                  ({visit.series_frequency === 'biweekly' ? 'every 2 weeks' : visit.series_frequency}).
+                  ({visit.series_frequency}).
                   Saving will prompt you to apply changes to this visit, all future visits, or the entire series.
                 </div>
               )}
