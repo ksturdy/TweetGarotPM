@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Feedback, FeedbackComment, FeedbackFollower, UserSearchResult, feedbackService } from '../../services/feedback';
+import { Feedback, FeedbackComment, FeedbackFollower, UpdateFeedbackData, UserSearchResult, feedbackService, MODULE_OPTIONS, SUBMODULE_OPTIONS } from '../../services/feedback';
 import { attachmentsApi } from '../../services/attachments';
 import { useAuth } from '../../context/AuthContext';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './FeedbackDetail.css';
 
 interface FeedbackDetailProps {
@@ -12,6 +13,8 @@ interface FeedbackDetailProps {
   onUpdateComment?: (commentId: number, comment: string) => Promise<void>;
   onDeleteComment?: (commentId: number) => Promise<void>;
   onUpdateStatus?: (status: string) => Promise<void>;
+  onEditFeedback?: (data: UpdateFeedbackData) => Promise<void>;
+  onDeleteFeedback?: () => Promise<void>;
   onClose: () => void;
   followers?: FeedbackFollower[];
   isFollowing?: boolean;
@@ -30,6 +33,8 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
   onUpdateComment,
   onDeleteComment,
   onUpdateStatus,
+  onEditFeedback,
+  onDeleteFeedback,
   onClose,
   followers = [],
   isFollowing = false,
@@ -38,12 +43,19 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
   onRemoveFollower,
 }) => {
   const { user } = useAuth();
+  const { confirm } = useTitanFeedback();
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
   const [commentFiles, setCommentFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [isEditingFeedback, setIsEditingFeedback] = useState(false);
+  const [editDraft, setEditDraft] = useState<{
+    title: string; description: string;
+    type: Feedback['type']; priority: Feedback['priority'];
+    module: string; submodule: string;
+  }>({ title: '', description: '', type: 'enhancement', priority: 'medium', module: '', submodule: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Add-follower typeahead state
@@ -173,12 +185,51 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
 
   const handleDeleteComment = async (commentId: number) => {
     if (!onDeleteComment) return;
-    if (!window.confirm('Delete this comment?')) return;
+    const ok = await confirm({ message: 'Delete this comment?', confirmText: 'Delete', danger: true });
+    if (!ok) return;
     try {
       await onDeleteComment(commentId);
     } catch (error) {
       console.error('Error deleting comment:', error);
     }
+  };
+
+  const handleStartEditFeedback = () => {
+    setEditDraft({
+      title: feedback.title,
+      description: feedback.description,
+      type: feedback.type,
+      priority: feedback.priority,
+      module: feedback.module,
+      submodule: feedback.submodule || '',
+    });
+    setIsEditingFeedback(true);
+  };
+
+  const handleSaveEditFeedback = async () => {
+    if (!onEditFeedback || !editDraft.title.trim()) return;
+    await onEditFeedback({
+      title: editDraft.title.trim(),
+      description: editDraft.description,
+      type: editDraft.type,
+      priority: editDraft.priority,
+      module: editDraft.module,
+      submodule: editDraft.submodule || undefined,
+    });
+    setIsEditingFeedback(false);
+  };
+
+  const handleDeleteFeedback = async () => {
+    if (!onDeleteFeedback) return;
+    const ok = await confirm({
+      title: 'Delete Feedback',
+      message: 'This will permanently delete this feedback item and all its comments. This cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true,
+    });
+    if (!ok) return;
+    await onDeleteFeedback();
   };
 
   const handleStatusChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -188,6 +239,7 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
   };
 
   const isAdmin = user?.role === 'admin';
+  const canEditFeedback = user?.id === feedback.user_id || isAdmin;
 
   const canEditComment = (comment: FeedbackComment) => comment.user_id === user?.id;
   const canDeleteComment = (comment: FeedbackComment) => comment.user_id === user?.id || isAdmin;
@@ -197,22 +249,131 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
   return (
     <div className="feedback-detail">
       <div className="feedback-detail-header">
-        <button className="close-btn" onClick={onClose}>✕</button>
-        <div className="feedback-detail-title-row">
-          <span className="feedback-detail-type-icon">{getTypeIcon(feedback.type)}</span>
-          <h2>{feedback.title}</h2>
+        <div className="feedback-detail-header-actions">
+          {canEditFeedback && !isEditingFeedback && (
+            <>
+              <button className="detail-action-btn detail-action-edit" onClick={handleStartEditFeedback}>
+                Edit
+              </button>
+              {onDeleteFeedback && (
+                <button className="detail-action-btn detail-action-delete" onClick={handleDeleteFeedback}>
+                  🗑 Delete
+                </button>
+              )}
+            </>
+          )}
+          <button className="close-btn" onClick={onClose}>✕</button>
         </div>
-        <div className="feedback-detail-meta">
-          <span
-            className="feedback-detail-status"
-            style={{ backgroundColor: getStatusColor(feedback.status) }}
-          >
-            {feedback.status.replace('_', ' ')}
-          </span>
-          <span className="feedback-detail-priority priority-{feedback.priority}">
-            {feedback.priority}
-          </span>
-        </div>
+        {isEditingFeedback ? (
+          <div className="feedback-edit-form">
+            <div className="feedback-edit-row">
+              <label className="feedback-edit-label">Title</label>
+              <input
+                className="form-control"
+                value={editDraft.title}
+                onChange={e => setEditDraft(d => ({ ...d, title: e.target.value }))}
+                placeholder="Title"
+                autoFocus
+              />
+            </div>
+            <div className="feedback-edit-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div>
+                <label className="feedback-edit-label">Type</label>
+                <select
+                  className="form-control"
+                  value={editDraft.type}
+                  onChange={e => setEditDraft(d => ({ ...d, type: e.target.value as Feedback['type'] }))}
+                >
+                  <option value="bug">Bug</option>
+                  <option value="enhancement">Enhancement</option>
+                  <option value="feature_request">Feature Request</option>
+                  <option value="improvement">Improvement</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="feedback-edit-label">Priority</label>
+                <select
+                  className="form-control"
+                  value={editDraft.priority}
+                  onChange={e => setEditDraft(d => ({ ...d, priority: e.target.value as Feedback['priority'] }))}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+            </div>
+            <div className="feedback-edit-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div>
+                <label className="feedback-edit-label">Module</label>
+                <select
+                  className="form-control"
+                  value={editDraft.module}
+                  onChange={e => setEditDraft(d => ({ ...d, module: e.target.value, submodule: '' }))}
+                >
+                  <option value="">Select module…</option>
+                  {MODULE_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="feedback-edit-label">Submodule</label>
+                <select
+                  className="form-control"
+                  value={editDraft.submodule}
+                  onChange={e => setEditDraft(d => ({ ...d, submodule: e.target.value }))}
+                  disabled={!editDraft.module || !SUBMODULE_OPTIONS[editDraft.module]}
+                >
+                  <option value="">None</option>
+                  {(SUBMODULE_OPTIONS[editDraft.module] || []).map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="feedback-edit-row">
+              <label className="feedback-edit-label">Description</label>
+              <textarea
+                className="form-control"
+                value={editDraft.description}
+                onChange={e => setEditDraft(d => ({ ...d, description: e.target.value }))}
+                rows={5}
+              />
+            </div>
+            <div className="feedback-edit-actions">
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleSaveEditFeedback}
+                disabled={!editDraft.title.trim()}
+              >
+                Save
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsEditingFeedback(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="feedback-detail-title-row">
+              <span className="feedback-detail-type-icon">{getTypeIcon(feedback.type)}</span>
+              <h2>{feedback.title}</h2>
+            </div>
+            <div className="feedback-detail-meta">
+              <span
+                className="feedback-detail-status"
+                style={{ backgroundColor: getStatusColor(feedback.status) }}
+              >
+                {feedback.status.replace('_', ' ')}
+              </span>
+              <span className="feedback-detail-priority priority-{feedback.priority}">
+                {feedback.priority}
+              </span>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="feedback-detail-body">
@@ -364,10 +525,12 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
           </div>
         )}
 
-        <div className="feedback-detail-description">
-          <h3>Description</h3>
-          <p>{feedback.description}</p>
-        </div>
+        {!isEditingFeedback && (
+          <div className="feedback-detail-description">
+            <h3>Description</h3>
+            <p>{feedback.description}</p>
+          </div>
+        )}
 
         {attachments.length > 0 && (
           <div className="feedback-detail-attachments">

@@ -78,6 +78,11 @@ export interface UserSearchResult {
   email: string;
 }
 
+export interface FeedbackVoters {
+  up: { id: number; name: string }[];
+  down: { id: number; name: string }[];
+}
+
 export interface FeedbackFilters {
   status?: string;
   module?: string;
@@ -217,6 +222,11 @@ export const feedbackService = {
     const response = await api.get(`/feedback/user-search?q=${encodeURIComponent(q)}`);
     return response.data;
   },
+
+  async getVoters(id: number): Promise<FeedbackVoters> {
+    const response = await api.get(`/feedback/${id}/voters`);
+    return response.data;
+  },
 };
 
 // Module options for the feedback form — matches sidebar navigation
@@ -274,7 +284,7 @@ export const SUBMODULE_OPTIONS: Record<string, string[]> = {
   'Labor': ['Board', 'Calendar', 'Project Timeline', 'Assignments', 'Nominations'],
   'Safety': ['Safety Dashboard', 'Incidents', 'Inspections'],
   'Risk Management': ['Contract Reviews'],
-  'Marketing': ['Templates', 'Branding', 'Case Studies', 'Sell Sheets', 'Org Charts', 'Trade Shows', 'Proposals', 'Project Locations', 'Customer Comparison', 'Custom Maps', 'Market Groups', 'Media Library'],
+  'Marketing': ['Templates', 'Branding', 'Case Studies', 'Sell Sheets', 'Org Charts', 'Trade Shows', 'Proposals', 'Project Locations', 'Customer Comparison', 'Custom Maps', 'Market Groups', 'Media Library', 'Employee Resumes'],
   'Reports': ['Executive Report', 'Company Health', 'Rolling 12', 'PM Report', 'PM Workload', 'Cash Flow', 'Backlog Fit Analysis', 'Backlog Analysis', 'Weekly Sales', 'Buyout Metric', 'Scheduled Reports', 'Phase Report', 'Projections'],
   'HR': ['Employees', 'Departments', 'Locations', 'Employee Resumes'],
   'Users': ['User Management', 'Role Management', 'Permissions'],

@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { Feedback, FeedbackVote } from '../../services/feedback';
+import React, { useState, useMemo, useRef } from 'react';
+import ReactDOM from 'react-dom';
+import { Feedback, FeedbackVote, FeedbackVoters, feedbackService } from '../../services/feedback';
 import { useAuth } from '../../context/AuthContext';
 import './FeedbackList.css';
 
@@ -15,6 +16,44 @@ interface FeedbackListProps {
   selectedFeedbackId?: number;
 }
 
+interface VoterPopupState {
+  feedbackId: number;
+  type: 'up' | 'down';
+  voters: { id: number; name: string }[];
+  loading: boolean;
+  x: number;
+  y: number;
+}
+
+const VoterPopup: React.FC<{ popup: VoterPopupState }> = ({ popup }) => {
+  const { voters, loading, type, x, y } = popup;
+
+  return ReactDOM.createPortal(
+    <div
+      className="voter-popup"
+      style={{ position: 'fixed', left: x, top: y }}
+    >
+      <div className="voter-popup-arrow" />
+      <div className="voter-popup-header">
+        <span className="voter-popup-icon">{type === 'up' ? '👍' : '👎'}</span>
+        <span>{type === 'up' ? 'Liked by' : 'Disliked by'}</span>
+      </div>
+      <div className="voter-popup-body">
+        {loading ? (
+          <div className="voter-popup-empty">Loading…</div>
+        ) : voters.length === 0 ? (
+          <div className="voter-popup-empty">No votes yet</div>
+        ) : (
+          voters.map(v => (
+            <div key={v.id} className="voter-popup-item">{v.name}</div>
+          ))
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+};
+
 const FeedbackList: React.FC<FeedbackListProps> = ({
   feedbackItems,
   userVotes,
@@ -26,6 +65,34 @@ const FeedbackList: React.FC<FeedbackListProps> = ({
   const { user } = useAuth();
   const [sortCol, setSortCol] = useState<SortCol>('id');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [voterPopup, setVoterPopup] = useState<VoterPopupState | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voterCacheRef = useRef<Map<number, FeedbackVoters>>(new Map());
+
+  const handleVoteMouseEnter = (feedbackId: number, type: 'up' | 'down', e: React.MouseEvent<HTMLDivElement>) => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top - 8;
+    hoverTimerRef.current = setTimeout(async () => {
+      setVoterPopup({ feedbackId, type, voters: [], loading: true, x, y });
+      try {
+        let data = voterCacheRef.current.get(feedbackId);
+        if (!data) {
+          data = await feedbackService.getVoters(feedbackId);
+          voterCacheRef.current.set(feedbackId, data);
+        }
+        setVoterPopup({ feedbackId, type, voters: type === 'up' ? data.up : data.down, loading: false, x, y });
+      } catch {
+        setVoterPopup(null);
+      }
+    }, 250);
+  };
+
+  const handleVoteMouseLeave = () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    setVoterPopup(null);
+  };
 
   const handleSort = (col: SortCol) => {
     if (sortCol === col) {
@@ -84,8 +151,8 @@ const FeedbackList: React.FC<FeedbackListProps> = ({
   };
 
   const handleVoteClick = (feedbackId: number, voteType: 'up' | 'down') => {
+    voterCacheRef.current.delete(feedbackId);
     const currentVote = userVotes.get(feedbackId);
-
     if (currentVote?.vote_type === voteType) {
       onRemoveVote(feedbackId);
     } else {
@@ -112,6 +179,7 @@ const FeedbackList: React.FC<FeedbackListProps> = ({
 
   return (
     <div className="feedback-list">
+      {voterPopup && <VoterPopup popup={voterPopup} />}
       {feedbackItems.length === 0 ? (
         <div className="feedback-empty">
           <p>No feedback found. Be the first to submit!</p>
@@ -164,26 +232,32 @@ const FeedbackList: React.FC<FeedbackListProps> = ({
                     <span className="feedback-module">{feedback.module}</span>
                   </td>
                   <td className="col-votes">
-                    <button
-                      className={`vote-btn vote-up ${userVote?.vote_type === 'up' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleVoteClick(feedback.id, 'up');
-                      }}
-                      title="Thumbs up"
-                    >
-                      👍 <span className="vote-count">{feedback.upvotes || 0}</span>
-                    </button>
-                    <button
-                      className={`vote-btn vote-down ${userVote?.vote_type === 'down' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleVoteClick(feedback.id, 'down');
-                      }}
-                      title="Thumbs down"
-                    >
-                      👎 <span className="vote-count">{feedback.downvotes || 0}</span>
-                    </button>
+                    <div className="vote-wrap">
+                      <div
+                        className="vote-btn-wrap"
+                        onMouseEnter={(e) => handleVoteMouseEnter(feedback.id, 'up', e)}
+                        onMouseLeave={handleVoteMouseLeave}
+                      >
+                        <button
+                          className={`vote-btn vote-up ${userVote?.vote_type === 'up' ? 'active' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); handleVoteClick(feedback.id, 'up'); }}
+                        >
+                          👍 <span className="vote-count">{feedback.upvotes || 0}</span>
+                        </button>
+                      </div>
+                      <div
+                        className="vote-btn-wrap"
+                        onMouseEnter={(e) => handleVoteMouseEnter(feedback.id, 'down', e)}
+                        onMouseLeave={handleVoteMouseLeave}
+                      >
+                        <button
+                          className={`vote-btn vote-down ${userVote?.vote_type === 'down' ? 'active' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); handleVoteClick(feedback.id, 'down'); }}
+                        >
+                          👎 <span className="vote-count">{feedback.downvotes || 0}</span>
+                        </button>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               );

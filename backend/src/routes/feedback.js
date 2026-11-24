@@ -365,6 +365,26 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// GET /api/feedback/:id/voters - Get all voters grouped by vote type
+router.get('/:id/voters', async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT fv.vote_type, fv.user_id, u.first_name || ' ' || u.last_name AS name
+       FROM feedback_votes fv
+       JOIN users u ON fv.user_id = u.id
+       WHERE fv.feedback_id = $1
+       ORDER BY fv.created_at ASC`,
+      [req.params.id]
+    );
+    const up = rows.filter(r => r.vote_type === 'up').map(r => ({ id: r.user_id, name: r.name }));
+    const down = rows.filter(r => r.vote_type === 'down').map(r => ({ id: r.user_id, name: r.name }));
+    res.json({ up, down });
+  } catch (error) {
+    console.error('Error fetching voters:', error);
+    res.status(500).json({ message: 'Error fetching voters', error: error.message });
+  }
+});
+
 // GET /api/feedback/:id/vote - Get user's vote on feedback
 router.get('/:id/vote', async (req, res) => {
   try {

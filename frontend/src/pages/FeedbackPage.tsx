@@ -6,7 +6,8 @@ import {
   FeedbackVote,
   FeedbackComment,
   FeedbackFilters,
-  FeedbackKPIs
+  FeedbackKPIs,
+  UpdateFeedbackData,
 } from '../services/feedback';
 import { useAuth } from '../context/AuthContext';
 import { attachmentsApi } from '../services/attachments';
@@ -214,13 +215,45 @@ const FeedbackPage: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feedback'] });
       if (selectedFeedback) {
-        // Refresh the selected feedback
         feedbackService.getById(selectedFeedback.id).then(updated => {
           setSelectedFeedback(updated);
         });
       }
     }
   });
+
+  // Edit feedback mutation (submitter or admin)
+  const editFeedbackMutation = useMutation({
+    mutationFn: ({ feedbackId, data }: { feedbackId: number; data: UpdateFeedbackData }) =>
+      feedbackService.update(feedbackId, data),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['feedback'] });
+      queryClient.invalidateQueries({ queryKey: ['feedback-second-panel'] });
+      setSelectedFeedback(updated);
+    }
+  });
+
+  // Delete feedback mutation (submitter or admin)
+  const deleteFeedbackMutation = useMutation({
+    mutationFn: (feedbackId: number) => feedbackService.delete(feedbackId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feedback'] });
+      queryClient.invalidateQueries({ queryKey: ['feedback-second-panel'] });
+      setSelectedFeedback(null);
+    }
+  });
+
+  const handleEditFeedback = async (data: UpdateFeedbackData) => {
+    if (selectedFeedback) {
+      await editFeedbackMutation.mutateAsync({ feedbackId: selectedFeedback.id, data });
+    }
+  };
+
+  const handleDeleteFeedback = async () => {
+    if (selectedFeedback) {
+      await deleteFeedbackMutation.mutateAsync(selectedFeedback.id);
+    }
+  };
 
   const handleVote = (feedbackId: number, voteType: 'up' | 'down') => {
     voteMutation.mutate({ feedbackId, voteType });
@@ -645,6 +678,8 @@ const FeedbackPage: React.FC = () => {
               onUpdateComment={handleUpdateComment}
               onDeleteComment={handleDeleteComment}
               onUpdateStatus={isAdmin ? handleUpdateStatus : undefined}
+              onEditFeedback={handleEditFeedback}
+              onDeleteFeedback={handleDeleteFeedback}
               onClose={() => setSelectedFeedback(null)}
               followers={followersData?.followers}
               isFollowing={followersData?.isFollowing}
