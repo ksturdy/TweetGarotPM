@@ -76,7 +76,17 @@ export const ProjectSidebarItem: React.FC<Props> = React.memo(({ project, visitC
       <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '3px' }}>
         #{project.number}
         {project.department_name && <span style={{ marginLeft: '6px', color: '#9ca3af' }}>{project.department_name}</span>}
+        {(project.ship_city || project.ship_state) && (
+          <span style={{ marginLeft: '6px', color: '#9ca3af' }}>
+            · {[project.ship_city, project.ship_state?.split(/\s+/)[0]].filter(Boolean).join(', ')}
+          </span>
+        )}
       </div>
+      {project.manager_name && (
+        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
+          <span style={{ color: '#9ca3af' }}>PM:</span> {project.manager_name}
+        </div>
+      )}
       {/* Percent complete bar */}
       <div style={{ marginTop: '6px', marginBottom: '4px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#9ca3af', marginBottom: '2px' }}>

@@ -21,6 +21,7 @@ import { ProjectSidebarItem } from '../../components/safety/ProjectSidebarItem';
 import { SafetyCalendarGrid } from '../../components/safety/SafetyCalendarGrid';
 import { VisitReportDrawer } from '../../components/safety/VisitReportDrawer';
 import ConfirmModal from '../../components/common/ConfirmModal';
+import { SeriesScopeModal } from '../../components/safety/SeriesScopeModal';
 
 class LeftClickOnlyPointerSensor extends PointerSensor {
   static activators = [
@@ -44,12 +45,16 @@ const SafetyCalendar: React.FC = () => {
   );
   const [selectedVisit, setSelectedVisit] = useState<SafetyVisit | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [seriesDeleteVisit, setSeriesDeleteVisit] = useState<import('../../services/safetyVisits').SafetyVisit | null>(null);
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const [teamFilter, setTeamFilter] = useState<string>('');
   const [deptFilter, setDeptFilter] = useState<string>('');
   const [openChecked, setOpenChecked] = useState(true);
   const [softClosedChecked, setSoftClosedChecked] = useState(true);
   const [hardClosedChecked, setHardClosedChecked] = useState(false);
+  const [pctMax, setPctMax] = useState(100);
+  const [visitsMax, setVisitsMax] = useState(20);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<ActiveItem | null>(null);
 
   const sensors = useSensors(useSensor(LeftClickOnlyPointerSensor, { activationConstraint: { distance: 5 } }));
@@ -125,6 +130,17 @@ const SafetyCalendar: React.FC = () => {
     return counts;
   }, [visits]);
 
+  const maxVisitsInWindow = React.useMemo(() =>
+    Math.max(5, ...Object.values(visitCountByProject)),
+  [visitCountByProject]);
+
+  const sidebarProjects = React.useMemo(() =>
+    projects.filter(p =>
+      (p.percent_complete ?? 0) <= pctMax &&
+      (visitCountByProject[p.id] ?? 0) <= visitsMax
+    ),
+  [projects, pctMax, visitsMax, visitCountByProject]);
+
   const createMut = useMutation({
     mutationFn: (data: Parameters<typeof safetyVisitsApi.create>[0]) =>
       safetyVisitsApi.create(data).then(r => r.data),
@@ -156,6 +172,25 @@ const SafetyCalendar: React.FC = () => {
       setConfirmDeleteId(null);
     },
   });
+
+  const deleteSeriesForwardMut = useMutation({
+    mutationFn: (visitId: number) => safetyVisitsApi.deleteSeriesForward(visitId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['safety-visits'] }); setSeriesDeleteVisit(null); },
+  });
+
+  const deleteSeriesAllMut = useMutation({
+    mutationFn: (seriesId: number) => safetyVisitsApi.deleteSeries(seriesId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['safety-visits'] }); setSeriesDeleteVisit(null); },
+  });
+
+  const handleDeleteVisit = useCallback((visitId: number) => {
+    const visit = visits.find(v => v.id === visitId);
+    if (visit?.series_id) {
+      setSeriesDeleteVisit(visit);
+    } else {
+      setConfirmDeleteId(visitId);
+    }
+  }, [visits]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const id = String(event.active.id);
@@ -446,28 +481,102 @@ const SafetyCalendar: React.FC = () => {
           >
             {/* Left sidebar: project list */}
             <div style={{
-              width: '300px',
+              width: '380px',
               flexShrink: 0,
               borderRight: '1px solid #e5e7eb',
-              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
               background: '#f9fafb',
+              overflow: 'hidden',
             }}>
-              <div style={{ padding: '10px 10px 4px', fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #f3f4f6' }}>
-                Priority Queue — drag to calendar
-              </div>
-              {projects.length === 0 ? (
-                <div style={{ padding: '24px 16px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>
-                  No projects match current filters
+              {/* Collapsible filter toggle row */}
+              <button
+                onClick={() => setFiltersOpen(o => !o)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '7px 12px',
+                  border: 'none', borderBottom: '1px solid #e5e7eb',
+                  background: filtersOpen ? '#eff6ff' : '#fff',
+                  cursor: 'pointer', flexShrink: 0, textAlign: 'left',
+                  width: '100%',
+                }}
+              >
+                <span style={{ fontSize: '11px', fontWeight: 700, color: filtersOpen ? '#1d4ed8' : '#6b7280' }}>
+                  ⚙ Filters
+                </span>
+                <span style={{ fontSize: '11px', color: '#9ca3af', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  {pctMax < 100 && <span style={{ color: '#3b82f6', fontWeight: 700 }}>≤{pctMax}%</span>}
+                  {visitsMax < maxVisitsInWindow && <span style={{ color: '#f97316', fontWeight: 700 }}>≤{visitsMax} visits</span>}
+                  <span style={{ fontSize: '10px' }}>{filtersOpen ? '▲' : '▼'}</span>
+                </span>
+              </button>
+
+              {/* Expanded filter sliders */}
+              {filtersOpen && (
+                <div style={{ padding: '10px 12px 12px', borderBottom: '1px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, color: '#6b7280', marginBottom: '4px' }}>
+                        <span>% Complete ≤</span>
+                        <span style={{ color: '#374151' }}>{pctMax}%</span>
+                      </div>
+                      <input
+                        type="range" min={0} max={100} step={5} value={pctMax}
+                        onChange={e => setPctMax(Number(e.target.value))}
+                        style={{ width: '100%', accentColor: '#3b82f6', cursor: 'pointer' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#d1d5db' }}>
+                        <span>0%</span><span>100%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, color: '#6b7280', marginBottom: '4px' }}>
+                        <span>Visits ≤</span>
+                        <span style={{ color: '#374151' }}>{visitsMax >= maxVisitsInWindow ? 'Any' : visitsMax}</span>
+                      </div>
+                      <input
+                        type="range" min={0} max={maxVisitsInWindow} step={1} value={visitsMax}
+                        onChange={e => setVisitsMax(Number(e.target.value))}
+                        style={{ width: '100%', accentColor: '#f97316', cursor: 'pointer' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#d1d5db' }}>
+                        <span>0</span><span>{maxVisitsInWindow}+</span>
+                      </div>
+                    </div>
+                  </div>
+                  {(pctMax < 100 || visitsMax < maxVisitsInWindow) && (
+                    <button
+                      onClick={() => { setPctMax(100); setVisitsMax(maxVisitsInWindow); }}
+                      style={{ marginTop: '8px', fontSize: '11px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                    >
+                      Reset filters
+                    </button>
+                  )}
                 </div>
-              ) : (
-                projects.map(p => (
-                  <ProjectSidebarItem
-                    key={p.id}
-                    project={p}
-                    visitCount={visitCountByProject[p.id] ?? 0}
-                  />
-                ))
               )}
+
+              {/* Header */}
+              <div style={{ padding: '7px 10px', fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #f3f4f6', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Priority Queue — drag to calendar</span>
+                <span style={{ fontWeight: 400, color: '#9ca3af' }}>{sidebarProjects.length}</span>
+              </div>
+
+              {/* Project list */}
+              <div style={{ overflowY: 'auto', flex: 1 }}>
+                {sidebarProjects.length === 0 ? (
+                  <div style={{ padding: '24px 16px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>
+                    No projects match current filters
+                  </div>
+                ) : (
+                  sidebarProjects.map(p => (
+                    <ProjectSidebarItem
+                      key={p.id}
+                      project={p}
+                      visitCount={visitCountByProject[p.id] ?? 0}
+                    />
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Right: 6-week calendar */}
@@ -476,7 +585,7 @@ const SafetyCalendar: React.FC = () => {
               visits={filteredVisits}
               onVisitClick={setSelectedVisit}
               onResizeVisit={handleResizeVisit}
-              onDeleteVisit={setConfirmDeleteId}
+              onDeleteVisit={handleDeleteVisit}
               memberColorMap={memberColorMap}
             />
 
@@ -533,6 +642,16 @@ const SafetyCalendar: React.FC = () => {
         isPending={deleteMut.isPending}
         onConfirm={() => { if (confirmDeleteId !== null) deleteMut.mutate(confirmDeleteId); }}
         onCancel={() => setConfirmDeleteId(null)}
+      />
+
+      <SeriesScopeModal
+        isOpen={seriesDeleteVisit !== null}
+        mode="delete"
+        isPending={deleteSeriesForwardMut.isPending || deleteSeriesAllMut.isPending || deleteMut.isPending}
+        onJustThis={() => { if (seriesDeleteVisit) deleteMut.mutate(seriesDeleteVisit.id); setSeriesDeleteVisit(null); }}
+        onThisAndFuture={() => { if (seriesDeleteVisit) deleteSeriesForwardMut.mutate(seriesDeleteVisit.id); }}
+        onAll={() => { if (seriesDeleteVisit?.series_id) deleteSeriesAllMut.mutate(seriesDeleteVisit.series_id); }}
+        onCancel={() => setSeriesDeleteVisit(null)}
       />
     </div>
   );

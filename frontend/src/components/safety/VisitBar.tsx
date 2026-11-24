@@ -29,15 +29,13 @@ const STATUS_COLORS: Record<string, { bg: string; border: string; color: string 
 
 const TYPE_LABEL: Record<string, string> = { kickoff: 'K', routine: 'R', follow_up: 'F' };
 
-function getCityState(address?: string | null): string {
-  if (!address) return '';
-  const parts = address.split(',').map(p => p.trim());
-  if (parts.length >= 3) {
-    const city = parts[parts.length - 2];
-    const state = parts[parts.length - 1].split(/\s+/)[0];
-    return `${city}, ${state}`;
-  }
-  return parts.length >= 2 ? parts[parts.length - 1] : '';
+function getCityState(city?: string | null, state?: string | null): string {
+  const c = city?.trim();
+  const s = state?.trim().split(/\s+/)[0]; // strip zip from "AL 36507"
+  if (c && s) return `${c}, ${s}`;
+  if (c) return c;
+  if (s) return s;
+  return '';
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -139,7 +137,7 @@ export const VisitBar: React.FC<Props> = ({
         boxSizing: 'border-box',
         transition: isDragging ? 'none' : 'opacity 0.1s',
       }}
-      title={`${visit.project_name ?? ''}${getCityState(visit.project_address) ? ' · ' + getCityState(visit.project_address) : ''} — ${visit.visit_type.replace('_', ' ')}${visit.assigned_to_name ? ' (' + visit.assigned_to_name + ')' : ''}${visit.is_out_of_state ? ' ✈' : ''}`}
+      title={`${visit.project_name ?? ''}${getCityState(visit.project_city, visit.project_state) ? ' · ' + getCityState(visit.project_city, visit.project_state) : ''} — ${visit.visit_type.replace('_', ' ')}${visit.assigned_to_name ? ' (' + visit.assigned_to_name + ')' : ''}${visit.is_out_of_state ? ' ✈' : ''}`}
     >
       {/* Assignee / type badge */}
       <span style={{
@@ -153,8 +151,8 @@ export const VisitBar: React.FC<Props> = ({
       {/* Label */}
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
         {visit.project_name ?? `Visit #${visit.number}`}
-        {getCityState(visit.project_address) && (
-          <span style={{ opacity: 0.65, fontWeight: 400 }}> · {getCityState(visit.project_address)}</span>
+        {getCityState(visit.project_city, visit.project_state) && (
+          <span style={{ opacity: 0.65, fontWeight: 400 }}> · {getCityState(visit.project_city, visit.project_state)}</span>
         )}
       </span>
       {visit.is_out_of_state && <span style={{ flexShrink: 0 }} title="Out of state">✈</span>}

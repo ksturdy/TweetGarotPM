@@ -4,6 +4,52 @@ import type { ObservationSection } from './safetyObservations';
 export type VisitType = 'kickoff' | 'routine' | 'follow_up';
 export type VisitStatus = 'proposed' | 'confirmed' | 'completed' | 'cancelled';
 
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export interface RecurrenceRule {
+  type: RecurrenceFrequency;
+
+  // Daily
+  dailyInterval?: number;
+  dailyWeekdaysOnly?: boolean;
+
+  // Weekly
+  weeklyInterval?: number;
+  weeklyDays?: number[]; // 0=Mon … 6=Sun
+
+  // Monthly
+  monthlyInterval?: number;
+  monthlyType?: 'day_of_month' | 'day_of_week';
+  monthlyDay?: number;       // 1–31
+  monthlyWeek?: number;      // 1–4 or -1 (last)
+  monthlyWeekday?: number;   // 0=Mon … 6=Sun
+
+  // Yearly
+  yearlyInterval?: number;
+  yearlyMonth?: number;      // 1–12
+  yearlyDay?: number;
+  yearlyType?: 'day_of_month' | 'day_of_week';
+  yearlyWeek?: number;
+  yearlyWeekday?: number;
+
+  // Range
+  endType: 'occurrences' | 'by_date' | 'no_end';
+  occurrences?: number;
+  endByDate?: string;
+}
+
+export interface SafetyVisitSeries {
+  id: number;
+  tenant_id: number;
+  project_id: number;
+  frequency: RecurrenceFrequency;
+  occurrences: number | null;
+  end_by_date: string | null;
+  visit_type: VisitType;
+  assigned_to: number | null;
+  created_at: string;
+}
+
 export interface SafetyVisit {
   id: number;
   tenant_id: number;
@@ -11,6 +57,11 @@ export interface SafetyVisit {
   project_name?: string;
   project_number?: string;
   project_address?: string;
+  project_city?: string | null;
+  project_state?: string | null;
+  series_id?: number | null;
+  series_position?: number | null;
+  series_frequency?: RecurrenceFrequency | null;
   number: number;
   visit_type: VisitType;
   status: VisitStatus;
@@ -39,12 +90,15 @@ export interface ProjectWithPriority {
   name: string;
   number: string;
   address: string | null;
+  ship_city: string | null;
+  ship_state: string | null;
   start_date: string;
   end_date: string | null;
   percent_complete: number;
   project_status: string;
   department_id: number | null;
   department_name: string | null;
+  manager_name: string | null;
   remaining_hours: number;
   last_visit_date: string | null;
   completed_count: number;
@@ -96,4 +150,32 @@ export const safetyVisitsApi = {
 
   delete: (id: number) =>
     api.delete(`/safety-visits/${id}`),
+
+  createSeries: (data: {
+    project_id: number;
+    recurrence_rule: RecurrenceRule;
+    anchor_date: string;
+    duration_days?: number;
+    visit_type?: VisitType;
+    assigned_to?: number | null;
+    travel_hours_ow?: number | null;
+    travel_notes?: string | null;
+    is_out_of_state?: boolean;
+  }) => api.post<{ series: SafetyVisitSeries; visitIds: number[] }>('/safety-visits/series', data),
+
+  updateSeries: (seriesId: number, data: {
+    scope: 'forward' | 'all';
+    from_position?: number;
+    visit_type?: VisitType;
+    assigned_to?: number | null;
+    travel_hours_ow?: number | null;
+    travel_notes?: string | null;
+    is_out_of_state?: boolean;
+  }) => api.put(`/safety-visits/series/${seriesId}`, data),
+
+  deleteSeries: (seriesId: number) =>
+    api.delete(`/safety-visits/series/${seriesId}`),
+
+  deleteSeriesForward: (visitId: number) =>
+    api.delete(`/safety-visits/${visitId}/series-forward`),
 };

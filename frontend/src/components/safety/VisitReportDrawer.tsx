@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { safetyVisitsApi } from '../../services/safetyVisits';
-import type { SafetyVisit, VisitType, VisitStatus } from '../../services/safetyVisits';
+import type { SafetyVisit, VisitType, VisitStatus, RecurrenceRule } from '../../services/safetyVisits';
 import { safetyTeamApi } from '../../services/safetyTeamMembers';
+import { SeriesScopeModal } from './SeriesScopeModal';
+import { RecurrenceModal } from './RecurrenceModal';
 import {
   AUDIT_AREAS,
   buildBlankSection,
@@ -31,6 +33,47 @@ const ANSWER_STYLES: Record<string, { bg: string; color: string; label: string }
   na:  { bg: '#f3f4f6', color: '#6b7280', label: '– N/A' },
 };
 
+const DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const ORDINAL_LABELS: Record<number, string> = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', [-1]: 'last' };
+
+function describeRule(r: RecurrenceRule): string {
+  const end = r.endType === 'occurrences'
+    ? `, ${r.occurrences ?? '?'} occurrences`
+    : r.endType === 'by_date' && r.endByDate
+      ? ` until ${r.endByDate}`
+      : '';
+  if (r.type === 'daily') {
+    return r.dailyWeekdaysOnly
+      ? `Every weekday${end}`
+      : `Every ${r.dailyInterval ?? 1} day(s)${end}`;
+  }
+  if (r.type === 'weekly') {
+    const on = (r.weeklyDays ?? []).map(d => DAYS_SHORT[d]).join('/') || '';
+    const every = r.weeklyInterval === 2 ? 'Every 2 weeks' : r.weeklyInterval && r.weeklyInterval > 2 ? `Every ${r.weeklyInterval} weeks` : 'Weekly';
+    return `${every}${on ? ' on ' + on : ''}${end}`;
+  }
+  if (r.type === 'monthly') {
+    const intv = r.monthlyInterval && r.monthlyInterval > 1 ? ` every ${r.monthlyInterval} mo` : ' monthly';
+    if (r.monthlyType === 'day_of_week') {
+      const ord = ORDINAL_LABELS[r.monthlyWeek ?? 1] ?? `${r.monthlyWeek}th`;
+      const wd = DAYS_SHORT[r.monthlyWeekday ?? 0];
+      return `${ord} ${wd}${intv}${end}`;
+    }
+    return `Day ${r.monthlyDay ?? '?'}${intv}${end}`;
+  }
+  if (r.type === 'yearly') {
+    const mo = MONTH_SHORT[(r.yearlyMonth ?? 1) - 1];
+    if (r.yearlyType === 'day_of_week') {
+      const ord = ORDINAL_LABELS[r.yearlyWeek ?? 1] ?? `${r.yearlyWeek}th`;
+      const wd = DAYS_SHORT[r.yearlyWeekday ?? 0];
+      return `${ord} ${wd} of ${mo} yearly${end}`;
+    }
+    return `${mo} ${r.yearlyDay ?? '?'} yearly${end}`;
+  }
+  return 'Recurring';
+}
+
 export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) => {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('schedule');
@@ -44,6 +87,12 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
   const [travelHours, setTravelHours] = useState('');
   const [travelNotes, setTravelNotes] = useState('');
   const [isOutOfState, setIsOutOfState] = useState(false);
+
+  // Recurrence
+  const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | null>(null);
+  const [recurrenceModalOpen, setRecurrenceModalOpen] = useState(false);
+  const [seriesScopeOpen, setSeriesScopeOpen] = useState(false);
+  const [pendingScheduleFields, setPendingScheduleFields] = useState<Record<string, unknown> | null>(null);
 
   // Report fields
   const [reportWeather, setReportWeather] = useState('');
@@ -84,6 +133,18 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['safety-visits'] }); onSaved(); },
   });
 
+  const createSeriesMut = useMutation({
+    mutationFn: (data: Parameters<typeof safetyVisitsApi.createSeries>[0]) =>
+      safetyVisitsApi.createSeries(data).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['safety-visits'] }); onSaved(); },
+  });
+
+  const updateSeriesMut = useMutation({
+    mutationFn: (data: Parameters<typeof safetyVisitsApi.updateSeries>[1] & { seriesId: number }) =>
+      safetyVisitsApi.updateSeries(data.seriesId, data).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['safety-visits'] }); setSeriesScopeOpen(false); onSaved(); },
+  });
+
   const completeMut = useMutation({
     mutationFn: () => safetyVisitsApi.complete(visit!.id, {
       report_weather: reportWeather || null,
@@ -95,7 +156,7 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
   });
 
   const handleSaveSchedule = () => {
-    updateMut.mutate({
+    const fields = {
       scheduled_date: scheduledDate || null,
       end_date: endDate || null,
       visit_type: visitType,
@@ -104,7 +165,55 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
       travel_hours_ow: travelHours ? Number(travelHours) : null,
       travel_notes: travelNotes || null,
       is_out_of_state: isOutOfState,
-    } as Partial<SafetyVisit>);
+    };
+
+    // If recurrence rule set on a non-series visit, create a series
+    if (recurrenceRule && !visit!.series_id) {
+      if (!scheduledDate) return;
+      const duration = scheduledDate && endDate
+        ? Math.max(0, Math.round((new Date(endDate).getTime() - new Date(scheduledDate).getTime()) / 86400000))
+        : 0;
+      createSeriesMut.mutate({
+        project_id: visit!.project_id,
+        recurrence_rule: recurrenceRule,
+        anchor_date: scheduledDate,
+        duration_days: duration,
+        visit_type: visitType,
+        assigned_to: assignedTo ? Number(assignedTo) : null,
+        travel_hours_ow: travelHours ? Number(travelHours) : null,
+        travel_notes: travelNotes || null,
+        is_out_of_state: isOutOfState,
+      });
+      return;
+    }
+
+    // If this visit belongs to a series, prompt for scope
+    if (visit!.series_id) {
+      setPendingScheduleFields(fields);
+      setSeriesScopeOpen(true);
+      return;
+    }
+
+    updateMut.mutate(fields as Partial<SafetyVisit>);
+  };
+
+  const dispatchSeriesUpdate = (scope: 'just_this' | 'forward' | 'all') => {
+    if (!visit || !pendingScheduleFields) return;
+    if (scope === 'just_this') {
+      updateMut.mutate(pendingScheduleFields as Partial<SafetyVisit>);
+      setSeriesScopeOpen(false);
+    } else {
+      updateSeriesMut.mutate({
+        seriesId: visit.series_id!,
+        scope: scope === 'forward' ? 'forward' : 'all',
+        from_position: scope === 'forward' ? (visit.series_position ?? undefined) : undefined,
+        visit_type: pendingScheduleFields.visit_type as VisitType,
+        assigned_to: pendingScheduleFields.assigned_to as number | null,
+        travel_hours_ow: pendingScheduleFields.travel_hours_ow as number | null,
+        travel_notes: pendingScheduleFields.travel_notes as string | null,
+        is_out_of_state: pendingScheduleFields.is_out_of_state as boolean,
+      });
+    }
   };
 
   const handleAnswer = (sectionIdx: number, itemIdx: number, answer: ObservationAnswer) => {
@@ -145,6 +254,15 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
 
   return (
     <>
+      <SeriesScopeModal
+        isOpen={seriesScopeOpen}
+        mode="edit"
+        isPending={updateMut.isPending || updateSeriesMut.isPending}
+        onJustThis={() => dispatchSeriesUpdate('just_this')}
+        onThisAndFuture={() => dispatchSeriesUpdate('forward')}
+        onAll={() => dispatchSeriesUpdate('all')}
+        onCancel={() => setSeriesScopeOpen(false)}
+      />
       <div
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 1000 }}
         onClick={onClose}
@@ -167,7 +285,7 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
                 {visit.project_name}
                 <span style={{ marginLeft: '8px', fontSize: '13px', opacity: 0.7 }}>#{visit.project_number}</span>
               </div>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{
                   display: 'inline-block',
                   padding: '2px 10px',
@@ -182,6 +300,14 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
                 <span style={{ fontSize: '12px', opacity: 0.7 }}>
                   Visit #{visit.number} · {visit.visit_type.replace('_', ' ')}
                 </span>
+                {visit.series_id && (
+                  <span style={{
+                    fontSize: '10px', background: 'rgba(109,40,217,0.2)', color: '#c4b5fd',
+                    borderRadius: '10px', padding: '1px 8px', fontWeight: 700,
+                  }}>
+                    ↻ {visit.series_frequency === 'biweekly' ? 'every 2 wks' : visit.series_frequency} · #{visit.series_position}
+                  </span>
+                )}
                 {visit.is_out_of_state && <span style={{ fontSize: '14px' }} title="Out of state">✈</span>}
               </div>
             </div>
@@ -320,6 +446,60 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
               {visit.project_address && (
                 <div style={{ padding: '10px 14px', background: '#f9fafb', borderRadius: '8px', fontSize: '13px', color: '#6b7280' }}>
                   📍 {visit.project_address}
+                </div>
+              )}
+
+              {/* Recurrence — only shown when visit is not already in a series */}
+              {!visit.series_id && !isCompleted && (
+                <div>
+                  {recurrenceRule ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', background: '#f5f3ff', borderRadius: '8px', border: '1px solid #ede9fe' }}>
+                      <span style={{ fontSize: '14px' }}>↻</span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed', flex: 1 }}>
+                        {describeRule(recurrenceRule)}
+                      </span>
+                      <button onClick={() => setRecurrenceModalOpen(true)}
+                        style={{ fontSize: '11px', color: '#7c3aed', background: 'none', border: 'none', cursor: 'pointer', padding: '0', fontWeight: 700, textDecoration: 'underline' }}>
+                        Edit
+                      </button>
+                      <button onClick={() => setRecurrenceRule(null)}
+                        style={{ fontSize: '11px', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: '0', fontWeight: 600, textDecoration: 'underline' }}>
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setRecurrenceModalOpen(true)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        padding: '9px 14px', borderRadius: '8px',
+                        border: '1px dashed #c4b5fd', background: '#faf5ff',
+                        color: '#7c3aed', fontSize: '13px', fontWeight: 700,
+                        cursor: 'pointer', width: '100%',
+                      }}
+                    >
+                      ↻ Make this a recurring visit…
+                    </button>
+                  )}
+                  <RecurrenceModal
+                    isOpen={recurrenceModalOpen}
+                    anchorDate={scheduledDate || new Date().toISOString().slice(0, 10)}
+                    durationDays={scheduledDate && endDate
+                      ? Math.max(0, Math.round((new Date(endDate).getTime() - new Date(scheduledDate).getTime()) / 86400000))
+                      : 0}
+                    initial={recurrenceRule}
+                    onConfirm={rule => { setRecurrenceRule(rule); setRecurrenceModalOpen(false); }}
+                    onCancel={() => setRecurrenceModalOpen(false)}
+                  />
+                </div>
+              )}
+
+              {/* Series info for existing series visits */}
+              {visit.series_id && (
+                <div style={{ padding: '10px 14px', background: '#f5f3ff', borderRadius: '8px', fontSize: '12px', color: '#7c3aed', border: '1px solid #ede9fe' }}>
+                  ↻ Visit {visit.series_position} in a recurring series
+                  ({visit.series_frequency === 'biweekly' ? 'every 2 weeks' : visit.series_frequency}).
+                  Saving will prompt you to apply changes to this visit, all future visits, or the entire series.
                 </div>
               )}
             </div>

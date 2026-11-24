@@ -129,4 +129,73 @@ router.delete('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Series endpoints ────────────────────────────────────────────────────────
+
+// POST /api/safety-visits/series  — create recurring series from scratch
+router.post('/series', verifyProjectOwnership, async (req, res, next) => {
+  try {
+    const { recurrence_rule, anchor_date, duration_days,
+            visit_type, assigned_to, travel_hours_ow, travel_notes, is_out_of_state } = req.body;
+
+    if (!anchor_date) return res.status(400).json({ error: 'anchor_date required' });
+    if (!recurrence_rule) return res.status(400).json({ error: 'recurrence_rule required' });
+    if (!['daily','weekly','monthly','yearly'].includes(recurrence_rule.type))
+      return res.status(400).json({ error: 'Invalid recurrence type' });
+    if (recurrence_rule.endType === 'occurrences' && recurrence_rule.occurrences > 52)
+      return res.status(400).json({ error: 'Max 52 occurrences' });
+
+    const result = await SafetyVisit.createSeries({
+      tenantId:       req.tenantId,
+      projectId:      req.project.id,
+      recurrenceRule: recurrence_rule,
+      anchorDate:     anchor_date,
+      durationDays:   duration_days ? parseInt(duration_days) : 0,
+      visitType:      visit_type,
+      assignedTo:     assigned_to || null,
+      travelHoursOw:  travel_hours_ow || null,
+      travelNotes:    travel_notes || null,
+      isOutOfState:   is_out_of_state || false,
+      createdBy:      req.user.id,
+    });
+    res.status(201).json(result);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/safety-visits/series/:seriesId  — update scope of a series
+router.put('/series/:seriesId', async (req, res, next) => {
+  try {
+    const { scope, from_position, visit_type, assigned_to, travel_hours_ow, travel_notes, is_out_of_state } = req.body;
+    if (!['forward', 'all'].includes(scope)) return res.status(400).json({ error: 'scope must be forward or all' });
+
+    await SafetyVisit.updateSeriesScope(req.params.seriesId, req.tenantId, {
+      scope,
+      fromPosition: from_position ? parseInt(from_position) : null,
+      fields: { visit_type, assigned_to, travel_hours_ow, travel_notes, is_out_of_state },
+    });
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/safety-visits/series/:seriesId  — delete entire series
+router.delete('/series/:seriesId', async (req, res, next) => {
+  try {
+    await SafetyVisit.deleteSeriesScope(req.params.seriesId, req.tenantId, { scope: 'all' });
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/safety-visits/:id/series-forward  — delete this + future in series
+router.delete('/:id/series-forward', async (req, res, next) => {
+  try {
+    const visit = await SafetyVisit.findById(req.params.id);
+    if (!visit || visit.tenant_id !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+    if (!visit.series_id) return res.status(400).json({ error: 'Visit is not part of a series' });
+    await SafetyVisit.deleteSeriesScope(visit.series_id, req.tenantId, {
+      scope: 'forward',
+      fromPosition: visit.series_position,
+    });
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
