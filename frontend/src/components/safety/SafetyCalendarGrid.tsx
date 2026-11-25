@@ -137,7 +137,7 @@ const WeekRow = React.memo<{
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div ref={rowRef} style={{ display: 'flex', borderBottom: '1px solid #c1c7d0', minHeight: `${rowH}px` }}>
+    <div ref={rowRef} style={{ display: 'flex', borderBottom: '1px solid #9ca3af', minHeight: `${rowH}px` }}>
       {/* Week label */}
       <div style={{
         width: `${LABEL_W}px`,
@@ -222,7 +222,7 @@ export const SafetyCalendarGrid: React.FC<Props> = ({
         top: 0,
         zIndex: 10,
         background: '#f9fafb',
-        borderBottom: '2px solid #c1c7d0',
+        borderBottom: '2px solid #9ca3af',
         flexShrink: 0,
       }}>
         <div style={{ width: `${LABEL_W}px`, flexShrink: 0, borderRight: '1px solid #c1c7d0', padding: '6px 6px', fontSize: '10px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
