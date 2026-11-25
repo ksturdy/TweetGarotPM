@@ -364,27 +364,36 @@ const SafetyVisit = {
   },
 
   async getProjectInfo(projectId, tenantId) {
-    const [projRes, laborRes] = await Promise.all([
-      db.query(
-        `SELECT p.id, p.name, p.number, p.address, p.start_date, p.end_date, p.status AS project_status,
-                p.percent_complete,
-                vc.ship_city, vc.ship_state,
-                mgr.first_name || ' ' || mgr.last_name AS manager_name,
-                d.name AS department_name
-         FROM projects p
-         LEFT JOIN employees mgr ON mgr.id = p.manager_id
-         LEFT JOIN departments d  ON d.id  = p.department_id
-         LEFT JOIN LATERAL (
-           SELECT ship_city, ship_state
-           FROM vp_contracts
-           WHERE linked_project_id = p.id
-           LIMIT 1
-         ) vc ON true
-         WHERE p.id = $1 AND p.tenant_id = $2
-         LIMIT 1`,
-        [projectId, tenantId]
-      ),
-      db.query(
+    // Core project info — no Vista dependency
+    const projRes = await db.query(
+      `SELECT p.id, p.name, p.number, p.address, p.start_date, p.end_date,
+              p.status AS project_status, p.percent_complete,
+              mgr.first_name || ' ' || mgr.last_name AS manager_name,
+              d.name AS department_name
+       FROM projects p
+       LEFT JOIN employees mgr ON mgr.id = p.manager_id
+       LEFT JOIN departments d  ON d.id  = p.department_id
+       WHERE p.id = $1 AND p.tenant_id = $2
+       LIMIT 1`,
+      [projectId, tenantId]
+    );
+    if (!projRes.rows[0]) return null;
+    const base = projRes.rows[0];
+
+    // Vista city/state — optional, skip if table missing
+    let ship_city = null, ship_state = null;
+    try {
+      const vcRes = await db.query(
+        `SELECT ship_city, ship_state FROM vp_contracts WHERE linked_project_id = $1 LIMIT 1`,
+        [projectId]
+      );
+      if (vcRes.rows[0]) { ship_city = vcRes.rows[0].ship_city; ship_state = vcRes.rows[0].ship_state; }
+    } catch (_) { /* Vista tables not available */ }
+
+    // Vista labor by trade — optional, skip if table missing
+    let labor_by_trade = [];
+    try {
+      const laborRes = await db.query(
         `SELECT COALESCE(NULLIF(TRIM(pc.description), ''), 'Other') AS trade,
                 COALESCE(SUM(pc.est_hours),  0)::float AS est_hours,
                 COALESCE(SUM(pc.jtd_hours),  0)::float AS jtd_hours,
@@ -395,10 +404,11 @@ const SafetyVisit = {
          ORDER BY remaining_hours DESC
          LIMIT 15`,
         [projectId, tenantId]
-      ),
-    ]);
-    if (!projRes.rows[0]) return null;
-    return { ...projRes.rows[0], labor_by_trade: laborRes.rows };
+      );
+      labor_by_trade = laborRes.rows;
+    } catch (_) { /* Vista tables not available */ }
+
+    return { ...base, ship_city, ship_state, labor_by_trade };
   },
 
   async update(id, tenantId, fields) {
