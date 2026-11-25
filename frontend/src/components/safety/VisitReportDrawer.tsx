@@ -108,11 +108,12 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: projectInfo } = useQuery<ProjectInfo>({
+  const { data: projectInfo, isLoading: infoLoading, isError: infoError } = useQuery<ProjectInfo>({
     queryKey: ['safety-visit-project-info', visit?.project_id],
     queryFn: () => safetyVisitsApi.getProjectInfo(visit!.project_id).then(r => r.data),
     enabled: !!visit?.project_id,
     staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 
   useEffect(() => {
@@ -505,7 +506,7 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
               )}
 
               {/* ── Project Overview Panel ── */}
-              <ProjectOverviewPanel info={projectInfo} />
+              <ProjectOverviewPanel info={projectInfo} isLoading={infoLoading} isError={infoError} />
             </div>
           )}
 
@@ -667,7 +668,7 @@ function fmtShortDate(d: string | null | undefined): string {
   } catch { return '—'; }
 }
 
-function ProjectOverviewPanel({ info }: { info?: ProjectInfo }) {
+function ProjectOverviewPanel({ info, isLoading, isError }: { info?: ProjectInfo; isLoading?: boolean; isError?: boolean }) {
   const maxRemaining = info?.labor_by_trade?.length
     ? Math.max(...info.labor_by_trade.map(t => t.remaining_hours), 1)
     : 1;
@@ -690,9 +691,11 @@ function ProjectOverviewPanel({ info }: { info?: ProjectInfo }) {
         Project Overview
       </div>
 
-      {!info ? (
+      {isLoading ? (
         <div style={{ fontSize: '12px', color: '#9ca3af' }}>Loading…</div>
-      ) : (
+      ) : isError ? (
+        <div style={{ fontSize: '12px', color: '#ef4444' }}>Could not load project info.</div>
+      ) : !info ? null : (
         <>
           {/* Info grid */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', marginBottom: '16px' }}>

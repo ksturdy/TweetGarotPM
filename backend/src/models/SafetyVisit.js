@@ -367,19 +367,21 @@ const SafetyVisit = {
     const [projRes, laborRes] = await Promise.all([
       db.query(
         `SELECT p.id, p.name, p.number, p.address, p.start_date, p.end_date, p.status AS project_status,
+                p.percent_complete,
                 vc.ship_city, vc.ship_state,
-                CASE
-                  WHEN vc.projected_revenue > 0
-                  THEN LEAST(100, ROUND((vc.earned_revenue / vc.projected_revenue) * 100))::int
-                  ELSE 0
-                END AS percent_complete,
                 mgr.first_name || ' ' || mgr.last_name AS manager_name,
                 d.name AS department_name
          FROM projects p
          LEFT JOIN employees mgr ON mgr.id = p.manager_id
          LEFT JOIN departments d  ON d.id  = p.department_id
-         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
-         WHERE p.id = $1 AND p.tenant_id = $2`,
+         LEFT JOIN LATERAL (
+           SELECT ship_city, ship_state
+           FROM vp_contracts
+           WHERE linked_project_id = p.id
+           LIMIT 1
+         ) vc ON true
+         WHERE p.id = $1 AND p.tenant_id = $2
+         LIMIT 1`,
         [projectId, tenantId]
       ),
       db.query(
