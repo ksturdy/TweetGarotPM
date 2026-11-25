@@ -124,11 +124,11 @@ export const contractReviewsApi = {
       if (data.needs_legal_review !== undefined) formData.append('needs_legal_review', data.needs_legal_review.toString());
       if (data.findings) formData.append('findings', JSON.stringify(data.findings));
 
-      return api.post('/contract-reviews', formData, {
+      return api.post<ContractReview>('/contract-reviews', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
     }
-    return api.post('/contract-reviews', data);
+    return api.post<ContractReview>('/contract-reviews', data);
   },
 
   // Update contract review
