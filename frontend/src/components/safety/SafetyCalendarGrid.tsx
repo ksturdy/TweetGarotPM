@@ -86,6 +86,7 @@ const DayCell = React.memo<{
       style={{
         flex: 1,
         borderRight: '1px solid #c1c7d0',
+        borderBottom: '1px solid #c1c7d0',
         background: isOver ? '#bfdbfe'
           : isToday ? '#fefce8'
           : isWeekend ? shade.weekend
@@ -137,7 +138,7 @@ const WeekRow = React.memo<{
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div ref={rowRef} style={{ display: 'flex', borderBottom: '1px solid #9ca3af', minHeight: `${rowH}px` }}>
+    <div ref={rowRef} style={{ display: 'flex', minHeight: `${rowH}px` }}>
       {/* Week label */}
       <div style={{
         width: `${LABEL_W}px`,
@@ -148,6 +149,7 @@ const WeekRow = React.memo<{
         color: isCurrentWeek ? '#002356' : '#6b7280',
         background: isCurrentWeek ? '#eff6ff' : shade.label,
         borderRight: '1px solid #c1c7d0',
+        borderBottom: '1px solid #c1c7d0',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-start',
