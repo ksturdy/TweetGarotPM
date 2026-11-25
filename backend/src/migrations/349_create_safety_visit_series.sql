@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS safety_visit_series (
 CREATE INDEX IF NOT EXISTS idx_safety_visit_series_tenant  ON safety_visit_series(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_safety_visit_series_project ON safety_visit_series(project_id);
 
+DROP TRIGGER IF EXISTS update_safety_visit_series_updated_at ON safety_visit_series;
 CREATE TRIGGER update_safety_visit_series_updated_at
   BEFORE UPDATE ON safety_visit_series
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
