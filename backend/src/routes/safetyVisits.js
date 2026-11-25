@@ -58,7 +58,10 @@ router.get('/project-info/:projectId', async (req, res, next) => {
     const info = await SafetyVisit.getProjectInfo(req.params.projectId, req.tenantId);
     if (!info) return res.status(404).json({ error: 'Not found' });
     res.json(info);
-  } catch (err) { next(err); }
+  } catch (err) {
+    console.error('[safety-visits/project-info] Error:', err.message);
+    next(err);
+  }
 });
 
 // GET /api/safety-visits/:id
