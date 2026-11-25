@@ -371,7 +371,7 @@ const SafetyVisit = {
               mgr.first_name || ' ' || mgr.last_name AS manager_name,
               d.name AS department_name
        FROM projects p
-       LEFT JOIN employees mgr ON mgr.id = p.manager_id
+       LEFT JOIN users mgr ON mgr.id = p.manager_id
        LEFT JOIN departments d  ON d.id  = p.department_id
        WHERE p.id = $1 AND p.tenant_id = $2
        LIMIT 1`,
