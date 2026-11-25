@@ -79,8 +79,22 @@ const DayCell = React.memo<{
         boxShadow: isOver ? 'inset 0 0 0 2px #2563eb' : 'none',
         transition: 'background 0.1s, box-shadow 0.1s',
         minHeight: `${MIN_ROW_H}px`,
+        position: 'relative',
       }}
-    />
+    >
+      <span style={{
+        position: 'absolute',
+        top: '3px',
+        right: '4px',
+        fontSize: '9px',
+        fontWeight: isToday ? 700 : 400,
+        color: isToday ? '#2563eb' : isWeekend ? '#9ca3af' : '#d1d5db',
+        userSelect: 'none',
+        pointerEvents: 'none',
+      }}>
+        {format(date, 'M/d')}
+      </span>
+    </div>
   );
 });
 

@@ -1,4 +1,9 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// Return DATE columns as plain YYYY-MM-DD strings instead of JS Date objects.
+// Without this, pg converts DATE → new Date(y, m, d) → UTC midnight ISO string
+// on the Render server (UTC), which shifts the date back one day in US timezones.
+types.setTypeParser(1082, (val) => val);
 
 // Support both DATABASE_URL (Render) and individual connection params (local dev)
 const poolConfig = process.env.DATABASE_URL
