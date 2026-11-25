@@ -5,6 +5,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  pointerWithin,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -475,6 +476,7 @@ const SafetyCalendar: React.FC = () => {
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <DndContext
             sensors={sensors}
+            collisionDetection={pointerWithin}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onDragCancel={() => setActiveItem(null)}

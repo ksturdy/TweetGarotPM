@@ -75,8 +75,9 @@ const DayCell = React.memo<{
       style={{
         flex: 1,
         borderRight: '1px solid #e5e7eb',
-        background: isOver ? '#eff6ff' : isToday ? '#fefce8' : isWeekend ? '#fafafa' : '#fff',
-        transition: 'background 0.1s',
+        background: isOver ? '#bfdbfe' : isToday ? '#fefce8' : isWeekend ? '#fafafa' : '#fff',
+        boxShadow: isOver ? 'inset 0 0 0 2px #2563eb' : 'none',
+        transition: 'background 0.1s, box-shadow 0.1s',
         minHeight: `${MIN_ROW_H}px`,
       }}
     />
