@@ -367,7 +367,7 @@ const SafetyVisit = {
     // Core project info — no Vista dependency
     const projRes = await db.query(
       `SELECT p.id, p.name, p.number, p.address, p.start_date, p.end_date,
-              p.status AS project_status, p.percent_complete,
+              p.status AS project_status,
               mgr.first_name || ' ' || mgr.last_name AS manager_name,
               d.name AS department_name
        FROM projects p
@@ -378,16 +378,24 @@ const SafetyVisit = {
       [projectId, tenantId]
     );
     if (!projRes.rows[0]) return null;
-    const base = projRes.rows[0];
+    const base = { ...projRes.rows[0], percent_complete: 0, ship_city: null, ship_state: null };
 
-    // Vista city/state — optional, skip if table missing
-    let ship_city = null, ship_state = null;
+    // Vista city/state + percent complete — optional, skip if table missing
+    let ship_city = null, ship_state = null, percent_complete = 0;
     try {
       const vcRes = await db.query(
-        `SELECT ship_city, ship_state FROM vp_contracts WHERE linked_project_id = $1 LIMIT 1`,
+        `SELECT ship_city, ship_state,
+                CASE WHEN projected_revenue > 0
+                     THEN LEAST(100, ROUND((earned_revenue / projected_revenue) * 100))::int
+                     ELSE 0 END AS percent_complete
+         FROM vp_contracts WHERE linked_project_id = $1 LIMIT 1`,
         [projectId]
       );
-      if (vcRes.rows[0]) { ship_city = vcRes.rows[0].ship_city; ship_state = vcRes.rows[0].ship_state; }
+      if (vcRes.rows[0]) {
+        ship_city = vcRes.rows[0].ship_city;
+        ship_state = vcRes.rows[0].ship_state;
+        percent_complete = vcRes.rows[0].percent_complete ?? 0;
+      }
     } catch (_) { /* Vista tables not available */ }
 
     // Vista labor by trade — optional, skip if table missing
@@ -408,7 +416,7 @@ const SafetyVisit = {
       labor_by_trade = laborRes.rows;
     } catch (_) { /* Vista tables not available */ }
 
-    return { ...base, ship_city, ship_state, labor_by_trade };
+    return { ...base, ship_city, ship_state, percent_complete, labor_by_trade };
   },
 
   async update(id, tenantId, fields) {
