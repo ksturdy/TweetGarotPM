@@ -1,11 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { format, addDays, addWeeks, startOfWeek, parseISO, differenceInDays, isSameDay } from 'date-fns';
+import { format, addDays, parseISO, differenceInDays, isSameDay } from 'date-fns';
 import { VisitBar, LANE_H } from './VisitBar';
 import type { SafetyVisit } from '../../services/safetyVisits';
 
 interface Props {
-  windowStart: Date;
+  weekStarts: Date[];
   visits: SafetyVisit[];
   onVisitClick: (visit: SafetyVisit) => void;
   onResizeVisit: (visitId: number, newEndDate: string) => void;
@@ -13,10 +13,19 @@ interface Props {
   memberColorMap: Record<number, string>;
 }
 
-const WEEKS = 6;
 const LABEL_W = 68;
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MIN_ROW_H = 36;
+
+// Alternating month shading — even/odd calendar month index
+const MONTH_SHADES = [
+  { cell: '#ffffff', weekend: '#f5f5f6', label: '#f9fafb' },
+  { cell: '#f0f4fb', weekend: '#e8ecf5', label: '#eaeff8' },
+] as const;
+
+function getMonthShade(date: Date): 0 | 1 {
+  return ((date.getFullYear() * 12 + date.getMonth()) % 2) as 0 | 1;
+}
 
 interface VisitSegment {
   visit: SafetyVisit;
@@ -65,9 +74,11 @@ const DayCell = React.memo<{
   date: Date;
   isToday: boolean;
   isWeekend: boolean;
-}>(({ date, isToday, isWeekend }) => {
+  monthShade: 0 | 1;
+}>(({ date, isToday, isWeekend, monthShade }) => {
   const dateStr = format(date, 'yyyy-MM-dd');
   const { isOver, setNodeRef } = useDroppable({ id: `day-${dateStr}`, data: { date } });
+  const shade = MONTH_SHADES[monthShade];
 
   return (
     <div
@@ -75,7 +86,10 @@ const DayCell = React.memo<{
       style={{
         flex: 1,
         borderRight: '1px solid #e5e7eb',
-        background: isOver ? '#bfdbfe' : isToday ? '#fefce8' : isWeekend ? '#fafafa' : '#fff',
+        background: isOver ? '#bfdbfe'
+          : isToday ? '#fefce8'
+          : isWeekend ? shade.weekend
+          : shade.cell,
         boxShadow: isOver ? 'inset 0 0 0 2px #2563eb' : 'none',
         transition: 'background 0.1s, box-shadow 0.1s',
         minHeight: `${MIN_ROW_H}px`,
@@ -102,18 +116,28 @@ const WeekRow = React.memo<{
   weekStart: Date;
   segments: VisitSegment[];
   today: Date;
+  isCurrentWeek: boolean;
+  monthShade: 0 | 1;
   onVisitClick: (visit: SafetyVisit) => void;
   onResizeVisit: (visitId: number, newEndDate: string) => void;
   onDeleteVisit: (visitId: number) => void;
   memberColorMap: Record<number, string>;
-}>(({ weekStart, segments, today, onVisitClick, onResizeVisit, onDeleteVisit, memberColorMap }) => {
+}>(({ weekStart, segments, today, isCurrentWeek, monthShade, onVisitClick, onResizeVisit, onDeleteVisit, memberColorMap }) => {
   const gridRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
   const numLanes = segments.length > 0 ? Math.max(...segments.map(s => s.lane)) + 1 : 0;
   const rowH = Math.max(MIN_ROW_H, numLanes * LANE_H + 8);
-  const isCurrentWeek = weekStart <= today && addDays(weekStart, 6) >= today;
+  const shade = MONTH_SHADES[monthShade];
+
+  // Scroll this week into view on first mount
+  useEffect(() => {
+    if (isCurrentWeek) {
+      rowRef.current?.scrollIntoView({ block: 'start' });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', minHeight: `${rowH}px` }}>
+    <div ref={rowRef} style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', minHeight: `${rowH}px` }}>
       {/* Week label */}
       <div style={{
         width: `${LABEL_W}px`,
@@ -122,7 +146,7 @@ const WeekRow = React.memo<{
         fontSize: '11px',
         fontWeight: isCurrentWeek ? 700 : 500,
         color: isCurrentWeek ? '#002356' : '#6b7280',
-        background: isCurrentWeek ? '#eff6ff' : '#f9fafb',
+        background: isCurrentWeek ? '#eff6ff' : shade.label,
         borderRight: '1px solid #e5e7eb',
         display: 'flex',
         flexDirection: 'column',
@@ -142,6 +166,7 @@ const WeekRow = React.memo<{
               date={day}
               isToday={isSameDay(day, today)}
               isWeekend={i >= 5}
+              monthShade={monthShade}
             />
           );
         })}
@@ -174,7 +199,7 @@ const WeekRow = React.memo<{
 });
 
 export const SafetyCalendarGrid: React.FC<Props> = ({
-  windowStart,
+  weekStarts,
   visits,
   onVisitClick,
   onResizeVisit,
@@ -183,16 +208,10 @@ export const SafetyCalendarGrid: React.FC<Props> = ({
 }) => {
   const today = new Date();
 
-  const weekStarts = React.useMemo(
-    () => Array.from({ length: WEEKS }, (_, i) =>
-      startOfWeek(addWeeks(windowStart, i), { weekStartsOn: 1 })
-    ),
-    [windowStart]
+  const segmentsByWeek = React.useMemo(
+    () => weekStarts.map(ws => computeWeekSegments(visits, ws)),
+    [visits, weekStarts]
   );
-
-  const segmentsByWeek = React.useMemo(() => {
-    return weekStarts.map(ws => computeWeekSegments(visits, ws));
-  }, [visits, weekStarts]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
@@ -230,19 +249,33 @@ export const SafetyCalendarGrid: React.FC<Props> = ({
         })}
       </div>
 
-      {/* Week rows */}
-      {weekStarts.map((ws, i) => (
-        <WeekRow
-          key={ws.toISOString()}
-          weekStart={ws}
-          segments={segmentsByWeek[i]}
-          today={today}
-          onVisitClick={onVisitClick}
-          onResizeVisit={onResizeVisit}
-          onDeleteVisit={onDeleteVisit}
-          memberColorMap={memberColorMap}
-        />
-      ))}
+      {/* All week rows */}
+      {weekStarts.map((ws, i) => {
+        const isCurrentWeek = isSameDay(ws, startOfCurrentWeek(today));
+        return (
+          <WeekRow
+            key={ws.toISOString()}
+            weekStart={ws}
+            segments={segmentsByWeek[i]}
+            today={today}
+            isCurrentWeek={isCurrentWeek}
+            monthShade={getMonthShade(ws)}
+            onVisitClick={onVisitClick}
+            onResizeVisit={onResizeVisit}
+            onDeleteVisit={onDeleteVisit}
+            memberColorMap={memberColorMap}
+          />
+        );
+      })}
     </div>
   );
 };
+
+function startOfCurrentWeek(today: Date): Date {
+  const d = new Date(today);
+  const day = d.getDay(); // 0=Sun, 1=Mon...
+  const diff = (day === 0 ? -6 : 1 - day); // shift to Monday
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}

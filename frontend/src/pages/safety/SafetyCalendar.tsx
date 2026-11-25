@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -41,9 +41,16 @@ type ActiveItem =
 
 const SafetyCalendar: React.FC = () => {
   const qc = useQueryClient();
-  const [windowStart, setWindowStart] = useState<Date>(() =>
-    startOfWeek(new Date(), { weekStartsOn: 1 })
-  );
+
+  // Fixed range: 52 weeks back → 104 weeks forward (157 total). No navigation state.
+  const todayWeekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }), []);
+  const rangeStart = useMemo(() => subWeeks(todayWeekStart, 52), [todayWeekStart]);
+  const allWeekStarts = useMemo(() =>
+    Array.from({ length: 157 }, (_, i) => addWeeks(rangeStart, i)),
+  [rangeStart]);
+  const startStr = format(rangeStart, 'yyyy-MM-dd');
+  const endStr   = format(addWeeks(todayWeekStart, 105), 'yyyy-MM-dd');
+
   const [selectedVisit, setSelectedVisit] = useState<SafetyVisit | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [seriesDeleteVisit, setSeriesDeleteVisit] = useState<import('../../services/safetyVisits').SafetyVisit | null>(null);
@@ -59,10 +66,6 @@ const SafetyCalendar: React.FC = () => {
   const [activeItem, setActiveItem] = useState<ActiveItem | null>(null);
 
   const sensors = useSensors(useSensor(LeftClickOnlyPointerSensor, { activationConstraint: { distance: 5 } }));
-
-  const windowEnd = addWeeks(windowStart, 6);
-  const startStr = format(windowStart, 'yyyy-MM-dd');
-  const endStr   = format(windowEnd, 'yyyy-MM-dd');
 
   const statuses = [
     ...(openChecked       ? ['Open']        : []),
@@ -282,31 +285,6 @@ const SafetyCalendar: React.FC = () => {
             ← Safety
           </Link>
           <div style={{ fontSize: '16px', fontWeight: 800, color: '#111827' }}>📅 Safety Calendar</div>
-        </div>
-
-        {/* Week navigation */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px' }}>
-          <button
-            onClick={() => setWindowStart(w => subWeeks(w, 6))}
-            style={{ padding: '4px 10px', borderRadius: '5px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}
-          >
-            ← Prev
-          </button>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: '#111827', minWidth: '160px', textAlign: 'center' }}>
-            {format(windowStart, 'MMM d')} – {format(addWeeks(windowStart, 5), 'MMM d, yyyy')}
-          </span>
-          <button
-            onClick={() => setWindowStart(startOfWeek(new Date(), { weekStartsOn: 1 }))}
-            style={{ padding: '4px 10px', borderRadius: '5px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: '12px' }}
-          >
-            Today
-          </button>
-          <button
-            onClick={() => setWindowStart(w => addWeeks(w, 6))}
-            style={{ padding: '4px 10px', borderRadius: '5px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}
-          >
-            Next →
-          </button>
         </div>
 
         {/* Spacer */}
@@ -581,9 +559,9 @@ const SafetyCalendar: React.FC = () => {
               </div>
             </div>
 
-            {/* Right: 6-week calendar */}
+            {/* Right: scrollable calendar */}
             <SafetyCalendarGrid
-              windowStart={windowStart}
+              weekStarts={allWeekStarts}
               visits={filteredVisits}
               onVisitClick={setSelectedVisit}
               onResizeVisit={handleResizeVisit}
