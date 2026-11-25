@@ -60,7 +60,9 @@ const SafetyCalendar: React.FC = () => {
   const [openChecked, setOpenChecked] = useState(true);
   const [softClosedChecked, setSoftClosedChecked] = useState(true);
   const [hardClosedChecked, setHardClosedChecked] = useState(false);
+  const [pctMin, setPctMin] = useState(0);
   const [pctMax, setPctMax] = useState(100);
+  const [visitsMin, setVisitsMin] = useState(0);
   const [visitsMax, setVisitsMax] = useState(20);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<ActiveItem | null>(null);
@@ -140,10 +142,12 @@ const SafetyCalendar: React.FC = () => {
 
   const sidebarProjects = React.useMemo(() =>
     projects.filter(p =>
+      (p.percent_complete ?? 0) >= pctMin &&
       (p.percent_complete ?? 0) <= pctMax &&
+      (visitCountByProject[p.id] ?? 0) >= visitsMin &&
       (visitCountByProject[p.id] ?? 0) <= visitsMax
     ),
-  [projects, pctMax, visitsMax, visitCountByProject]);
+  [projects, pctMin, pctMax, visitsMin, visitsMax, visitCountByProject]);
 
   const createMut = useMutation({
     mutationFn: (data: Parameters<typeof safetyVisitsApi.create>[0]) =>
@@ -485,8 +489,8 @@ const SafetyCalendar: React.FC = () => {
                   ⚙ Filters
                 </span>
                 <span style={{ fontSize: '11px', color: '#9ca3af', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                  {pctMax < 100 && <span style={{ color: '#3b82f6', fontWeight: 700 }}>≤{pctMax}%</span>}
-                  {visitsMax < maxVisitsInWindow && <span style={{ color: '#f97316', fontWeight: 700 }}>≤{visitsMax} visits</span>}
+                  {(pctMin > 0 || pctMax < 100) && <span style={{ color: '#3b82f6', fontWeight: 700 }}>{pctMin}–{pctMax}%</span>}
+                  {(visitsMin > 0 || visitsMax < maxVisitsInWindow) && <span style={{ color: '#f97316', fontWeight: 700 }}>{visitsMin}–{visitsMax} visits</span>}
                   <span style={{ fontSize: '10px' }}>{filtersOpen ? '▲' : '▼'}</span>
                 </span>
               </button>
@@ -495,38 +499,57 @@ const SafetyCalendar: React.FC = () => {
               {filtersOpen && (
                 <div style={{ padding: '10px 12px 12px', borderBottom: '1px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    {/* % Complete filter */}
                     <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, color: '#6b7280', marginBottom: '4px' }}>
-                        <span>% Complete ≤</span>
-                        <span style={{ color: '#374151' }}>{pctMax}%</span>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', marginBottom: '5px' }}>% Complete</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '5px' }}>
+                        <input
+                          type="number" min={0} max={pctMax} step={1} value={pctMin}
+                          onChange={e => setPctMin(Math.min(Math.max(0, Number(e.target.value)), pctMax))}
+                          style={{ width: '42px', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}
+                        />
+                        <span style={{ fontSize: '10px', color: '#9ca3af' }}>%</span>
+                        <span style={{ fontSize: '10px', color: '#9ca3af', flex: 1, textAlign: 'center' }}>to</span>
+                        <input
+                          type="number" min={pctMin} max={100} step={1} value={pctMax}
+                          onChange={e => setPctMax(Math.max(Math.min(100, Number(e.target.value)), pctMin))}
+                          style={{ width: '42px', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}
+                        />
+                        <span style={{ fontSize: '10px', color: '#9ca3af' }}>%</span>
                       </div>
                       <input
                         type="range" min={0} max={100} step={5} value={pctMax}
-                        onChange={e => setPctMax(Number(e.target.value))}
+                        onChange={e => setPctMax(Math.max(Number(e.target.value), pctMin))}
                         style={{ width: '100%', accentColor: '#3b82f6', cursor: 'pointer' }}
                       />
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#d1d5db' }}>
-                        <span>0%</span><span>100%</span>
-                      </div>
                     </div>
+                    {/* Visits filter */}
                     <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, color: '#6b7280', marginBottom: '4px' }}>
-                        <span>Visits ≤</span>
-                        <span style={{ color: '#374151' }}>{visitsMax >= maxVisitsInWindow ? 'Any' : visitsMax}</span>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', marginBottom: '5px' }}>Visits</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '5px' }}>
+                        <input
+                          type="number" min={0} max={visitsMax} step={1} value={visitsMin}
+                          onChange={e => setVisitsMin(Math.min(Math.max(0, Number(e.target.value)), visitsMax))}
+                          style={{ width: '42px', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}
+                        />
+                        <span style={{ fontSize: '10px', color: '#9ca3af', flex: 1, textAlign: 'center' }}>to</span>
+                        <input
+                          type="number" min={visitsMin} max={maxVisitsInWindow} step={1} value={visitsMax}
+                          onChange={e => setVisitsMax(Math.max(Math.min(maxVisitsInWindow, Number(e.target.value)), visitsMin))}
+                          style={{ width: '42px', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}
+                        />
+                        <span style={{ fontSize: '10px', color: '#9ca3af' }}>max</span>
                       </div>
                       <input
                         type="range" min={0} max={maxVisitsInWindow} step={1} value={visitsMax}
-                        onChange={e => setVisitsMax(Number(e.target.value))}
+                        onChange={e => setVisitsMax(Math.max(Number(e.target.value), visitsMin))}
                         style={{ width: '100%', accentColor: '#f97316', cursor: 'pointer' }}
                       />
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#d1d5db' }}>
-                        <span>0</span><span>{maxVisitsInWindow}+</span>
-                      </div>
                     </div>
                   </div>
-                  {(pctMax < 100 || visitsMax < maxVisitsInWindow) && (
+                  {(pctMin > 0 || pctMax < 100 || visitsMin > 0 || visitsMax < maxVisitsInWindow) && (
                     <button
-                      onClick={() => { setPctMax(100); setVisitsMax(maxVisitsInWindow); }}
+                      onClick={() => { setPctMin(0); setPctMax(100); setVisitsMin(0); setVisitsMax(maxVisitsInWindow); }}
                       style={{ marginTop: '8px', fontSize: '11px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
                     >
                       Reset filters
