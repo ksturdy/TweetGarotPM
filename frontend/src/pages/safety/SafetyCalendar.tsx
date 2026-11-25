@@ -24,6 +24,59 @@ import { VisitReportDrawer } from '../../components/safety/VisitReportDrawer';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import { SeriesScopeModal } from '../../components/safety/SeriesScopeModal';
 
+const DUAL_RANGE_STYLE = `
+  .dr-thumb { position:absolute; width:100%; height:100%; margin:0;
+    background:transparent; -webkit-appearance:none; appearance:none;
+    pointer-events:none; }
+  .dr-thumb::-webkit-slider-runnable-track { background:transparent; }
+  .dr-thumb::-moz-range-track { background:transparent; }
+  .dr-thumb::-webkit-slider-thumb {
+    -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+    border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.3);
+    pointer-events:all; cursor:pointer; }
+  .dr-thumb::-moz-range-thumb {
+    width:16px; height:16px; border-radius:50%; border:2px solid #fff;
+    box-shadow:0 1px 4px rgba(0,0,0,.3); pointer-events:all; cursor:pointer; }
+  .dr-blue::-webkit-slider-thumb  { background:#3b82f6; }
+  .dr-blue::-moz-range-thumb      { background:#3b82f6; }
+  .dr-orange::-webkit-slider-thumb { background:#f97316; }
+  .dr-orange::-moz-range-thumb     { background:#f97316; }
+`;
+
+const DualRangeSlider: React.FC<{
+  min: number; max: number; step: number;
+  low: number; high: number;
+  colorClass: 'dr-blue' | 'dr-orange';
+  fillColor: string;
+  onLow: (v: number) => void;
+  onHigh: (v: number) => void;
+}> = ({ min, max, step, low, high, colorClass, fillColor, onLow, onHigh }) => {
+  const pct = (v: number) => ((v - min) / (max - min)) * 100;
+  return (
+    <div style={{ position: 'relative', height: '20px', margin: '4px 0 2px' }}>
+      {/* track bg */}
+      <div style={{ position:'absolute', top:'50%', transform:'translateY(-50%)',
+        left:0, right:0, height:'4px', background:'#e5e7eb', borderRadius:'2px' }} />
+      {/* filled range */}
+      <div style={{ position:'absolute', top:'50%', transform:'translateY(-50%)',
+        left:`${pct(low)}%`, width:`${pct(high)-pct(low)}%`,
+        height:'4px', background:fillColor, borderRadius:'2px' }} />
+      {/* low thumb */}
+      <input type="range" min={min} max={max} step={step} value={low}
+        onChange={e => onLow(Math.min(Number(e.target.value), high - step))}
+        className={`dr-thumb ${colorClass}`}
+        style={{ zIndex: low > high - (max - min) * 0.1 ? 5 : 3 } as React.CSSProperties}
+      />
+      {/* high thumb */}
+      <input type="range" min={min} max={max} step={step} value={high}
+        onChange={e => onHigh(Math.max(Number(e.target.value), low + step))}
+        className={`dr-thumb ${colorClass}`}
+        style={{ zIndex: 4 } as React.CSSProperties}
+      />
+    </div>
+  );
+};
+
 class LeftClickOnlyPointerSensor extends PointerSensor {
   static activators = [
     {
@@ -273,6 +326,7 @@ const SafetyCalendar: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#f9fafb' }}>
+      <style>{DUAL_RANGE_STYLE}</style>
       {/* Header */}
       <div style={{
         flexShrink: 0,
@@ -501,8 +555,13 @@ const SafetyCalendar: React.FC = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                     {/* % Complete filter */}
                     <div>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', marginBottom: '5px' }}>% Complete</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '5px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', marginBottom: '4px' }}>% Complete</div>
+                      <DualRangeSlider
+                        min={0} max={100} step={5} low={pctMin} high={pctMax}
+                        colorClass="dr-blue" fillColor="#3b82f6"
+                        onLow={setPctMin} onHigh={setPctMax}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                         <input
                           type="number" min={0} max={pctMax} step={1} value={pctMin}
                           onChange={e => setPctMin(Math.min(Math.max(0, Number(e.target.value)), pctMax))}
@@ -517,16 +576,16 @@ const SafetyCalendar: React.FC = () => {
                         />
                         <span style={{ fontSize: '10px', color: '#9ca3af' }}>%</span>
                       </div>
-                      <input
-                        type="range" min={0} max={100} step={5} value={pctMax}
-                        onChange={e => setPctMax(Math.max(Number(e.target.value), pctMin))}
-                        style={{ width: '100%', accentColor: '#3b82f6', cursor: 'pointer' }}
-                      />
                     </div>
                     {/* Visits filter */}
                     <div>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', marginBottom: '5px' }}>Visits</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '5px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', marginBottom: '4px' }}>Visits</div>
+                      <DualRangeSlider
+                        min={0} max={maxVisitsInWindow} step={1} low={visitsMin} high={visitsMax}
+                        colorClass="dr-orange" fillColor="#f97316"
+                        onLow={setVisitsMin} onHigh={setVisitsMax}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                         <input
                           type="number" min={0} max={visitsMax} step={1} value={visitsMin}
                           onChange={e => setVisitsMin(Math.min(Math.max(0, Number(e.target.value)), visitsMax))}
@@ -538,13 +597,7 @@ const SafetyCalendar: React.FC = () => {
                           onChange={e => setVisitsMax(Math.max(Math.min(maxVisitsInWindow, Number(e.target.value)), visitsMin))}
                           style={{ width: '42px', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}
                         />
-                        <span style={{ fontSize: '10px', color: '#9ca3af' }}>max</span>
                       </div>
-                      <input
-                        type="range" min={0} max={maxVisitsInWindow} step={1} value={visitsMax}
-                        onChange={e => setVisitsMax(Math.max(Number(e.target.value), visitsMin))}
-                        style={{ width: '100%', accentColor: '#f97316', cursor: 'pointer' }}
-                      />
                     </div>
                   </div>
                   {(pctMin > 0 || pctMax < 100 || visitsMin > 0 || visitsMax < maxVisitsInWindow) && (
