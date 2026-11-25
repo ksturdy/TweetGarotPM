@@ -52,6 +52,15 @@ router.get('/project/:projectId', verifyProjectOwnership, async (req, res, next)
   } catch (err) { next(err); }
 });
 
+// GET /api/safety-visits/project-info/:projectId — project details + labor by trade for the visit drawer
+router.get('/project-info/:projectId', async (req, res, next) => {
+  try {
+    const info = await SafetyVisit.getProjectInfo(req.params.projectId, req.tenantId);
+    if (!info) return res.status(404).json({ error: 'Not found' });
+    res.json(info);
+  } catch (err) { next(err); }
+});
+
 // GET /api/safety-visits/:id
 router.get('/:id', async (req, res, next) => {
   try {

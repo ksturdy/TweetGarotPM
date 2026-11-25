@@ -363,6 +363,42 @@ const SafetyVisit = {
     return result.rows;
   },
 
+  async getProjectInfo(projectId, tenantId) {
+    const [projRes, laborRes] = await Promise.all([
+      db.query(
+        `SELECT p.id, p.name, p.number, p.address, p.start_date, p.end_date, p.status AS project_status,
+                vc.ship_city, vc.ship_state,
+                CASE
+                  WHEN vc.projected_revenue > 0
+                  THEN LEAST(100, ROUND((vc.earned_revenue / vc.projected_revenue) * 100))::int
+                  ELSE 0
+                END AS percent_complete,
+                mgr.first_name || ' ' || mgr.last_name AS manager_name,
+                d.name AS department_name
+         FROM projects p
+         LEFT JOIN employees mgr ON mgr.id = p.manager_id
+         LEFT JOIN departments d  ON d.id  = p.department_id
+         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+         WHERE p.id = $1 AND p.tenant_id = $2`,
+        [projectId, tenantId]
+      ),
+      db.query(
+        `SELECT COALESCE(NULLIF(TRIM(pc.description), ''), 'Other') AS trade,
+                COALESCE(SUM(pc.est_hours),  0)::float AS est_hours,
+                COALESCE(SUM(pc.jtd_hours),  0)::float AS jtd_hours,
+                GREATEST(0, COALESCE(SUM(pc.est_hours - pc.jtd_hours), 0))::float AS remaining_hours
+         FROM vp_phase_codes pc
+         WHERE pc.linked_project_id = $1 AND pc.tenant_id = $2 AND pc.cost_type = 1
+         GROUP BY COALESCE(NULLIF(TRIM(pc.description), ''), 'Other')
+         ORDER BY remaining_hours DESC
+         LIMIT 15`,
+        [projectId, tenantId]
+      ),
+    ]);
+    if (!projRes.rows[0]) return null;
+    return { ...projRes.rows[0], labor_by_trade: laborRes.rows };
+  },
+
   async update(id, tenantId, fields) {
     const allowed = ['visit_type', 'status', 'scheduled_date', 'end_date', 'assigned_to',
                      'travel_hours_ow', 'travel_notes', 'is_out_of_state',

@@ -107,6 +107,29 @@ export interface ProjectWithPriority {
   needs_kickoff: boolean;
 }
 
+export interface LaborByTrade {
+  trade: string;
+  est_hours: number;
+  jtd_hours: number;
+  remaining_hours: number;
+}
+
+export interface ProjectInfo {
+  id: number;
+  name: string;
+  number: string;
+  address: string | null;
+  ship_city: string | null;
+  ship_state: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  percent_complete: number;
+  project_status: string;
+  manager_name: string | null;
+  department_name: string | null;
+  labor_by_trade: LaborByTrade[];
+}
+
 export const safetyVisitsApi = {
   getProjects: (params?: { teamId?: number; departmentId?: number; statuses?: string[] }) =>
     api.get<ProjectWithPriority[]>('/safety-visits/projects', {
@@ -178,4 +201,7 @@ export const safetyVisitsApi = {
 
   deleteSeriesForward: (visitId: number) =>
     api.delete(`/safety-visits/${visitId}/series-forward`),
+
+  getProjectInfo: (projectId: number) =>
+    api.get<ProjectInfo>(`/safety-visits/project-info/${projectId}`),
 };

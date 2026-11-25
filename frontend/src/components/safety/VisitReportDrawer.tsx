@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { safetyVisitsApi } from '../../services/safetyVisits';
-import type { SafetyVisit, VisitType, VisitStatus, RecurrenceRule } from '../../services/safetyVisits';
+import type { SafetyVisit, VisitType, VisitStatus, RecurrenceRule, ProjectInfo } from '../../services/safetyVisits';
 import { safetyTeamApi } from '../../services/safetyTeamMembers';
 import { SeriesScopeModal } from './SeriesScopeModal';
 import { RecurrenceModal } from './RecurrenceModal';
@@ -105,6 +105,13 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['safety-team-members'],
     queryFn: () => safetyTeamApi.getAll().then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: projectInfo } = useQuery<ProjectInfo>({
+    queryKey: ['safety-visit-project-info', visit?.project_id],
+    queryFn: () => safetyVisitsApi.getProjectInfo(visit!.project_id).then(r => r.data),
+    enabled: !!visit?.project_id,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -443,12 +450,6 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
                 />
               </label>
 
-              {visit.project_address && (
-                <div style={{ padding: '10px 14px', background: '#f9fafb', borderRadius: '8px', fontSize: '13px', color: '#6b7280' }}>
-                  📍 {visit.project_address}
-                </div>
-              )}
-
               {/* Recurrence — only shown when visit is not already in a series */}
               {!visit.series_id && !isCompleted && (
                 <div>
@@ -502,6 +503,9 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
                   Saving will prompt you to apply changes to this visit, all future visits, or the entire series.
                 </div>
               )}
+
+              {/* ── Project Overview Panel ── */}
+              <ProjectOverviewPanel info={projectInfo} />
             </div>
           )}
 
@@ -652,3 +656,107 @@ export const VisitReportDrawer: React.FC<Props> = ({ visit, onClose, onSaved }) 
     </>
   );
 };
+
+// ── Project Overview Panel ────────────────────────────────────────────────────
+
+function fmtShortDate(d: string | null | undefined): string {
+  if (!d) return '—';
+  try {
+    const [y, m, day] = d.split('-');
+    return `${parseInt(m)}/${parseInt(day)}/${y.slice(2)}`;
+  } catch { return '—'; }
+}
+
+function ProjectOverviewPanel({ info }: { info?: ProjectInfo }) {
+  const maxRemaining = info?.labor_by_trade?.length
+    ? Math.max(...info.labor_by_trade.map(t => t.remaining_hours), 1)
+    : 1;
+
+  const pct = info?.percent_complete ?? 0;
+  const pctColor = pct >= 90 ? '#10b981' : pct >= 50 ? '#3b82f6' : '#f97316';
+
+  const address = [
+    info?.address,
+    [info?.ship_city, info?.ship_state?.split(/\s+/)[0]].filter(Boolean).join(', '),
+  ].filter(Boolean).join('\n');
+
+  return (
+    <div style={{
+      marginTop: '8px',
+      borderTop: '2px solid #e5e7eb',
+      paddingTop: '16px',
+    }}>
+      <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '14px' }}>
+        Project Overview
+      </div>
+
+      {!info ? (
+        <div style={{ fontSize: '12px', color: '#9ca3af' }}>Loading…</div>
+      ) : (
+        <>
+          {/* Info grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', marginBottom: '16px' }}>
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '3px' }}>Site Address</div>
+              <div style={{ fontSize: '12px', color: '#374151', lineHeight: 1.5 }}>
+                {info.address || '—'}
+                {(info.ship_city || info.ship_state) && (
+                  <><br />{[info.ship_city, info.ship_state?.split(/\s+/)[0]].filter(Boolean).join(', ')}</>
+                )}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '3px' }}>Project Manager</div>
+              <div style={{ fontSize: '12px', color: '#374151' }}>{info.manager_name || '—'}</div>
+              {info.department_name && (
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{info.department_name}</div>
+              )}
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '3px' }}>Schedule</div>
+              <div style={{ fontSize: '12px', color: '#374151' }}>
+                {fmtShortDate(info.start_date)} → {fmtShortDate(info.end_date)}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>% Complete</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: '#e5e7eb', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: pctColor, borderRadius: '3px', transition: 'width 0.4s' }} />
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#374151', flexShrink: 0 }}>{pct}%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Labor by trade */}
+          {info.labor_by_trade.length > 0 && (
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                Remaining Field Hours by Trade
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                {info.labor_by_trade.map(t => (
+                  <div key={t.trade} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', color: '#374151', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.trade}</span>
+                    <div style={{ width: '90px', height: '4px', borderRadius: '2px', background: '#e5e7eb', overflow: 'hidden', flexShrink: 0 }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${Math.min(100, (t.remaining_hours / maxRemaining) * 100)}%`,
+                        background: '#3b82f6',
+                        borderRadius: '2px',
+                      }} />
+                    </div>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#374151', width: '60px', textAlign: 'right', flexShrink: 0 }}>
+                      {Math.round(t.remaining_hours).toLocaleString()} hrs
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
