@@ -380,11 +380,11 @@ const SafetyVisit = {
     if (!projRes.rows[0]) return null;
     const base = { ...projRes.rows[0], percent_complete: 0, ship_city: null, ship_state: null };
 
-    // Vista city/state + percent complete — optional, skip if table missing
-    let ship_city = null, ship_state = null, percent_complete = 0;
+    // Vista city/state + percent complete + PM name — optional, skip if table missing
+    let ship_city = null, ship_state = null, percent_complete = 0, vista_pm = null;
     try {
       const vcRes = await db.query(
-        `SELECT ship_city, ship_state,
+        `SELECT ship_city, ship_state, project_manager_name,
                 CASE WHEN projected_revenue > 0
                      THEN LEAST(100, ROUND((earned_revenue / projected_revenue) * 100))::int
                      ELSE 0 END AS percent_complete
@@ -395,6 +395,7 @@ const SafetyVisit = {
         ship_city = vcRes.rows[0].ship_city;
         ship_state = vcRes.rows[0].ship_state;
         percent_complete = vcRes.rows[0].percent_complete ?? 0;
+        vista_pm = vcRes.rows[0].project_manager_name || null;
       }
     } catch (_) { /* Vista tables not available */ }
 
@@ -407,7 +408,8 @@ const SafetyVisit = {
                 COALESCE(SUM(pc.jtd_hours),  0)::float AS jtd_hours,
                 GREATEST(0, COALESCE(SUM(pc.est_hours - pc.jtd_hours), 0))::float AS remaining_hours
          FROM vp_phase_codes pc
-         WHERE pc.linked_project_id = $1 AND pc.tenant_id = $2 AND pc.cost_type = 1
+         WHERE pc.linked_project_id = $1 AND pc.tenant_id = $2
+           AND pc.cost_type IN (1, '1')
          GROUP BY COALESCE(NULLIF(TRIM(pc.description), ''), 'Other')
          ORDER BY remaining_hours DESC
          LIMIT 15`,
@@ -416,7 +418,8 @@ const SafetyVisit = {
       labor_by_trade = laborRes.rows;
     } catch (_) { /* Vista tables not available */ }
 
-    return { ...base, ship_city, ship_state, percent_complete, labor_by_trade };
+    return { ...base, ship_city, ship_state, percent_complete, labor_by_trade,
+             manager_name: vista_pm || base.manager_name };
   },
 
   async update(id, tenantId, fields) {
