@@ -19,8 +19,8 @@ const MIN_ROW_H = 36;
 
 // Alternating month shading — even/odd calendar month index
 const MONTH_SHADES = [
-  { cell: '#ffffff', weekend: '#f5f5f6', label: '#f9fafb' },
-  { cell: '#f0f4fb', weekend: '#e8ecf5', label: '#eaeff8' },
+  { cell: '#ffffff', weekend: '#f4f5f6', label: '#f9fafb' },
+  { cell: '#f7f9fd', weekend: '#eef1f8', label: '#f2f5fb' },
 ] as const;
 
 function getMonthShade(date: Date): 0 | 1 {
@@ -85,7 +85,7 @@ const DayCell = React.memo<{
       ref={setNodeRef}
       style={{
         flex: 1,
-        borderRight: '1px solid #e5e7eb',
+        borderRight: '1px solid #c1c7d0',
         background: isOver ? '#bfdbfe'
           : isToday ? '#fefce8'
           : isWeekend ? shade.weekend
@@ -102,7 +102,7 @@ const DayCell = React.memo<{
         right: '4px',
         fontSize: '9px',
         fontWeight: isToday ? 700 : 400,
-        color: isToday ? '#2563eb' : isWeekend ? '#9ca3af' : '#d1d5db',
+        color: isToday ? '#2563eb' : isWeekend ? '#6b7280' : '#9ca3af',
         userSelect: 'none',
         pointerEvents: 'none',
       }}>
@@ -137,7 +137,7 @@ const WeekRow = React.memo<{
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div ref={rowRef} style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', minHeight: `${rowH}px` }}>
+    <div ref={rowRef} style={{ display: 'flex', borderBottom: '1px solid #c1c7d0', minHeight: `${rowH}px` }}>
       {/* Week label */}
       <div style={{
         width: `${LABEL_W}px`,
@@ -147,7 +147,7 @@ const WeekRow = React.memo<{
         fontWeight: isCurrentWeek ? 700 : 500,
         color: isCurrentWeek ? '#002356' : '#6b7280',
         background: isCurrentWeek ? '#eff6ff' : shade.label,
-        borderRight: '1px solid #e5e7eb',
+        borderRight: '1px solid #c1c7d0',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-start',
@@ -222,10 +222,10 @@ export const SafetyCalendarGrid: React.FC<Props> = ({
         top: 0,
         zIndex: 10,
         background: '#f9fafb',
-        borderBottom: '2px solid #e5e7eb',
+        borderBottom: '2px solid #c1c7d0',
         flexShrink: 0,
       }}>
-        <div style={{ width: `${LABEL_W}px`, flexShrink: 0, borderRight: '1px solid #e5e7eb', padding: '6px 6px', fontSize: '10px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div style={{ width: `${LABEL_W}px`, flexShrink: 0, borderRight: '1px solid #c1c7d0', padding: '6px 6px', fontSize: '10px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Week
         </div>
         {DAY_NAMES.map((name, i) => {
@@ -238,7 +238,7 @@ export const SafetyCalendarGrid: React.FC<Props> = ({
               fontSize: '11px',
               fontWeight: 700,
               color: isWeekend ? '#9ca3af' : '#374151',
-              borderRight: '1px solid #e5e7eb',
+              borderRight: '1px solid #c1c7d0',
               background: isWeekend ? '#fafafa' : '#f9fafb',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
